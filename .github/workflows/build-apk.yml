@@ -1,0 +1,91 @@
+name: Build Android APK (GitHub Cloud)
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-apk:
+    name: Build Release APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'gradle'
+
+      - name: Install npm dependencies
+        run: npm ci || npm install
+
+      - name: Prebuild Native Android Project
+        run: npx expo prebuild --platform android --clean
+
+      - name: Build Android Release APK
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon -Dorg.gradle.jvmargs="-Xmx4096m -XX:MaxMetaspaceSize=1024m" -x lint -x test
+
+      - name: Prepare APK Output
+        run: |
+          mkdir -p output
+          APK_PATH=$(find android/app/build/outputs/apk/release -name "*.apk" | head -n 1)
+          if [ -z "$APK_PATH" ]; then
+            echo "Error: APK not found in android/app/build/outputs/apk/release"
+            find android/app/build/outputs/ -type f || true
+            exit 1
+          fi
+          echo "Found APK at: $APK_PATH"
+          cp "$APK_PATH" output/movieflix-v1.1.1.apk
+          ls -lh output/
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: movieflix-v1.1.1-apk
+          path: output/movieflix-v1.1.1.apk
+          retention-days: 30
+
+      - name: Create GitHub Release
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.1.1
+          name: Movieflix v1.1.1
+          draft: false
+          prerelease: false
+          body: |
+            ### 🎬 Movieflix v1.1.1 Release APK
+
+            Built automatically via **GitHub Actions Cloud**!
+
+            #### ✨ What's New:
+            * **Hardware Screen Backlight Control**: Adjust actual device brightness via left-side vertical drag. Reverts to system brightness automatically on player close.
+            * **Hardware Audio Volume Control**: Native ExoPlayer volume control via right-side vertical drag.
+            * **Real-time Download Notification**: Shows actual ASCII loading bar with downloaded vs total MB (`[██████░░░░░░] 52%`).
+            * **Background Downloads**: Full persistent background downloads even when app is closed.
+            * **Native Network Connectivity Detection**: Real-time `@react-native-community/netinfo` with offline screen and instant retry.
+          files: |
+            output/movieflix-v1.1.1.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
