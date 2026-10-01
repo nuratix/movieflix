@@ -4,7 +4,7 @@ import { Linking, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Current App Version (aligned with package.json & app.json)
-export const CURRENT_APP_VERSION = '1.0.0';
+export const CURRENT_APP_VERSION = '1.1.1';
 
 // GitHub Repository Configuration
 export const GITHUB_OWNER = 'nuratix';
