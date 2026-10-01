@@ -52,6 +52,11 @@ import {
   formatBytes,
 } from './downloadService';
 import {
+  CURRENT_APP_VERSION,
+  checkForUpdateAsync,
+  downloadAndInstallApkAsync,
+} from './updateService';
+import {
   TRENDING_NOW,
   LATEST_RELEASES,
   NETFLIX_POPULAR,
@@ -849,6 +854,14 @@ function ReelApp() {
   const [homeCategory, setHomeCategory] = useState('All'); // 'All' | 'Movies' | 'Series'
   const [meSubTab, setMeSubTab] = useState('History'); // 'History' | 'MyList' | 'Downloads'
 
+  // App Update State
+  const [updateInfo, setUpdateInfo] = useState(null); // null | { hasUpdate, latestVersion, ... }
+  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
+  const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
+  const [apkDownloadProgress, setApkDownloadProgress] = useState(null); // null | { percent, writtenFormatted, totalFormatted }
+  const [apkDownloadError, setApkDownloadError] = useState(null);
+  const [isDownloadingApk, setIsDownloadingApk] = useState(false);
+
   // Safe Local Storage State
   const [watchHistory, setWatchHistory] = useState([]);
   const [myList, setMyList] = useState([]);
@@ -1145,6 +1158,19 @@ function ReelApp() {
         }).catch(() => {});
       }
     }).catch(() => {});
+
+    // Silent background update check after 3s (non-blocking)
+    setTimeout(() => {
+      checkForUpdateAsync().then((info) => {
+        if (info && info.hasUpdate) {
+          setUpdateInfo(info);
+          // Auto-show update modal if a new version is available
+          setIsUpdateModalOpen(true);
+        } else if (info) {
+          setUpdateInfo(info);
+        }
+      }).catch(() => {});
+    }, 3000);
   }, []);
 
   const loadAllLocalData = async () => {
@@ -1902,7 +1928,47 @@ function ReelApp() {
     }
   };
 
+  // ─── In-App Update Handlers ───────────────────────────────────────────────
+  const handleCheckForUpdate = async () => {
+    setIsCheckingUpdate(true);
+    setApkDownloadError(null);
+    setApkDownloadProgress(null);
+    try {
+      const info = await checkForUpdateAsync();
+      setUpdateInfo(info);
+      setIsUpdateModalOpen(true);
+    } catch (e) {
+      setUpdateInfo({ hasUpdate: false, currentVersion: CURRENT_APP_VERSION, error: e.message });
+      setIsUpdateModalOpen(true);
+    } finally {
+      setIsCheckingUpdate(false);
+    }
+  };
+
+  const handleDownloadAndInstallApk = async () => {
+    if (!updateInfo?.apkAsset) {
+      showToast('No APK file attached to this release. Visit GitHub to download manually.');
+      return;
+    }
+    setIsDownloadingApk(true);
+    setApkDownloadError(null);
+    setApkDownloadProgress({ percent: 0, writtenFormatted: '0 B', totalFormatted: updateInfo.apkAsset.sizeFormatted || '...' });
+    try {
+      await downloadAndInstallApkAsync(updateInfo.apkAsset, (progress) => {
+        setApkDownloadProgress(progress);
+      });
+      setIsDownloadingApk(false);
+      setIsUpdateModalOpen(false);
+      showToast('Update downloaded! Installing...');
+    } catch (err) {
+      setIsDownloadingApk(false);
+      setApkDownloadError(err.message || 'Download failed. Please try again.');
+    }
+  };
+  // ─────────────────────────────────────────────────────────────────────────
+
   const heroItem = heroList[heroIndex] || heroList[0];
+
 
   return (
     <View style={styles.appContainer}>
@@ -2306,6 +2372,103 @@ function ReelApp() {
                 )}
               </View>
             )}
+
+            {/* ====================================================== */}
+            {/* CHECK FOR UPDATES CARD                                  */}
+            {/* ====================================================== */}
+            <View style={styles.updateCheckCard}>
+              {/* Header row */}
+              <View style={styles.updateCheckHeaderRow}>
+                <View style={styles.updateCheckIconBox}>
+                  <Ionicons name="cloud-download-outline" size={20} color="#e50914" />
+                </View>
+                <View style={{ flex: 1, marginLeft: 12 }}>
+                  <Text style={styles.updateCheckTitle}>App Updates</Text>
+                  <Text style={styles.updateCheckSubtitle}>
+                    Current version: <Text style={{ color: '#e50914', fontWeight: '700' }}>v{CURRENT_APP_VERSION}</Text>
+                  </Text>
+                </View>
+                {updateInfo?.hasUpdate && (
+                  <View style={styles.updateAvailableBadge}>
+                    <Text style={styles.updateAvailableBadgeText}>NEW</Text>
+                  </View>
+                )}
+              </View>
+
+              {/* Update available banner */}
+              {updateInfo?.hasUpdate && (
+                <View style={styles.updateBannerBox}>
+                  <Ionicons name="arrow-up-circle" size={16} color="#46d369" style={{ marginRight: 8 }} />
+                  <Text style={styles.updateBannerText}>
+                    v{updateInfo.latestVersion} is available — {updateInfo.releaseTitle}
+                  </Text>
+                </View>
+              )}
+              {updateInfo && !updateInfo.hasUpdate && !updateInfo.error && (
+                <View style={[styles.updateBannerBox, { backgroundColor: 'rgba(70, 211, 105, 0.08)', borderColor: 'rgba(70, 211, 105, 0.18)' }]}>
+                  <Ionicons name="checkmark-circle" size={16} color="#46d369" style={{ marginRight: 8 }} />
+                  <Text style={[styles.updateBannerText, { color: '#46d369' }]}>You have the latest version!</Text>
+                </View>
+              )}
+
+              {/* Action Buttons */}
+              <View style={styles.updateCheckBtnRow}>
+                <TouchableOpacity
+                  style={[styles.updateCheckBtn, isCheckingUpdate && { opacity: 0.6 }]}
+                  onPress={handleCheckForUpdate}
+                  activeOpacity={0.8}
+                  disabled={isCheckingUpdate}
+                >
+                  {isCheckingUpdate ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" style={{ marginRight: 6 }} />
+                  ) : (
+                    <Ionicons name="refresh-outline" size={15} color="#FFFFFF" style={{ marginRight: 6 }} />
+                  )}
+                  <Text style={styles.updateCheckBtnText}>
+                    {isCheckingUpdate ? 'Checking...' : 'Check for Update'}
+                  </Text>
+                </TouchableOpacity>
+
+                {updateInfo?.hasUpdate && (
+                  <TouchableOpacity
+                    style={[styles.updateInstallBtn, isDownloadingApk && { opacity: 0.7 }]}
+                    onPress={handleDownloadAndInstallApk}
+                    activeOpacity={0.8}
+                    disabled={isDownloadingApk}
+                  >
+                    {isDownloadingApk ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" style={{ marginRight: 6 }} />
+                    ) : (
+                      <Ionicons name="download-outline" size={15} color="#FFFFFF" style={{ marginRight: 6 }} />
+                    )}
+                    <Text style={styles.updateCheckBtnText}>
+                      {isDownloadingApk ? 'Downloading...' : 'Update Now'}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              {/* Download Progress Bar */}
+              {isDownloadingApk && apkDownloadProgress && (
+                <View style={styles.apkProgressContainer}>
+                  <View style={styles.apkProgressBarTrack}>
+                    <View style={[styles.apkProgressBarFill, { width: `${apkDownloadProgress.percent || 0}%` }]} />
+                  </View>
+                  <Text style={styles.apkProgressText}>
+                    {apkDownloadProgress.percent}% · {apkDownloadProgress.writtenFormatted} / {apkDownloadProgress.totalFormatted}
+                  </Text>
+                </View>
+              )}
+
+              {/* Download Error */}
+              {apkDownloadError && (
+                <View style={styles.apkErrorBox}>
+                  <Ionicons name="alert-circle-outline" size={14} color="#e50914" style={{ marginRight: 6 }} />
+                  <Text style={styles.apkErrorText} numberOfLines={2}>{apkDownloadError}</Text>
+                </View>
+              )}
+            </View>
+
           </View>
         ) : (
           /* ==================================================== */
@@ -2962,7 +3125,133 @@ function ReelApp() {
         </View>
       </Modal>
 
+      {/* ===================================================== */}
+      {/* AUTO-UPDATE MODAL (pops automatically when new ver found) */}
+      {/* ===================================================== */}
+      <Modal
+        visible={isUpdateModalOpen}
+        animationType="slide"
+        transparent={true}
+        statusBarTranslucent
+        onRequestClose={() => !isDownloadingApk && setIsUpdateModalOpen(false)}
+      >
+        <TouchableWithoutFeedback onPress={() => !isDownloadingApk && setIsUpdateModalOpen(false)}>
+          <View style={styles.updateModalBackdrop}>
+            <TouchableWithoutFeedback onPress={() => {}}>
+              <View style={styles.updateModalCard}>
+                {/* Close btn */}
+                {!isDownloadingApk && (
+                  <TouchableOpacity
+                    style={styles.updateModalCloseBtn}
+                    onPress={() => setIsUpdateModalOpen(false)}
+                    hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                  >
+                    <Ionicons name="close" size={20} color="#8e8e93" />
+                  </TouchableOpacity>
+                )}
+
+                {/* Icon + Title */}
+                <View style={styles.updateModalIconHalo}>
+                  <Ionicons
+                    name={updateInfo?.hasUpdate ? 'arrow-up-circle' : 'checkmark-circle'}
+                    size={36}
+                    color={updateInfo?.hasUpdate ? '#e50914' : '#46d369'}
+                  />
+                </View>
+
+                <Text style={styles.updateModalTitle}>
+                  {updateInfo?.hasUpdate
+                    ? `Update Available`
+                    : updateInfo?.error
+                      ? 'Update Check Failed'
+                      : `You're up to date`}
+                </Text>
+
+                <Text style={styles.updateModalVersionRow}>
+                  {updateInfo?.hasUpdate
+                    ? `v${updateInfo.currentVersion}  →  v${updateInfo.latestVersion}`
+                    : `v${updateInfo?.currentVersion || CURRENT_APP_VERSION} — Latest`}
+                </Text>
+
+                {/* Release notes */}
+                {updateInfo?.hasUpdate && updateInfo.releaseNotes && (
+                  <View style={styles.updateReleaseNotesBox}>
+                    <Text style={styles.updateReleaseNotesTitle}>What's new:</Text>
+                    <Text style={styles.updateReleaseNotesText} numberOfLines={8}>
+                      {updateInfo.releaseNotes.replace(/#+\s*/g, '').replace(/[*_`]/g, '')}
+                    </Text>
+                  </View>
+                )}
+
+                {updateInfo?.error && (
+                  <Text style={styles.updateModalErrorText}>{updateInfo.error}</Text>
+                )}
+
+                {/* Progress bar during download */}
+                {isDownloadingApk && apkDownloadProgress && (
+                  <View style={styles.apkProgressContainer}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
+                      <Text style={styles.apkProgressLabel}>Downloading APK...</Text>
+                      <Text style={styles.apkProgressLabel}>{apkDownloadProgress.percent}%</Text>
+                    </View>
+                    <View style={styles.apkProgressBarTrack}>
+                      <View style={[styles.apkProgressBarFill, { width: `${apkDownloadProgress.percent || 0}%` }]} />
+                    </View>
+                    <Text style={[styles.apkProgressText, { marginTop: 6 }]}>
+                      {apkDownloadProgress.writtenFormatted} / {apkDownloadProgress.totalFormatted}
+                    </Text>
+                  </View>
+                )}
+
+                {/* APK download error */}
+                {apkDownloadError && !isDownloadingApk && (
+                  <View style={[styles.apkErrorBox, { width: '100%' }]}>
+                    <Ionicons name="alert-circle-outline" size={14} color="#e50914" style={{ marginRight: 6 }} />
+                    <Text style={styles.apkErrorText} numberOfLines={3}>{apkDownloadError}</Text>
+                  </View>
+                )}
+
+                {/* Action Buttons */}
+                <View style={styles.updateModalBtnRow}>
+                  {updateInfo?.hasUpdate && !isDownloadingApk && (
+                    <TouchableOpacity
+                      style={styles.updateModalInstallBtn}
+                      onPress={handleDownloadAndInstallApk}
+                      activeOpacity={0.85}
+                    >
+                      <Ionicons name="download-outline" size={16} color="#FFFFFF" style={{ marginRight: 7 }} />
+                      <Text style={styles.updateModalInstallBtnText}>
+                        Download & Install
+                        {updateInfo?.apkAsset?.sizeFormatted ? ` (${updateInfo.apkAsset.sizeFormatted})` : ''}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                  {isDownloadingApk && (
+                    <View style={[styles.updateModalInstallBtn, { backgroundColor: 'rgba(229,9,20,0.5)', justifyContent: 'center' }]}>
+                      <ActivityIndicator size="small" color="#FFFFFF" style={{ marginRight: 8 }} />
+                      <Text style={styles.updateModalInstallBtnText}>Downloading...</Text>
+                    </View>
+                  )}
+                  {!isDownloadingApk && (
+                    <TouchableOpacity
+                      style={styles.updateModalSkipBtn}
+                      onPress={() => setIsUpdateModalOpen(false)}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.updateModalSkipBtnText}>
+                        {updateInfo?.hasUpdate ? 'Skip for Now' : 'OK'}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
+
       {/* SEPARATE INTRO LOADING SCREEN MODAL */}
+
       <Modal
         visible={isIntroLoading}
         animationType="fade"
@@ -7041,4 +7330,269 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
   },
+
+  // ─── IN-APP UPDATE UI STYLES ────────────────────────────────────────────────
+
+  // Check for Updates card (inside Me tab)
+  updateCheckCard: {
+    marginHorizontal: 16,
+    marginTop: 16,
+    marginBottom: 24,
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  updateCheckHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  updateCheckIconBox: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    backgroundColor: 'rgba(229, 9, 20, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(229, 9, 20, 0.25)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  updateCheckTitle: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  updateCheckSubtitle: {
+    color: '#8e8e93',
+    fontSize: 12,
+  },
+  updateAvailableBadge: {
+    backgroundColor: '#e50914',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    marginLeft: 6,
+  },
+  updateAvailableBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  updateBannerBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(229, 9, 20, 0.08)',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(229, 9, 20, 0.2)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 12,
+  },
+  updateBannerText: {
+    color: '#f5f5f1',
+    fontSize: 12,
+    fontWeight: '500',
+    flex: 1,
+  },
+  updateCheckBtnRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flexWrap: 'wrap',
+  },
+  updateCheckBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 10,
+  },
+  updateInstallBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#e50914',
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    borderRadius: 10,
+    shadowColor: '#e50914',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.4,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  updateCheckBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+
+  // APK Download Progress Bar
+  apkProgressContainer: {
+    marginTop: 12,
+    width: '100%',
+  },
+  apkProgressBarTrack: {
+    width: '100%',
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    overflow: 'hidden',
+  },
+  apkProgressBarFill: {
+    height: '100%',
+    borderRadius: 3,
+    backgroundColor: '#e50914',
+  },
+  apkProgressText: {
+    color: '#8e8e93',
+    fontSize: 11,
+    marginTop: 4,
+    textAlign: 'center',
+  },
+  apkProgressLabel: {
+    color: '#a3a3a3',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  apkErrorBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 10,
+    backgroundColor: 'rgba(229,9,20,0.08)',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(229,9,20,0.2)',
+    padding: 10,
+  },
+  apkErrorText: {
+    color: '#e50914',
+    fontSize: 12,
+    flex: 1,
+    lineHeight: 16,
+  },
+
+  // Auto Update Popup Modal
+  updateModalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.78)',
+    justifyContent: 'flex-end',
+  },
+  updateModalCard: {
+    backgroundColor: '#161618',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    padding: 24,
+    paddingBottom: 36,
+    borderTopWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    alignItems: 'center',
+  },
+  updateModalCloseBtn: {
+    position: 'absolute',
+    top: 16,
+    right: 18,
+    zIndex: 10,
+  },
+  updateModalIconHalo: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: 'rgba(229, 9, 20, 0.1)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(229, 9, 20, 0.25)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 14,
+    marginTop: 10,
+  },
+  updateModalTitle: {
+    color: '#FFFFFF',
+    fontSize: 22,
+    fontWeight: '800',
+    textAlign: 'center',
+    marginBottom: 5,
+  },
+  updateModalVersionRow: {
+    color: '#8e8e93',
+    fontSize: 13,
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  updateReleaseNotesBox: {
+    width: '100%',
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.07)',
+    padding: 14,
+    marginBottom: 16,
+  },
+  updateReleaseNotesTitle: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+    marginBottom: 6,
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+  },
+  updateReleaseNotesText: {
+    color: '#a3a3a3',
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  updateModalErrorText: {
+    color: '#e50914',
+    fontSize: 12,
+    textAlign: 'center',
+    marginBottom: 12,
+    lineHeight: 18,
+  },
+  updateModalBtnRow: {
+    width: '100%',
+    gap: 10,
+    marginTop: 4,
+  },
+  updateModalInstallBtn: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#e50914',
+    paddingVertical: 14,
+    borderRadius: 14,
+    shadowColor: '#e50914',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 10,
+    elevation: 5,
+  },
+  updateModalInstallBtnText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  updateModalSkipBtn: {
+    width: '100%',
+    alignItems: 'center',
+    paddingVertical: 12,
+  },
+  updateModalSkipBtnText: {
+    color: '#737373',
+    fontSize: 14,
+    fontWeight: '600',
+  },
 });
+
