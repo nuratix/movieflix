@@ -47,15 +47,13 @@
       "expo-image",
       "expo-asset",
       "expo-notifications",
-      "expo-screen-orientation",
-      [
-        "expo-intent-launcher"
-      ]
+      "expo-screen-orientation"
     ],
     "extra": {
       "eas": {
-        "projectId": "movieflix"
+        "projectId": "1794b566-0be5-4647-ab45-1696f5785c62"
       }
-    }
+    },
+    "owner": "opex0041w"
   }
 }
