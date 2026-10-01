@@ -13,6 +13,7 @@ import {
   useWindowDimensions,
   Animated,
   Easing,
+  PanResponder,
 } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import { StatusBar } from 'expo-status-bar';
@@ -4055,6 +4056,232 @@ function ReelCustomPlayer({
   const hideTimerRef = useRef(null);
   const videoViewRef = useRef(null);
 
+  // Brightness (0.05 to 1.0) & Volume (0.0 to 1.0) Gesture States
+  const [brightness, setBrightness] = useState(1.0);
+  const [volume, setVolume] = useState(1.0);
+  const [showBrightnessHud, setShowBrightnessHud] = useState(false);
+  const [showVolumeHud, setShowVolumeHud] = useState(false);
+  const hudTimerRef = useRef(null);
+  const brightnessRef = useRef(1.0);
+  const volumeRef = useRef(1.0);
+
+  // 2× Long Press Fast-Forward State
+  const [is2xActive, setIs2xActive] = useState(false);
+  const originalSpeedRef = useRef(1.0);
+
+  // Double Tap 10s Feedback Animation
+  const [doubleTapSide, setDoubleTapSide] = useState(null); // 'left' | 'right' | null
+  const doubleTapFadeAnim = useRef(new Animated.Value(0)).current;
+  const doubleTapTimerRef = useRef(null);
+
+  // Picture in Picture State
+  const [isInPiP, setIsInPiP] = useState(false);
+
+  // Gesture Tracking Refs
+  const showControlsRef = useRef(true);
+  const currentSpeedRef = useRef('1.0×');
+  const playerRef = useRef(null);
+  const lastTapTimeRef = useRef(0);
+  const lastTapXRef = useRef(0);
+  const singleTapTimerRef = useRef(null);
+  const longPressTimerRef = useRef(null);
+  const isDraggingRef = useRef(false);
+  const isLongPressActiveRef = useRef(false);
+  const startDragValRef = useRef(0);
+  const dragTypeRef = useRef(null); // 'brightness' | 'volume' | null
+
+  useEffect(() => {
+    showControlsRef.current = showControls;
+  }, [showControls]);
+
+  useEffect(() => {
+    currentSpeedRef.current = currentSpeed;
+  }, [currentSpeed]);
+
+  useEffect(() => {
+    brightnessRef.current = brightness;
+  }, [brightness]);
+
+  useEffect(() => {
+    volumeRef.current = volume;
+  }, [volume]);
+
+  const parseSpeed = (spdStr) => {
+    const num = parseFloat(String(spdStr).replace('×', '').trim());
+    return isNaN(num) || num <= 0 ? 1.0 : num;
+  };
+
+  const triggerHud = (type) => {
+    if (hudTimerRef.current) clearTimeout(hudTimerRef.current);
+    if (type === 'brightness') {
+      setShowBrightnessHud(true);
+      setShowVolumeHud(false);
+    } else if (type === 'volume') {
+      setShowVolumeHud(true);
+      setShowBrightnessHud(false);
+    }
+    hudTimerRef.current = setTimeout(() => {
+      setShowBrightnessHud(false);
+      setShowVolumeHud(false);
+    }, 1200);
+  };
+
+  const triggerDoubleTapFeedback = (side) => {
+    setDoubleTapSide(side);
+    doubleTapFadeAnim.setValue(1);
+    if (doubleTapTimerRef.current) clearTimeout(doubleTapTimerRef.current);
+    Animated.sequence([
+      Animated.timing(doubleTapFadeAnim, {
+        toValue: 1,
+        duration: 80,
+        useNativeDriver: true,
+      }),
+      Animated.timing(doubleTapFadeAnim, {
+        toValue: 0,
+        duration: 400,
+        delay: 200,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      setDoubleTapSide(null);
+    });
+  };
+
+  // PanResponder for Double Tap, Long Press 2x, Vertical Volume/Brightness Swipes, and Single Tap UI Toggle
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        return Math.abs(gestureState.dy) > 8;
+      },
+      onPanResponderGrant: (evt) => {
+        const { locationX } = evt.nativeEvent;
+        const screenW = windowWidth || 800;
+
+        isDraggingRef.current = false;
+        isLongPressActiveRef.current = false;
+
+        const isLeft = locationX < screenW / 2;
+        dragTypeRef.current = isLeft ? 'brightness' : 'volume';
+        startDragValRef.current = isLeft ? brightnessRef.current : volumeRef.current;
+
+        // Long Press: 400ms hold -> 2× Speed
+        if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+        longPressTimerRef.current = setTimeout(() => {
+          if (!isDraggingRef.current) {
+            isLongPressActiveRef.current = true;
+            originalSpeedRef.current = parseSpeed(currentSpeedRef.current);
+            if (playerRef.current) {
+              playerRef.current.playbackRate = 2.0;
+            }
+            setIs2xActive(true);
+          }
+        }, 400);
+      },
+      onPanResponderMove: (_, gestureState) => {
+        if (Math.abs(gestureState.dy) > 8) {
+          isDraggingRef.current = true;
+          if (longPressTimerRef.current) {
+            clearTimeout(longPressTimerRef.current);
+          }
+          if (isLongPressActiveRef.current) {
+            isLongPressActiveRef.current = false;
+            setIs2xActive(false);
+            if (playerRef.current) {
+              playerRef.current.playbackRate = originalSpeedRef.current;
+            }
+          }
+
+          const screenH = windowHeight || 400;
+          const delta = -gestureState.dy / (screenH * 0.55);
+
+          if (dragTypeRef.current === 'brightness') {
+            const nextB = Math.max(0.05, Math.min(1.0, startDragValRef.current + delta));
+            setBrightness(nextB);
+            brightnessRef.current = nextB;
+            triggerHud('brightness');
+          } else if (dragTypeRef.current === 'volume') {
+            const nextV = Math.max(0.0, Math.min(1.0, startDragValRef.current + delta));
+            setVolume(nextV);
+            volumeRef.current = nextV;
+            if (playerRef.current) {
+              playerRef.current.volume = nextV;
+            }
+            triggerHud('volume');
+          }
+        }
+      },
+      onPanResponderRelease: (evt) => {
+        if (longPressTimerRef.current) {
+          clearTimeout(longPressTimerRef.current);
+        }
+
+        // If user was in 2× speed hold mode, restore original playback speed!
+        if (isLongPressActiveRef.current) {
+          isLongPressActiveRef.current = false;
+          setIs2xActive(false);
+          if (playerRef.current) {
+            playerRef.current.playbackRate = originalSpeedRef.current;
+          }
+          return;
+        }
+
+        // If user was dragging brightness or volume, finish drag without tapping
+        if (isDraggingRef.current) {
+          isDraggingRef.current = false;
+          return;
+        }
+
+        // Tap handling: Single Tap vs Double Tap
+        const x = evt.nativeEvent.locationX;
+        const now = Date.now();
+        const screenW = windowWidth || 800;
+
+        if (now - lastTapTimeRef.current < 320 && Math.abs(x - lastTapXRef.current) < 90) {
+          // DOUBLE TAP DETECTED: 10s move
+          if (singleTapTimerRef.current) {
+            clearTimeout(singleTapTimerRef.current);
+            singleTapTimerRef.current = null;
+          }
+          lastTapTimeRef.current = 0;
+
+          if (x < screenW / 2) {
+            seekRelative(-10);
+            triggerDoubleTapFeedback('left');
+          } else {
+            seekRelative(10);
+            triggerDoubleTapFeedback('right');
+          }
+        } else {
+          // SINGLE TAP: Toggle Player UI (show or close)
+          lastTapTimeRef.current = now;
+          lastTapXRef.current = x;
+
+          if (singleTapTimerRef.current) {
+            clearTimeout(singleTapTimerRef.current);
+          }
+          singleTapTimerRef.current = setTimeout(() => {
+            if (showControlsRef.current) {
+              setShowControls(false);
+              if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+            } else {
+              wakeControls();
+            }
+          }, 320);
+        }
+      },
+    })
+  ).current;
+
+  useEffect(() => {
+    return () => {
+      if (singleTapTimerRef.current) clearTimeout(singleTapTimerRef.current);
+      if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+      if (doubleTapTimerRef.current) clearTimeout(doubleTapTimerRef.current);
+      if (hudTimerRef.current) clearTimeout(hudTimerRef.current);
+    };
+  }, []);
+
   useEffect(() => {
     activeTranslateLangRef.current = activeTranslateLang;
   }, [activeTranslateLang]);
@@ -4113,6 +4340,10 @@ function ReelCustomPlayer({
     }
     p.play();
   });
+
+  useEffect(() => {
+    playerRef.current = player;
+  }, [player]);
 
   // Keep ref updated
   useEffect(() => {
@@ -4429,19 +4660,37 @@ function ReelCustomPlayer({
         player={player}
         nativeControls={false}
         allowsFullscreen={false}
-        allowsPictureInPicture
-        startsPictureInPictureAutomatically
+        allowsPictureInPicture={true}
+        startsPictureInPictureAutomatically={true}
         contentFit={contentFitMode}
+        onPictureInPictureStart={() => {
+          setIsInPiP(true);
+          setShowControls(false);
+        }}
+        onPictureInPictureStop={() => {
+          setIsInPiP(false);
+        }}
       />
 
-
+      {/* Software Brightness Dimming Layer */}
+      <View
+        pointerEvents="none"
+        style={[
+          StyleSheet.absoluteFill,
+          {
+            backgroundColor: '#000000',
+            opacity: (1 - brightness) * 0.85,
+            zIndex: 1,
+          },
+        ]}
+      />
 
       {/* REAL ON-SCREEN SUBTITLE OVERLAY */}
-      {Boolean(currentSubtitleText && selectedSubtitle !== 'Off') && (
+      {Boolean(currentSubtitleText && selectedSubtitle !== 'Off' && !isInPiP) && (
         <View
           style={[
             styles.subtitleOverlayContainer,
-            { bottom: showControls ? 82 : 32 },
+            { bottom: showControls ? 82 : 32, zIndex: 3 },
           ]}
           pointerEvents="none"
         >
@@ -4451,18 +4700,73 @@ function ReelCustomPlayer({
         </View>
       )}
 
-      {/* TRANSPARENT TAP DETECTOR */}
-      <TouchableWithoutFeedback onPress={wakeControls}>
-        <View style={StyleSheet.absoluteFill} />
-      </TouchableWithoutFeedback>
+      {/* GESTURE DETECTOR: DOUBLE TAP (±10s), LONG PRESS (2×), VERTICAL SWIPES (VOL/BRIGHTNESS), SINGLE TAP (SHOW/HIDE) */}
+      {!isInPiP && (
+        <View
+          style={[StyleSheet.absoluteFill, { zIndex: 4 }]}
+          {...panResponder.panHandlers}
+        />
+      )}
+
+      {/* HUD: BRIGHTNESS LEVEL (LEFT DRAG) */}
+      {!isInPiP && showBrightnessHud && (
+        <View style={styles.hudCardLeft} pointerEvents="none">
+          <Ionicons
+            name={brightness > 0.6 ? "sunny" : brightness > 0.25 ? "sunny-outline" : "moon-outline"}
+            size={22}
+            color="#FFFFFF"
+          />
+          <View style={styles.hudTrack}>
+            <View style={[styles.hudFill, { height: `${Math.round(brightness * 100)}%` }]} />
+          </View>
+          <Text style={styles.hudText}>{Math.round(brightness * 100)}%</Text>
+        </View>
+      )}
+
+      {/* HUD: VOLUME LEVEL (RIGHT DRAG) */}
+      {!isInPiP && showVolumeHud && (
+        <View style={styles.hudCardRight} pointerEvents="none">
+          <Ionicons
+            name={volume <= 0.01 ? "volume-mute" : volume < 0.5 ? "volume-low" : "volume-high"}
+            size={22}
+            color="#FFFFFF"
+          />
+          <View style={styles.hudTrack}>
+            <View style={[styles.hudFill, { height: `${Math.round(volume * 100)}%` }]} />
+          </View>
+          <Text style={styles.hudText}>{Math.round(volume * 100)}%</Text>
+        </View>
+      )}
+
+      {/* HUD: 2× LONG PRESS SPEED PILL BANNER */}
+      {!isInPiP && is2xActive && (
+        <View style={styles.speed2xBanner} pointerEvents="none">
+          <Ionicons name="play-forward" size={15} color="#FFFFFF" style={{ marginRight: 6 }} />
+          <Text style={styles.speed2xBannerText}>2× Speed</Text>
+        </View>
+      )}
+
+      {/* HUD: DOUBLE TAP 10s FEEDBACK RIPPLE */}
+      {!isInPiP && doubleTapSide === 'left' && (
+        <Animated.View style={[styles.doubleTapRippleLeft, { opacity: doubleTapFadeAnim }]} pointerEvents="none">
+          <Ionicons name="play-back" size={26} color="#FFFFFF" />
+          <Text style={styles.doubleTapRippleText}>10s</Text>
+        </Animated.View>
+      )}
+      {!isInPiP && doubleTapSide === 'right' && (
+        <Animated.View style={[styles.doubleTapRippleRight, { opacity: doubleTapFadeAnim }]} pointerEvents="none">
+          <Ionicons name="play-forward" size={26} color="#FFFFFF" />
+          <Text style={styles.doubleTapRippleText}>10s</Text>
+        </Animated.View>
+      )}
 
       {/* OVERLAY CONTROLS (FULLSCREEN SAFE-AREA POSITIONING) */}
-      {showControls && (
+      {!isInPiP && showControls && (
         <View
           style={[
             StyleSheet.absoluteFill,
             styles.playerControlsOverlay,
-            { backgroundColor: 'transparent' },
+            { zIndex: 10 },
           ]}
           pointerEvents="box-none"
         >
@@ -4498,17 +4802,19 @@ function ReelCustomPlayer({
               {/* Picture in Picture Button */}
               <TouchableOpacity
                 style={styles.playerGlassPillBtn}
-                onPress={() => {
-                  wakeControls();
+                onPress={async () => {
                   try {
-                    videoViewRef.current?.startPictureInPicture();
+                    setShowControls(false);
+                    if (videoViewRef.current?.startPictureInPicture) {
+                      await videoViewRef.current.startPictureInPicture();
+                    }
                   } catch (e) {
                     console.log("PiP start note:", e);
                   }
                 }}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
-                <Ionicons name="copy-outline" size={14} color="#FFFFFF" style={{ marginRight: 4 }} />
+                <Ionicons name="albums-outline" size={14} color="#FFFFFF" style={{ marginRight: 4 }} />
                 <Text style={styles.playerGlassPillText}>PiP</Text>
               </TouchableOpacity>
 
@@ -5966,6 +6272,114 @@ const styles = StyleSheet.create({
   playerExitBtnText: {
     color: '#a3a3a3',
     fontSize: 13,
+  },
+
+  // BRIGHTNESS & VOLUME HUD CARDS
+  hudCardLeft: {
+    position: 'absolute',
+    left: 36,
+    top: '50%',
+    transform: [{ translateY: -70 }],
+    width: 48,
+    height: 140,
+    borderRadius: 24,
+    backgroundColor: 'rgba(16, 16, 20, 0.88)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.18)',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    zIndex: 15,
+  },
+  hudCardRight: {
+    position: 'absolute',
+    right: 36,
+    top: '50%',
+    transform: [{ translateY: -70 }],
+    width: 48,
+    height: 140,
+    borderRadius: 24,
+    backgroundColor: 'rgba(16, 16, 20, 0.88)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.18)',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    zIndex: 15,
+  },
+  hudTrack: {
+    width: 6,
+    height: 64,
+    borderRadius: 3,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    overflow: 'hidden',
+    justifyContent: 'flex-end',
+  },
+  hudFill: {
+    width: '100%',
+    backgroundColor: '#e50914',
+    borderRadius: 3,
+  },
+  hudText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+
+  // 2× SPEED BANNER (LONG PRESS)
+  speed2xBanner: {
+    position: 'absolute',
+    top: 24,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(229, 9, 20, 0.94)',
+    paddingHorizontal: 16,
+    paddingVertical: 7,
+    borderRadius: 20,
+    zIndex: 25,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  speed2xBannerText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+
+  // DOUBLE TAP 10S FEEDBACK
+  doubleTapRippleLeft: {
+    position: 'absolute',
+    left: 48,
+    top: '50%',
+    transform: [{ translateY: -40 }],
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(255, 255, 255, 0.22)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 22,
+  },
+  doubleTapRippleRight: {
+    position: 'absolute',
+    right: 48,
+    top: '50%',
+    transform: [{ translateY: -40 }],
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(255, 255, 255, 0.22)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 22,
+  },
+  doubleTapRippleText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '700',
+    marginTop: 2,
   },
 
   // MODAL BOTTOM SHEETS
