@@ -1,24 +1,42 @@
 {
   "expo": {
-    "name": "reel-app",
-    "slug": "reel-app",
+    "name": "Movieflix",
+    "slug": "movieflix",
     "version": "1.0.0",
-    "orientation": "portrait",
+    "orientation": "default",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#0a0a0a",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0a0a0a"
+    },
+    "notification": {
+      "icon": "./assets/notification-icon.png",
+      "color": "#e50914"
+    },
     "ios": {
       "supportsTablet": true
     },
     "android": {
+      "package": "com.movieflix.app",
+      "usesCleartextTraffic": true,
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
+        "backgroundColor": "#0a0a0a",
+        "foregroundImage": "./assets/android-icon-foreground.png"
       }
     },
     "web": {
-      "favicon": "./assets/favicon.png"
-    }
+      "favicon": "./assets/icon.png"
+    },
+    "plugins": [
+      "expo-video",
+      "expo-status-bar",
+      "expo-secure-store",
+      "expo-image",
+      "expo-asset",
+      "expo-notifications"
+    ]
   }
 }
