@@ -4,6 +4,8 @@ import {
   notifyDownloadStarted,
   notifyDownloadCompleted,
   notifyDownloadFailed,
+  notifyDownloadProgress,
+  cancelDownloadNotification,
 } from './notificationService';
 
 // Active in-flight download resumables
@@ -97,6 +99,7 @@ export async function startDownload({
   await saveDownload(downloadRecord);
   if (onStatusChange) onStatusChange('downloading', 0);
   notifyDownloadStarted(movie.name || 'Title', resolution, language);
+  notifyDownloadProgress(id, movie.name || 'Title', 0, 0, 0);
 
   // If subtitle URL provided, download subtitle file in background
   if (subtitleUrl && downloadsDir) {
@@ -134,9 +137,10 @@ export async function startDownload({
     }
 
     const now = Date.now();
-    if (now - lastSaveTime > 800 || percent === 100) {
+    if (now - lastSaveTime > 1200 || percent === 100) {
       lastSaveTime = now;
       updateDownloadProgress(id, percent, 'downloading', localVideoUri, written);
+      notifyDownloadProgress(id, movie.name || 'Title', percent, written, expected);
     }
   };
 
@@ -147,10 +151,17 @@ export async function startDownload({
   };
 
   try {
+    const backgroundSession = FileSystem.FileSystemSessionType?.BACKGROUND !== undefined
+      ? FileSystem.FileSystemSessionType.BACKGROUND
+      : 0;
+
     const downloadResumable = FileSystem.createDownloadResumable(
       videoUrl,
       localVideoUri,
-      { headers: downloadHeaders },
+      {
+        headers: downloadHeaders,
+        sessionType: backgroundSession,
+      },
       callback
     );
 
@@ -164,11 +175,11 @@ export async function startDownload({
           const finalSize = fileInfo?.size || 0;
           await updateDownloadProgress(id, 100, 'completed', result.uri, finalSize);
           if (onStatusChange) onStatusChange('completed', 100);
-          notifyDownloadCompleted(movie.name || 'Title', formatBytes(finalSize));
+          notifyDownloadCompleted(id, movie.name || 'Title', formatBytes(finalSize));
         } else {
           await updateDownloadProgress(id, 0, 'error');
           if (onStatusChange) onStatusChange('error', 0);
-          notifyDownloadFailed(movie.name || 'Title');
+          notifyDownloadFailed(id, movie.name || 'Title');
         }
       })
       .catch(async (err) => {
@@ -176,7 +187,7 @@ export async function startDownload({
         console.warn('Download error:', err);
         await updateDownloadProgress(id, 0, 'error');
         if (onStatusChange) onStatusChange('error', 0);
-        notifyDownloadFailed(movie.name || 'Title');
+        notifyDownloadFailed(id, movie.name || 'Title');
       });
 
     return {
@@ -185,6 +196,7 @@ export async function startDownload({
         try {
           await downloadResumable.cancelAsync();
           activeDownloads.delete(id);
+          cancelDownloadNotification(id);
           await updateDownloadProgress(id, 0, 'canceled');
           if (onStatusChange) onStatusChange('canceled', 0);
         } catch (e) {}
@@ -207,6 +219,7 @@ export async function cancelDownload(id) {
     try {
       await task.cancelAsync();
       activeDownloads.delete(id);
+      cancelDownloadNotification(id);
     } catch (e) {}
   }
   await updateDownloadProgress(id, 0, 'canceled');

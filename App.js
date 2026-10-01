@@ -22,6 +22,8 @@ import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-
 import { useVideoPlayer, VideoView } from 'expo-video';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import * as NavigationBar from 'expo-navigation-bar';
+import * as Brightness from 'expo-brightness';
+import NetInfo from '@react-native-community/netinfo';
 import { Ionicons, MaterialIcons, Feather } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system/legacy';
 import { Asset } from 'expo-asset';
@@ -1175,6 +1177,21 @@ function ReelApp() {
       exitFullscreenSystemBar();
     }
     preloadIntroVideoAsync();
+
+    // Real-time native network connectivity detection
+    const unsubscribeNetInfo = NetInfo.addEventListener((netState) => {
+      const offline = !netState.isConnected || (netState.isInternetReachable === false);
+      setIsOffline(offline);
+      if (!offline) {
+        fetchContent();
+      }
+    });
+
+    NetInfo.fetch().then((netState) => {
+      const offline = !netState.isConnected || (netState.isInternetReachable === false);
+      setIsOffline(offline);
+    }).catch(() => {});
+
     fetchContent();
     loadAllLocalData();
 
@@ -1203,6 +1220,10 @@ function ReelApp() {
         }
       }).catch(() => {});
     }, 3000);
+
+    return () => {
+      unsubscribeNetInfo();
+    };
   }, []);
 
   const loadAllLocalData = async () => {
@@ -1315,8 +1336,11 @@ function ReelApp() {
         }
       } catch (catErr) {
         console.log("Server categories live fetch note:", catErr);
-        // Don't mark offline just because category fetch failed — curated content is still loaded
-        // setIsOffline(true);  <-- removed to prevent false "You are offline" banner
+        NetInfo.fetch().then((netState) => {
+          if (!netState.isConnected || netState.isInternetReachable === false) {
+            setIsOffline(true);
+          }
+        }).catch(() => {});
       }
 
       // Persist to local storage for instant loading on next app launch
@@ -1447,6 +1471,11 @@ function ReelApp() {
     offlineVideoUrl = null,
     offlineSubUrl = null
   ) => {
+    if (!offlineVideoUrl && isOffline) {
+      showToast('You are offline. Connect to internet to stream, or watch your downloads in Me > Downloads!');
+      return;
+    }
+
     setPlayerMovie(movie);
     setCurrentSe(se);
     setCurrentEp(ep);
@@ -2523,14 +2552,39 @@ function ReelApp() {
                     <Text style={styles.offlineSubtitle}>
                       Stream unavailable. Watch your downloaded movies & episodes offline anytime.
                     </Text>
-                    <TouchableOpacity
-                      style={styles.offlineSeeDownloadsBtn}
-                      onPress={() => { setMainTab('Me'); setMeSubTab('Downloads'); }}
-                      activeOpacity={0.8}
-                    >
-                      <Ionicons name="cloud-download-outline" size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
-                      <Text style={styles.offlineSeeDownloadsText}>See Downloads ({downloads.length})</Text>
-                    </TouchableOpacity>
+                    <View style={styles.offlineActionRow}>
+                      <TouchableOpacity
+                        style={styles.offlineSeeDownloadsBtn}
+                        onPress={() => { setMainTab('Me'); setMeSubTab('Downloads'); }}
+                        activeOpacity={0.8}
+                      >
+                        <Ionicons name="cloud-download-outline" size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
+                        <Text style={styles.offlineSeeDownloadsText}>See Downloads ({downloads.length})</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.offlineRetryBtn}
+                        onPress={async () => {
+                          showToast('Checking connection...');
+                          try {
+                            const net = await NetInfo.fetch();
+                            const stillOffline = !net.isConnected || (net.isInternetReachable === false);
+                            setIsOffline(stillOffline);
+                            if (!stillOffline) {
+                              showToast('Back online! 🌐');
+                              fetchContent();
+                            } else {
+                              showToast('Still offline. Check WiFi or mobile data.');
+                            }
+                          } catch (e) {
+                            showToast('Offline check failed.');
+                          }
+                        }}
+                        activeOpacity={0.8}
+                      >
+                        <Ionicons name="refresh-outline" size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
+                        <Text style={styles.offlineRetryBtnText}>Retry</Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
                 </View>
               )}
@@ -2579,6 +2633,48 @@ function ReelApp() {
                 </View>
               )}
             </View>
+          ) : isOffline && (!trendingNow || trendingNow.length === 0) ? (
+            /* DEDICATED FULL OFFLINE SCREEN */
+            <View style={styles.offlineFullContainer}>
+              <View style={styles.offlineIconBoxLarge}>
+                <Ionicons name="cloud-offline" size={48} color="#e50914" />
+              </View>
+              <Text style={styles.offlineFullTitle}>You're Offline</Text>
+              <Text style={styles.offlineFullSubtitle}>
+                No internet connection detected. Check your Wi-Fi or mobile network to browse and stream online titles.
+              </Text>
+              <TouchableOpacity
+                style={styles.offlineFullDownloadsBtn}
+                onPress={() => { setMainTab('Me'); setMeSubTab('Downloads'); }}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="cloud-download-outline" size={18} color="#FFFFFF" style={{ marginRight: 8 }} />
+                <Text style={styles.offlineFullDownloadsText}>Watch Downloads ({downloads.length})</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.offlineFullRetryBtn}
+                onPress={async () => {
+                  showToast('Checking connection...');
+                  try {
+                    const net = await NetInfo.fetch();
+                    const stillOffline = !net.isConnected || (net.isInternetReachable === false);
+                    setIsOffline(stillOffline);
+                    if (!stillOffline) {
+                      showToast('Connected! Restoring feed... 🌐');
+                      fetchContent();
+                    } else {
+                      showToast('Still offline. Please check your connection.');
+                    }
+                  } catch (e) {
+                    showToast('Connection check failed.');
+                  }
+                }}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="refresh-outline" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+                <Text style={styles.offlineFullRetryText}>Retry Connection</Text>
+              </TouchableOpacity>
+            </View>
           ) : loading ? (
             /* SKELETON LOADING STATE */
             <HomeSkeletonLoader />
@@ -2596,14 +2692,39 @@ function ReelApp() {
                     <Text style={styles.offlineSubtitle}>
                       Stream unavailable. Watch your downloaded movies & episodes offline anytime.
                     </Text>
-                    <TouchableOpacity
-                      style={styles.offlineSeeDownloadsBtn}
-                      onPress={() => { setMainTab('Me'); setMeSubTab('Downloads'); }}
-                      activeOpacity={0.8}
-                    >
-                      <Ionicons name="cloud-download-outline" size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
-                      <Text style={styles.offlineSeeDownloadsText}>See Downloads ({downloads.length})</Text>
-                    </TouchableOpacity>
+                    <View style={styles.offlineActionRow}>
+                      <TouchableOpacity
+                        style={styles.offlineSeeDownloadsBtn}
+                        onPress={() => { setMainTab('Me'); setMeSubTab('Downloads'); }}
+                        activeOpacity={0.8}
+                      >
+                        <Ionicons name="cloud-download-outline" size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
+                        <Text style={styles.offlineSeeDownloadsText}>See Downloads ({downloads.length})</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.offlineRetryBtn}
+                        onPress={async () => {
+                          showToast('Checking connection...');
+                          try {
+                            const net = await NetInfo.fetch();
+                            const stillOffline = !net.isConnected || (net.isInternetReachable === false);
+                            setIsOffline(stillOffline);
+                            if (!stillOffline) {
+                              showToast('Back online! Syncing feed... 🌐');
+                              fetchContent();
+                            } else {
+                              showToast('Still offline. Check WiFi or mobile data.');
+                            }
+                          } catch (e) {
+                            showToast('Offline check failed.');
+                          }
+                        }}
+                        activeOpacity={0.8}
+                      >
+                        <Ionicons name="refresh-outline" size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
+                        <Text style={styles.offlineRetryBtnText}>Retry Connection</Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
                 </View>
               )}
@@ -4106,6 +4227,32 @@ function ReelCustomPlayer({
     volumeRef.current = volume;
   }, [volume]);
 
+  // Query hardware screen brightness on mount and restore system brightness on unmount
+  useEffect(() => {
+    let isMounted = true;
+    if (Platform.OS === 'android' || Platform.OS === 'ios') {
+      Brightness.getBrightnessAsync()
+        .then((initial) => {
+          if (isMounted && typeof initial === 'number' && !isNaN(initial) && initial > 0) {
+            setBrightness(initial);
+            brightnessRef.current = initial;
+          }
+        })
+        .catch((e) => {
+          console.log("Hardware brightness get note:", e);
+        });
+    }
+
+    return () => {
+      isMounted = false;
+      if (Platform.OS === 'android') {
+        Brightness.restoreSystemBrightnessAsync().catch((e) => {
+          console.log("Hardware brightness restore note:", e);
+        });
+      }
+    };
+  }, []);
+
   const parseSpeed = (spdStr) => {
     const num = parseFloat(String(spdStr).replace('×', '').trim());
     return isNaN(num) || num <= 0 ? 1.0 : num;
@@ -4199,6 +4346,9 @@ function ReelCustomPlayer({
             const nextB = Math.max(0.05, Math.min(1.0, startDragValRef.current + delta));
             setBrightness(nextB);
             brightnessRef.current = nextB;
+            if (Platform.OS === 'android' || Platform.OS === 'ios') {
+              Brightness.setBrightnessAsync(nextB).catch(() => {});
+            }
             triggerHud('brightness');
           } else if (dragTypeRef.current === 'volume') {
             const nextV = Math.max(0.0, Math.min(1.0, startDragValRef.current + delta));
@@ -4672,18 +4822,7 @@ function ReelCustomPlayer({
         }}
       />
 
-      {/* Software Brightness Dimming Layer */}
-      <View
-        pointerEvents="none"
-        style={[
-          StyleSheet.absoluteFill,
-          {
-            backgroundColor: '#000000',
-            opacity: (1 - brightness) * 0.85,
-            zIndex: 1,
-          },
-        ]}
-      />
+      {/* Hardware brightness controls device screen backlight directly */}
 
       {/* REAL ON-SCREEN SUBTITLE OVERLAY */}
       {Boolean(currentSubtitleText && selectedSubtitle !== 'Off' && !isInPiP) && (
@@ -7343,12 +7482,18 @@ const styles = StyleSheet.create({
     lineHeight: 17,
     marginBottom: 10,
   },
+  offlineActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 4,
+    flexWrap: 'wrap',
+  },
   offlineSeeDownloadsBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    alignSelf: 'flex-start',
     backgroundColor: '#e50914',
-    paddingHorizontal: 14,
+    paddingHorizontal: 13,
     paddingVertical: 7,
     borderRadius: 8,
   },
@@ -7356,6 +7501,87 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 12,
     fontWeight: '700',
+  },
+  offlineRetryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  offlineRetryBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  offlineFullContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 32,
+    paddingVertical: 64,
+  },
+  offlineIconBoxLarge: {
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    backgroundColor: 'rgba(229, 9, 20, 0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(229, 9, 20, 0.3)',
+  },
+  offlineFullTitle: {
+    color: '#FFFFFF',
+    fontSize: 20,
+    fontWeight: '800',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  offlineFullSubtitle: {
+    color: '#9ca3af',
+    fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 24,
+  },
+  offlineFullDownloadsBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#e50914',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    width: '100%',
+    maxWidth: 280,
+    marginBottom: 12,
+  },
+  offlineFullDownloadsText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  offlineFullRetryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    paddingVertical: 11,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    width: '100%',
+    maxWidth: 280,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  offlineFullRetryText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
   },
 
   // NO RESULT CARD

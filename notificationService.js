@@ -73,9 +73,36 @@ export async function initNotifications() {
   }
 }
 
+function formatBytes(bytes, decimals = 1) {
+  if (!bytes || bytes === 0) return '0 MB';
+  const k = 1024;
+  const dm = decimals < 0 ? 0 : decimals;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+}
+
+function renderProgressBar(percent, length = 12) {
+  const clamped = Math.max(0, Math.min(100, Math.round(percent || 0)));
+  const filled = Math.round((clamped / 100) * length);
+  const unfilled = Math.max(0, length - filled);
+  return '█'.repeat(filled) + '░'.repeat(unfilled);
+}
+
 async function setupAndroidChannels() {
   if (!Notifications?.setNotificationChannelAsync) return;
   try {
+    // Ongoing download progress channel (low importance so it does not beep or vibrate on each progress update)
+    await Notifications.setNotificationChannelAsync('download-progress', {
+      name: 'Download Progress',
+      importance: Notifications.AndroidImportance?.LOW ?? 2,
+      vibrationPattern: null,
+      enableVibrate: false,
+      sound: null,
+      showBadge: false,
+    });
+
+    // Completed or failed downloads channel (high importance with chime and vibration)
     await Notifications.setNotificationChannelAsync('downloads', {
       name: 'Downloads',
       importance: Notifications.AndroidImportance?.HIGH ?? 4,
@@ -104,8 +131,8 @@ export async function notifyDownloadStarted(movieName, resolution = '720p', lang
   try {
     await Notifications.scheduleNotificationAsync({
       content: {
-        title: `Downloading ${movieName}`,
-        body: `Quality: ${resolution} · ${language}. Download in progress.`,
+        title: `Starting download: ${movieName}`,
+        body: `Quality: ${resolution} · ${language}. Download in progress...`,
         sound: 'default',
         channelId: 'downloads',
       },
@@ -117,11 +144,43 @@ export async function notifyDownloadStarted(movieName, resolution = '720p', lang
 }
 
 /**
- * Trigger notification when download completes successfully
+ * Update real-time download notification with dynamic loading progress bar
  */
-export async function notifyDownloadCompleted(movieName, sizeFormatted = '') {
+export async function notifyDownloadProgress(downloadId, movieName, percent, writtenBytes = 0, totalBytes = 0) {
   if (!Notifications?.scheduleNotificationAsync) return;
   try {
+    const notifId = `dl_${String(downloadId || 'task').replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+    const bar = renderProgressBar(percent, 12);
+    const writtenStr = formatBytes(writtenBytes);
+    const totalStr = totalBytes > 0 ? formatBytes(totalBytes) : '...';
+
+    await Notifications.scheduleNotificationAsync({
+      identifier: notifId,
+      content: {
+        title: `Downloading ${movieName || 'Movie'}`,
+        body: `${bar} ${percent}%\n${writtenStr} / ${totalStr}`,
+        channelId: 'download-progress',
+        priority: Notifications.AndroidNotificationPriority?.LOW ?? 'low',
+        sticky: true,
+        autoDismiss: false,
+      },
+      trigger: null,
+    });
+  } catch (e) {
+    // Non-fatal notification error
+  }
+}
+
+/**
+ * Trigger notification when download completes successfully
+ */
+export async function notifyDownloadCompleted(downloadId, movieName, sizeFormatted = '') {
+  if (!Notifications?.scheduleNotificationAsync) return;
+  try {
+    if (downloadId && Notifications.dismissNotificationAsync) {
+      const notifId = `dl_${String(downloadId).replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+      await Notifications.dismissNotificationAsync(notifId).catch(() => {});
+    }
     const sizeText = sizeFormatted ? ` (${sizeFormatted})` : '';
     await Notifications.scheduleNotificationAsync({
       content: {
@@ -129,6 +188,7 @@ export async function notifyDownloadCompleted(movieName, sizeFormatted = '') {
         body: `${movieName}${sizeText} is downloaded and ready to watch offline anytime!`,
         sound: 'default',
         channelId: 'downloads',
+        priority: Notifications.AndroidNotificationPriority?.HIGH ?? 'high',
       },
       trigger: null,
     });
@@ -140,21 +200,37 @@ export async function notifyDownloadCompleted(movieName, sizeFormatted = '') {
 /**
  * Trigger notification when a download fails
  */
-export async function notifyDownloadFailed(movieName) {
+export async function notifyDownloadFailed(downloadId, movieName) {
   if (!Notifications?.scheduleNotificationAsync) return;
   try {
+    if (downloadId && Notifications.dismissNotificationAsync) {
+      const notifId = `dl_${String(downloadId).replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+      await Notifications.dismissNotificationAsync(notifId).catch(() => {});
+    }
     await Notifications.scheduleNotificationAsync({
       content: {
         title: 'Download Failed ❌',
         body: `Could not finish downloading ${movieName}. Tap to retry when connected.`,
         sound: 'default',
         channelId: 'downloads',
+        priority: Notifications.AndroidNotificationPriority?.HIGH ?? 'high',
       },
       trigger: null,
     });
   } catch (e) {
     console.warn('Download fail notification error:', e);
   }
+}
+
+/**
+ * Cancel and dismiss any in-flight download notification
+ */
+export async function cancelDownloadNotification(downloadId) {
+  if (!downloadId || !Notifications?.dismissNotificationAsync) return;
+  try {
+    const notifId = `dl_${String(downloadId).replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+    await Notifications.dismissNotificationAsync(notifId).catch(() => {});
+  } catch (e) {}
 }
 
 /**
