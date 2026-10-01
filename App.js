@@ -20,6 +20,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import * as ScreenOrientation from 'expo-screen-orientation';
+import * as NavigationBar from 'expo-navigation-bar';
 import { Ionicons, MaterialIcons, Feather } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system/legacy';
 import { Asset } from 'expo-asset';
@@ -74,6 +75,33 @@ const LOCAL_HEADER_ICON = require('./assets/header_icon.png');
 const LOCAL_INTRO_ASSET = require('./assets/intro.mp4');
 
 let preloadedIntroUri = null;
+
+// Android Edge-to-Edge System Navigation Bar Controllers
+const enterFullscreenSystemBar = async () => {
+  if (Platform.OS === 'android') {
+    try {
+      await NavigationBar.setVisibilityAsync('hidden');
+      await NavigationBar.setBehaviorAsync('overlay-swipe');
+      await NavigationBar.setBackgroundColorAsync('#000000');
+      await NavigationBar.setButtonStyleAsync('light');
+    } catch (e) {
+      // non-fatal
+    }
+  }
+};
+
+const exitFullscreenSystemBar = async () => {
+  if (Platform.OS === 'android') {
+    try {
+      await NavigationBar.setVisibilityAsync('visible');
+      await NavigationBar.setBehaviorAsync('inset-touch');
+      await NavigationBar.setBackgroundColorAsync('#0a0a0a');
+      await NavigationBar.setButtonStyleAsync('light');
+    } catch (e) {
+      // non-fatal
+    }
+  }
+};
 
 // Preload and cache the intro video to internal storage for instant 0-lag playback
 const preloadIntroVideoAsync = async () => {
@@ -1142,6 +1170,9 @@ function ReelApp() {
       else setSecureStorageStatus("Encrypted Safe Storage");
     });
     initNotifications();
+    if (Platform.OS === 'android') {
+      exitFullscreenSystemBar();
+    }
     preloadIntroVideoAsync();
     fetchContent();
     loadAllLocalData();
@@ -1429,11 +1460,14 @@ function ReelApp() {
     setAvailableAudioVariants([]);
     setPlayerResumeTime(resumeTime || 0);
 
+    enterFullscreenSystemBar();
+
     // Smooth landscape transition without sudden screen flash
     setTimeout(() => {
       ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE).catch((e) => {
         console.log("Landscape lock note:", e);
       });
+      enterFullscreenSystemBar();
     }, 150);
 
     if (offlineVideoUrl) {
@@ -1667,6 +1701,7 @@ function ReelApp() {
     } catch (e) {
       console.log("Portrait restore error:", e);
     }
+    exitFullscreenSystemBar();
     // Refresh watch history immediately on exit
     getWatchHistory().then(setWatchHistory).catch(() => {});
   };
@@ -3256,7 +3291,8 @@ function ReelApp() {
       <Modal
         visible={isIntroLoading}
         animationType="fade"
-        transparent={false}
+        transparent={true}
+        presentationStyle="overFullScreen"
         statusBarTranslucent={true}
         supportedOrientations={['landscape', 'portrait']}
         onRequestClose={() => {
@@ -3275,6 +3311,7 @@ function ReelApp() {
           onProceedToPlayer={() => {
             setIsIntroLoading(false);
             setIsPlayerOpen(true);
+            enterFullscreenSystemBar();
           }}
           onCancel={() => {
             setIsIntroLoading(false);
@@ -3290,12 +3327,13 @@ function ReelApp() {
       <Modal
         visible={isPlayerOpen}
         animationType="fade"
-        transparent={false}
+        transparent={true}
+        presentationStyle="overFullScreen"
         statusBarTranslucent={true}
         supportedOrientations={['landscape', 'portrait']}
         onRequestClose={closePlayer}
       >
-        <View style={styles.playerContainer}>
+        <View style={[styles.playerContainer, StyleSheet.absoluteFillObject, { backgroundColor: '#000000' }]}>
           <StatusBar hidden translucent />
 
           {activeStreamUrl ? (
@@ -3676,7 +3714,11 @@ function ReelApp() {
         <View style={styles.notifPromptBackdrop}>
           <View style={styles.notifPromptCard}>
             <View style={styles.notifPromptIconHalo}>
-              <Ionicons name="notifications" size={32} color="#e50914" />
+              <ExpoImage
+                source={LOCAL_HEADER_ICON}
+                style={{ width: 34, height: 38 }}
+                contentFit="contain"
+              />
             </View>
 
             <Text style={styles.notifPromptTitle}>Enable Notifications</Text>
@@ -3844,6 +3886,10 @@ function MovieflixIntroLoadingScreen({
   }, []);
 
   useEffect(() => {
+    enterFullscreenSystemBar();
+  }, []);
+
+  useEffect(() => {
     if (!introPlayer) return;
     try {
       introPlayer.currentTime = 0;
@@ -3887,7 +3933,7 @@ function MovieflixIntroLoadingScreen({
   }, [introEnded, activeStreamUrl, loadingStream, fadeAnim, introPlayer, onProceedToPlayer]);
 
   return (
-    <Animated.View style={[styles.introScreenContainer, { opacity: fadeAnim }]}>
+    <Animated.View style={[styles.introScreenContainer, StyleSheet.absoluteFillObject, { backgroundColor: '#000000', opacity: fadeAnim }]}>
       <StatusBar hidden translucent />
 
       {/* Intro Video layer if intro is still playing */}
@@ -3897,7 +3943,7 @@ function MovieflixIntroLoadingScreen({
           player={introPlayer}
           nativeControls={false}
           allowsFullscreen={false}
-          contentFit="cover"
+          contentFit="contain"
         />
       ) : (
         /* Stream loading state if stream is still resolving after intro */
@@ -4012,6 +4058,13 @@ function ReelCustomPlayer({
   useEffect(() => {
     activeTranslateLangRef.current = activeTranslateLang;
   }, [activeTranslateLang]);
+
+  useEffect(() => {
+    enterFullscreenSystemBar();
+    return () => {
+      exitFullscreenSystemBar();
+    };
+  }, []);
 
   const continuousWatchSecondsRef = useRef(0);
 
@@ -4300,8 +4353,14 @@ function ReelCustomPlayer({
 
       if (isCurrentlyLandscape) {
         await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
+        if (Platform.OS === 'android') {
+          NavigationBar.setVisibilityAsync('visible').catch(() => {});
+          NavigationBar.setBackgroundColorAsync('#000000').catch(() => {});
+          NavigationBar.setButtonStyleAsync('light').catch(() => {});
+        }
       } else {
         await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE);
+        enterFullscreenSystemBar();
       }
     } catch (e) {
       console.log("Toggle orientation failed:", e);
@@ -4358,7 +4417,7 @@ function ReelCustomPlayer({
   const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
 
   return (
-    <View style={[styles.playerContainer, { width: windowWidth, height: windowHeight }]}>
+    <View style={[styles.playerContainer, StyleSheet.absoluteFillObject, { backgroundColor: '#000000' }]}>
       {/* 
         UNDERLYING FULLSCREEN VIDEO VIEW
         nativeControls={false} completely eliminates duplicate player
@@ -4403,7 +4462,7 @@ function ReelCustomPlayer({
           style={[
             StyleSheet.absoluteFill,
             styles.playerControlsOverlay,
-            { width: windowWidth, height: windowHeight },
+            { backgroundColor: 'transparent' },
           ]}
           pointerEvents="box-none"
         >
@@ -5867,6 +5926,7 @@ const styles = StyleSheet.create({
   // PLAYER LOADING & ERROR
   playerLoadingCentered: {
     flex: 1,
+    backgroundColor: '#000000',
     justifyContent: 'center',
     alignItems: 'center',
   },

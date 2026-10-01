@@ -12,6 +12,11 @@
       "resizeMode": "contain",
       "backgroundColor": "#0a0a0a"
     },
+    "androidNavigationBar": {
+      "visible": "sticky-immersive",
+      "barStyle": "light-content",
+      "backgroundColor": "#000000"
+    },
     "notification": {
       "icon": "./assets/notification-icon.png",
       "color": "#e50914"
@@ -24,6 +29,17 @@
       "package": "com.movieflix.app",
       "versionCode": 1,
       "usesCleartextTraffic": true,
+      "backgroundColor": "#0a0a0a",
+      "splash": {
+        "image": "./assets/splash-icon.png",
+        "resizeMode": "contain",
+        "backgroundColor": "#0a0a0a"
+      },
+      "navigationBar": {
+        "visible": "sticky-immersive",
+        "barStyle": "light-content",
+        "backgroundColor": "#000000"
+      },
       "adaptiveIcon": {
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundColor": "#0a0a0a"
@@ -46,8 +62,15 @@
       "expo-secure-store",
       "expo-image",
       "expo-asset",
-      "expo-notifications",
-      "expo-screen-orientation"
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#e50914"
+        }
+      ],
+      "expo-screen-orientation",
+      "expo-navigation-bar"
     ],
     "extra": {
       "eas": {
