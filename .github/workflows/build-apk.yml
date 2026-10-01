@@ -32,10 +32,9 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
-          cache: 'gradle'
 
       - name: Install npm dependencies
-        run: npm ci || npm install
+        run: npm install --legacy-peer-deps
 
       - name: Prebuild Native Android Project
         run: npx expo prebuild --platform android --clean
