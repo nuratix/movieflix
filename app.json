@@ -17,15 +17,25 @@
       "color": "#e50914"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.movieflix.app"
     },
     "android": {
       "package": "com.movieflix.app",
+      "versionCode": 1,
       "usesCleartextTraffic": true,
       "adaptiveIcon": {
-        "backgroundColor": "#0a0a0a",
-        "foregroundImage": "./assets/android-icon-foreground.png"
-      }
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundColor": "#0a0a0a"
+      },
+      "permissions": [
+        "android.permission.INTERNET",
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.VIBRATE",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.REQUEST_INSTALL_PACKAGES"
+      ]
     },
     "web": {
       "favicon": "./assets/icon.png"
@@ -36,7 +46,16 @@
       "expo-secure-store",
       "expo-image",
       "expo-asset",
-      "expo-notifications"
-    ]
+      "expo-notifications",
+      "expo-screen-orientation",
+      [
+        "expo-intent-launcher"
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "movieflix"
+      }
+    }
   }
 }

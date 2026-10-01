@@ -1283,7 +1283,8 @@ function ReelApp() {
         }
       } catch (catErr) {
         console.log("Server categories live fetch note:", catErr);
-        setIsOffline(true);
+        // Don't mark offline just because category fetch failed — curated content is still loaded
+        // setIsOffline(true);  <-- removed to prevent false "You are offline" banner
       }
 
       // Persist to local storage for instant loading on next app launch
