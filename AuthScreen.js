@@ -13,6 +13,7 @@ import {
   Image,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import TiltedPostersBackground from './TiltedPostersBackground';
 
@@ -61,8 +62,19 @@ export default function AuthScreen({
     <View style={styles.container}>
       <StatusBar style="light" backgroundColor="#0a0a0a" translucent />
 
-      {/* Tilted Moving Posters Background */}
-      <TiltedPostersBackground />
+      {/* 1. Background Layer: Decorative posters + dark vignette overlay strictly isolated behind card */}
+      <View style={styles.backgroundLayer} pointerEvents="none">
+        <TiltedPostersBackground />
+        <LinearGradient
+          colors={[
+            'rgba(10,10,10,0.80)',
+            'rgba(10,10,10,0.60)',
+            'rgba(10,10,10,0.95)',
+          ]}
+          locations={[0, 0.45, 0.90]}
+          style={StyleSheet.absoluteFillObject}
+        />
+      </View>
 
       {/* Close / Back to browse button */}
       {onClose && (
@@ -226,10 +238,16 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#0a0a0a',
+    position: 'relative',
     overflow: 'hidden',
     height: Platform.OS === 'web' ? '100vh' : '100%',
     maxHeight: Platform.OS === 'web' ? '100vh' : '100%',
     width: '100%',
+  },
+  backgroundLayer: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 0,
+    elevation: 0,
   },
   closeBtn: {
     position: 'absolute',
@@ -241,6 +259,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 100,
+    elevation: 30,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.15)',
   },
@@ -248,6 +267,8 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '100%',
     height: '100%',
+    zIndex: 10,
+    elevation: 10,
   },
   scrollContent: {
     flexGrow: 1,
@@ -258,16 +279,17 @@ const styles = StyleSheet.create({
   card: {
     width: '100%',
     maxWidth: 420,
-    backgroundColor: 'rgba(20, 20, 24, 0.88)',
+    backgroundColor: 'rgba(18, 18, 22, 0.94)',
     borderRadius: 26,
     padding: 28,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderColor: 'rgba(255, 255, 255, 0.12)',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 24 },
     shadowOpacity: 0.7,
     shadowRadius: 40,
     elevation: 25,
+    zIndex: 20,
   },
   brandRow: {
     alignItems: 'center',

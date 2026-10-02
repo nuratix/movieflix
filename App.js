@@ -2835,13 +2835,8 @@ function ReelApp() {
 
   // ─── NATIVE (APK) ONBOARDING & AUTH GATE ─────────────────────────────────
   if (Platform.OS !== 'web') {
-    // 1. Welcome screen (shown immediately on first launch so user sees logo, posters & Get Started)
-    if (!hasSeenWelcome) {
-      return <WelcomeScreen onGetStarted={handleGetStarted} />;
-    }
-
-    // 2. Custom in-app animated splash screen for returning users while session initializes
-    if (!splashFinished) {
+    // 1. Returning authenticated user: quick splash screen while session loads
+    if (authUser && !splashFinished) {
       return (
         <CustomSplashScreen
           onFinish={() => {
@@ -2852,14 +2847,29 @@ function ReelApp() {
       );
     }
 
-    // 3. Native auth gate (clean minimal auth screen with moving posters)
+    // 2. Unauthenticated user:
     if (!authUser) {
+      // If user tapped "Get Started" or "Sign In", display the AuthScreen:
+      if (isAuthPageOpen) {
+        return (
+          <AuthScreen
+            initialMode={authMode}
+            authError={authError}
+            authLoading={authLoading}
+            onSubmit={handleAuthSubmit}
+            onClose={() => setIsAuthPageOpen(false)}
+          />
+        );
+      }
+
+      // Default landing for unauthenticated users: WelcomeScreen with posters, logo & Get Started button!
       return (
-        <AuthScreen
-          initialMode={authMode}
-          authError={authError}
-          authLoading={authLoading}
-          onSubmit={handleAuthSubmit}
+        <WelcomeScreen
+          onGetStarted={handleGetStarted}
+          onSignIn={() => {
+            setAuthMode('login');
+            setIsAuthPageOpen(true);
+          }}
         />
       );
     }

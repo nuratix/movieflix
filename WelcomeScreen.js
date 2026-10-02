@@ -7,7 +7,7 @@ import TiltedPostersBackground from './TiltedPostersBackground';
 
 const BRAND_LOGO = require('./assets/movieflix_brand_logo.png');
 
-export default function WelcomeScreen({ onGetStarted }) {
+export default function WelcomeScreen({ onGetStarted, onSignIn }) {
   const insets = useSafeAreaInsets();
   const { height } = Dimensions.get('window');
   const isCompact = height < 720;
@@ -91,6 +91,16 @@ export default function WelcomeScreen({ onGetStarted }) {
           <Text style={styles.footerNote}>
             Instant free access • No credit card required
           </Text>
+
+          <TouchableOpacity
+            style={styles.signInLinkWrap}
+            onPress={onSignIn || onGetStarted}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.signInLinkText}>
+              Already a member? <Text style={styles.signInLinkBold}>Sign In</Text>
+            </Text>
+          </TouchableOpacity>
         </View>
       </View>
     </View>
@@ -211,5 +221,23 @@ const styles = StyleSheet.create({
     textShadowColor: 'rgba(0, 0, 0, 0.95)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 6,
+  },
+  signInLinkWrap: {
+    marginTop: 10,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+  },
+  signInLinkText: {
+    color: '#d0d0d0',
+    fontSize: 13,
+    textAlign: 'center',
+    textShadowColor: 'rgba(0, 0, 0, 0.9)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
+  },
+  signInLinkBold: {
+    color: '#ffffff',
+    fontWeight: '800',
+    textDecorationLine: 'underline',
   },
 });
