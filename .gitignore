@@ -40,3 +40,8 @@ yarn-error.*
 /ios
 /android
 *.apk
+
+# Secret env files
+.env
+.env.local
+.env.production

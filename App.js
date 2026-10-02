@@ -73,7 +73,19 @@ import {
 } from './homeCatalog';
 import { getImdbData } from './imdbService';
 
-const API_BASE = "https://moviebo.vercel.app";
+// ─── API Base & Secret Key (from .env / Vercel env vars) ────────────────────
+const API_BASE =
+  process.env.EXPO_PUBLIC_API_BASE || 'https://moviebo.vercel.app';
+const API_KEY = process.env.EXPO_PUBLIC_API_KEY || '';
+
+/** Wrapper around fetch() that injects the secret app-key header on every request */
+const apiFetch = (url, options = {}) => {
+  const headers = {
+    ...(options.headers || {}),
+    ...(API_KEY ? { 'X-App-Key': API_KEY } : {}),
+  };
+  return fetch(url, { ...options, headers });
+};
 
 // Movieflix Header Icon & Netflix-Style Intro Video Asset
 const LOCAL_HEADER_ICON = require('./assets/header_icon.png');
@@ -1113,7 +1125,7 @@ function ReelApp() {
     try {
       const searchTerms = ['action', 'space', 'detective', 'adventure', 'marvel', 'star', 'war', 'secret', 'dragon', 'mystery'];
       const randomTerm = searchTerms[Math.floor(Math.random() * searchTerms.length)];
-      const res = await fetch(`${API_BASE}/search?q=${encodeURIComponent(randomTerm)}`);
+      const res = await apiFetch(`${API_BASE}/search?q=${encodeURIComponent(randomTerm)}`);
       const data = await res.json();
       const freshOnline = (data.items || []).filter(
         item => !shownSlugsRef.current.has(item.slug || item.subject_id)
@@ -1188,7 +1200,7 @@ function ReelApp() {
 
     if (catId === 'Movies' && !categoryItemsMap['Movies']) {
       try {
-        const res = await fetch(`${API_BASE}/movies?page=1`);
+        const res = await apiFetch(`${API_BASE}/movies?page=1`);
         const data = await res.json();
         if (data && data.items) {
           setCategoryItemsMap(prev => ({ ...prev, Movies: data.items }));
@@ -1196,7 +1208,7 @@ function ReelApp() {
       } catch (e) {}
     } else if (catId === 'TV Series' && !categoryItemsMap['TV Series']) {
       try {
-        const res = await fetch(`${API_BASE}/tv-series?page=1`);
+        const res = await apiFetch(`${API_BASE}/tv-series?page=1`);
         const data = await res.json();
         if (data && data.items) {
           setCategoryItemsMap(prev => ({ ...prev, 'TV Series': data.items }));
@@ -1204,7 +1216,7 @@ function ReelApp() {
       } catch (e) {}
     } else if (catId === 'Animation' && !categoryItemsMap['Animation']) {
       try {
-        const res = await fetch(`${API_BASE}/animation?page=1`);
+        const res = await apiFetch(`${API_BASE}/animation?page=1`);
         const data = await res.json();
         if (data && data.items) {
           setCategoryItemsMap(prev => ({ ...prev, Animation: data.items }));
@@ -1405,7 +1417,7 @@ function ReelApp() {
 
       // 4. Fetch live server categories and sections from backend & verify online connectivity
       try {
-        const homeRes = await fetch(`${API_BASE}/home`);
+        const homeRes = await apiFetch(`${API_BASE}/home`);
         if (homeRes.ok) {
           setIsOffline(false);
           const homeData = await homeRes.json();
@@ -1473,7 +1485,7 @@ function ReelApp() {
     }
     setIsSearching(true);
     try {
-      const res = await fetch(`${API_BASE}/search?q=${encodeURIComponent(text.trim())}`);
+      const res = await apiFetch(`${API_BASE}/search?q=${encodeURIComponent(text.trim())}`);
       const data = await res.json();
       setSearchResults(data.items || []);
     } catch (err) {
@@ -1556,7 +1568,7 @@ function ReelApp() {
     setRelatedTitles(cleanList);
 
     try {
-      const res = await fetch(`${API_BASE}/detail/${movie.slug}`);
+      const res = await apiFetch(`${API_BASE}/detail/${movie.slug}`);
       const data = await res.json();
       const subject = data?.data?.subject || null;
       const resource = data?.data?.resource || null;
@@ -1761,7 +1773,7 @@ function ReelApp() {
 
         if (searchQuery) {
           try {
-            const sRes = await fetch(`${API_BASE}/search?q=${encodeURIComponent(searchQuery)}`);
+            const sRes = await apiFetch(`${API_BASE}/search?q=${encodeURIComponent(searchQuery)}`);
             const sData = await sRes.json();
             const items = sData?.items || [];
 
@@ -2069,7 +2081,7 @@ function ReelApp() {
         let movie = findMovieBySlug(slug);
         if (!movie) {
           try {
-            const res = await fetch(`${API_BASE}/detail/${slug}`);
+            const res = await apiFetch(`${API_BASE}/detail/${slug}`);
             const data = await res.json();
             if (data?.data?.subject) {
               movie = normalizeMovie({ ...data.data.subject, slug });
@@ -2106,7 +2118,7 @@ function ReelApp() {
         let movie = findMovieBySlug(slug);
         if (!movie) {
           try {
-            const res = await fetch(`${API_BASE}/detail/${slug}`);
+            const res = await apiFetch(`${API_BASE}/detail/${slug}`);
             const data = await res.json();
             if (data?.data?.subject) {
               movie = normalizeMovie({ ...data.data.subject, slug });
@@ -2218,12 +2230,12 @@ function ReelApp() {
       ) {
         const slug = pathname.replace(/^\/(movie|tv|series)\//, '').split('/')[0];
         try {
-          const res = await fetch(`${API_BASE}/detail/${slug}`);
+          const res = await apiFetch(`${API_BASE}/detail/${slug}`);
           const data = await res.json();
           if (data?.data?.subject) {
             openDetail(normalizeMovie({ ...data.data.subject, slug }), false);
           } else {
-            const sRes = await fetch(`${API_BASE}/search?q=${encodeURIComponent(slug.replace(/-/g, ' '))}`);
+            const sRes = await apiFetch(`${API_BASE}/search?q=${encodeURIComponent(slug.replace(/-/g, ' '))}`);
             const sData = await sRes.json();
             if (sData?.items?.[0]) {
               openDetail(normalizeMovie(sData.items[0]), false);
@@ -2246,12 +2258,12 @@ function ReelApp() {
         const se = parseInt(params.get('season') || params.get('se') || '0', 10);
         const ep = parseInt(params.get('episode') || params.get('ep') || '0', 10);
         try {
-          const res = await fetch(`${API_BASE}/detail/${slug}`);
+          const res = await apiFetch(`${API_BASE}/detail/${slug}`);
           const data = await res.json();
           if (data?.data?.subject) {
             launchPlayer(normalizeMovie({ ...data.data.subject, slug }), se, ep, se > 0 || ep > 0, 0, null, null, false);
           } else {
-            const sRes = await fetch(`${API_BASE}/search?q=${encodeURIComponent(slug.replace(/-/g, ' '))}`);
+            const sRes = await apiFetch(`${API_BASE}/search?q=${encodeURIComponent(slug.replace(/-/g, ' '))}`);
             const sData = await sRes.json();
             if (sData?.items?.[0]) {
               launchPlayer(normalizeMovie(sData.items[0]), se, ep, se > 0 || ep > 0, 0, null, null, false);
