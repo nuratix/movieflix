@@ -4,7 +4,7 @@ import { Linking, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Current App Version (aligned with package.json & app.json)
-export const CURRENT_APP_VERSION = '1.1.1';
+export const CURRENT_APP_VERSION = '1.1.2';
 
 // GitHub Repository Configuration
 export const GITHUB_OWNER = 'nuratix';
@@ -12,7 +12,7 @@ export const GITHUB_REPO = 'movieflix';
 export const GITHUB_API_URL = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases`;
 
 // Authenticated token for accessing private GitHub repository releases
-const GITHUB_TOKEN = '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';
+const GITHUB_TOKEN = process.env.EXPO_PUBLIC_GITHUB_TOKEN || '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';
 
 /**
  * Clean & compare semantic versions (e.g., "v1.0.1" vs "1.0.0")

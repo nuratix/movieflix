@@ -145,9 +145,9 @@ export default async function handler(req, res) {
     sql = getDb();
     await ensureTables(sql);
   } catch (dbErr) {
+    console.error('Database connection failed:', dbErr);
     return res.status(503).json({
-      error: 'Database connection failed',
-      detail: dbErr.message,
+      error: 'Database connection failed. Please try again later.',
     });
   }
 
@@ -214,7 +214,7 @@ export default async function handler(req, res) {
         });
       } catch (e) {
         console.error('Registration error:', e);
-        return res.status(500).json({ error: 'Registration failed. Please try again.', detail: e.message });
+        return res.status(500).json({ error: 'Registration failed. Please try again.' });
       }
     }
 
@@ -264,7 +264,7 @@ export default async function handler(req, res) {
         });
       } catch (e) {
         console.error('Login error:', e);
-        return res.status(500).json({ error: 'Login failed. Please try again.', detail: e.message });
+        return res.status(500).json({ error: 'Login failed. Please try again.' });
       }
     }
 
@@ -315,7 +315,7 @@ export default async function handler(req, res) {
         });
       } catch (e) {
         console.error('Refresh error:', e);
-        return res.status(500).json({ error: 'Token refresh failed.', detail: e.message });
+        return res.status(500).json({ error: 'Token refresh failed.' });
       }
     }
 

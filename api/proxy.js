@@ -14,6 +14,29 @@ export default async function handler(req, res) {
   return handleEdge(req);
 }
 
+function isSafeUrl(urlStr) {
+  if (!urlStr || typeof urlStr !== 'string') return false;
+  try {
+    const parsed = new URL(urlStr);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
+    const hostname = parsed.hostname.toLowerCase();
+    if (
+      hostname === 'localhost' ||
+      hostname === '127.0.0.1' ||
+      hostname === '::1' ||
+      hostname === '169.254.169.254' ||
+      hostname.startsWith('10.') ||
+      hostname.startsWith('192.168.') ||
+      hostname.startsWith('172.16.')
+    ) {
+      return false;
+    }
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
 // ----------------------------------------------------
 // Edge Runtime Handler (Vercel Production)
 // ----------------------------------------------------
@@ -34,8 +57,8 @@ async function handleEdge(req) {
   const { searchParams } = new URL(req.url);
   const targetUrl = searchParams.get('url');
 
-  if (!targetUrl) {
-    return new Response('Missing "url" parameter', {
+  if (!targetUrl || !isSafeUrl(targetUrl)) {
+    return new Response('Invalid or forbidden "url" parameter', {
       status: 400,
       headers: { 'Access-Control-Allow-Origin': '*' },
     });
@@ -117,9 +140,9 @@ async function handleNode(req, res) {
   const parsedUrl = new URL(req.url, 'http://localhost');
   const targetUrl = parsedUrl.searchParams.get('url');
 
-  if (!targetUrl) {
+  if (!targetUrl || !isSafeUrl(targetUrl)) {
     res.statusCode = 400;
-    res.end('Missing "url" parameter');
+    res.end('Invalid or forbidden "url" parameter');
     return;
   }
 

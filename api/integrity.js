@@ -3,8 +3,8 @@ import crypto from 'crypto';
 // ─── Build Server Security & Official Fingerprint Configuration ──────────────
 const OFFICIAL_PACKAGE_NAME = 'com.movieflix.app';
 const OFFICIAL_ORIGIN_URL = 'https://movieflix-pi-six.vercel.app';
-const OFFICIAL_BUILD_VERSION = '1.1.1';
-const OFFICIAL_VERSION_CODE = 2;
+const OFFICIAL_BUILD_VERSION = '1.1.2';
+const OFFICIAL_VERSION_CODE = 3;
 const OFFICIAL_BUILD_FINGERPRINT = 'mf_sec_sha256_b48f9d0c2e1a7b3c6e5a9d8f0b1c2e3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e';
 const INTEGRITY_SECRET = process.env.INTEGRITY_SECRET || 'mf_integrity_seal_key_2026_secure';
 
