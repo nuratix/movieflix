@@ -81,6 +81,7 @@ import WelcomeScreen from './WelcomeScreen';
 import AuthScreen from './AuthScreen';
 import CustomSplashScreen from './CustomSplashScreen';
 import PrivacyScreen, { PRIVACY_POLICY_URL } from './PrivacyScreen';
+import DownloadScreen from './DownloadScreen';
 import * as SplashScreen from 'expo-splash-screen';
 
 // Prevent native splash screen from hiding before custom splash animation mounts
@@ -1032,6 +1033,8 @@ function ReelApp() {
   const [authInitDone, setAuthInitDone] = useState(false);
   const [splashFinished, setSplashFinished] = useState(false);
   const [isPrivacyPageOpen, setIsPrivacyPageOpen] = useState(false);
+  const [isDownloadPageOpen, setIsDownloadPageOpen] = useState(false);
+  const [showWebInstallBanner, setShowWebInstallBanner] = useState(true);
   const [securityStatus, setSecurityStatus] = useState({ verified: true, authentic: true, isTampered: false });
 
   // Sync access token to module-level var so apiFetch picks it up automatically
@@ -1146,6 +1149,7 @@ function ReelApp() {
     } else {
       if (detailMovie) setDetailMovie(null);
       if (isPlayerOpen) setIsPlayerOpen(false);
+      if (isDownloadPageOpen) setIsDownloadPageOpen(false);
       setIsPrivacyPageOpen(true);
       navigateWeb('/privacy', false);
     }
@@ -1153,6 +1157,23 @@ function ReelApp() {
 
   const closePrivacyPage = () => {
     setIsPrivacyPageOpen(false);
+    if (Platform.OS === 'web') {
+      navigateWeb('/', true);
+    }
+  };
+
+  const handleOpenDownload = () => {
+    if (detailMovie) setDetailMovie(null);
+    if (isPlayerOpen) setIsPlayerOpen(false);
+    if (isPrivacyPageOpen) setIsPrivacyPageOpen(false);
+    setIsDownloadPageOpen(true);
+    if (Platform.OS === 'web') {
+      navigateWeb('/download', false);
+    }
+  };
+
+  const closeDownloadPage = () => {
+    setIsDownloadPageOpen(false);
     if (Platform.OS === 'web') {
       navigateWeb('/', true);
     }
@@ -2273,7 +2294,7 @@ function ReelApp() {
   // 1. Sync Web URL with Main Tabs when not viewing a modal/player
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof window === 'undefined') return;
-    if (detailMovie || isPlayerOpen || isIntroLoading || isAuthPageOpen || isPrivacyPageOpen) return;
+    if (detailMovie || isPlayerOpen || isIntroLoading || isAuthPageOpen || isPrivacyPageOpen || isDownloadPageOpen) return;
 
     let targetUrl = '/';
     if (mainTab === 'Me') {
@@ -2295,11 +2316,12 @@ function ReelApp() {
       !currentUrl.startsWith('/series/') &&
       !currentUrl.startsWith('/watch/') &&
       !currentUrl.startsWith('/auth') &&
-      !currentUrl.startsWith('/privacy')
+      !currentUrl.startsWith('/privacy') &&
+      !currentUrl.startsWith('/download')
     ) {
       navigateWeb(targetUrl);
     }
-  }, [mainTab, homeCategory, meSubTab, detailMovie, isPlayerOpen, isIntroLoading, isAuthPageOpen, isPrivacyPageOpen]);
+  }, [mainTab, homeCategory, meSubTab, detailMovie, isPlayerOpen, isIntroLoading, isAuthPageOpen, isPrivacyPageOpen, isDownloadPageOpen]);
 
   // 2. Handle Web Browser Back / Forward History (popstate)
   useEffect(() => {
@@ -2385,6 +2407,14 @@ function ReelApp() {
         return;
       } else {
         setIsPrivacyPageOpen(false);
+      }
+
+      // Route: /download
+      if (pathname.startsWith('/download')) {
+        setIsDownloadPageOpen(true);
+        return;
+      } else {
+        setIsDownloadPageOpen(false);
       }
 
       // Route: /telegram
@@ -2540,6 +2570,10 @@ function ReelApp() {
       }
       if (pathname.startsWith('/privacy')) {
         setIsPrivacyPageOpen(true);
+        return;
+      }
+      if (pathname.startsWith('/download')) {
+        setIsDownloadPageOpen(true);
         return;
       }
       if (pathname.startsWith('/telegram')) {
@@ -2977,6 +3011,16 @@ function ReelApp() {
     );
   }
 
+  // ─── /download PAGE VIEW (DIRECT ROUTE ON WEB) ────────────────────────────
+  if (isDownloadPageOpen) {
+    return (
+      <DownloadScreen
+        onClose={closeDownloadPage}
+        onOpenPrivacy={handleOpenPrivacy}
+      />
+    );
+  }
+
   // ─── WEB / REUSABLE /auth PAGE VIEW ──────────────────────────────────────
   if (isAuthPageOpen) {
     return (
@@ -3236,6 +3280,31 @@ function ReelApp() {
                           {downloads.length > 0
                             ? `${downloads.length} offline · ${formatBytes(downloads.reduce((acc, d) => acc + (d.sizeBytes || 0), 0))}`
                             : 'Watch downloaded videos offline'}
+                        </Text>
+                      </View>
+                      <Feather name="chevron-right" size={18} color="#737373" />
+                    </TouchableOpacity>
+                  )}
+
+                  {/* Button 3: Download Android App (Web Only) */}
+                  {isWeb && (
+                    <TouchableOpacity
+                      style={styles.meNavCard}
+                      onPress={handleOpenDownload}
+                      activeOpacity={0.7}
+                    >
+                      <View style={[styles.meNavIconCircle, { backgroundColor: 'rgba(229, 9, 20, 0.12)', borderColor: 'rgba(229, 9, 20, 0.28)' }]}>
+                        <Feather name="download" size={19} color="#e50914" />
+                      </View>
+                      <View style={styles.meNavTextCol}>
+                        <View style={styles.meNavTitleRow}>
+                          <Text style={styles.meNavTitle}>Download Android App</Text>
+                          <View style={styles.meNavBadge}>
+                            <Text style={styles.meNavBadgeText}>v1.1.3 APK</Text>
+                          </View>
+                        </View>
+                        <Text style={styles.meNavSubtitle}>
+                          Offline downloads · 4K/HD streaming · Zero ads
                         </Text>
                       </View>
                       <Feather name="chevron-right" size={18} color="#737373" />
@@ -6664,6 +6733,44 @@ function ReelCustomPlayer({
           </View>
         </TouchableOpacity>
       </Modal>
+
+      {/* ─── WEB ONLY: Install APK for Better Experience Prompt ────────── */}
+      {Platform.OS === 'web' && showWebInstallBanner && !isDownloadPageOpen && !isPlayerOpen && (
+        <View style={styles.webInstallBanner}>
+          <View style={styles.webInstallInner}>
+            <TouchableOpacity
+              style={styles.webInstallContent}
+              onPress={handleOpenDownload}
+              activeOpacity={0.85}
+            >
+              <View style={styles.webInstallIconBox}>
+                <Ionicons name="logo-android" size={19} color="#FFFFFF" />
+              </View>
+              <View style={styles.webInstallTextCol}>
+                <Text style={styles.webInstallTitle} numberOfLines={1}>
+                  Install Movieflix APK for a better experience
+                </Text>
+                <Text style={styles.webInstallSubtitle} numberOfLines={1}>
+                  Tap to download latest v1.1.3 · Offline saves · 0 ads
+                </Text>
+              </View>
+              <View style={styles.webInstallBtn}>
+                <Text style={styles.webInstallBtnText}>Install APK</Text>
+                <Feather name="arrow-right" size={13} color="#FFFFFF" style={{ marginLeft: 3 }} />
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.webInstallCloseBtn}
+              onPress={() => setShowWebInstallBanner(false)}
+              activeOpacity={0.7}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Feather name="x" size={15} color="#888888" />
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
 
     </View>
   );
@@ -10287,6 +10394,79 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 12,
     fontWeight: '700',
+  },
+  // ─── Web Install APK Floating Banner ────────────────────────────────────
+  webInstallBanner: {
+    position: Platform.OS === 'web' ? 'fixed' : 'absolute',
+    bottom: Platform.OS === 'web' ? 70 : 60,
+    left: 14,
+    right: 14,
+    maxWidth: 540,
+    alignSelf: 'center',
+    marginHorizontal: 'auto',
+    zIndex: 99999,
+  },
+  webInstallInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(15, 15, 15, 0.94)',
+    borderWidth: 1,
+    borderColor: 'rgba(229, 9, 20, 0.45)',
+    borderRadius: 14,
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.55,
+    shadowRadius: 14,
+    elevation: 10,
+  },
+  webInstallContent: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  webInstallIconBox: {
+    width: 34,
+    height: 34,
+    borderRadius: 9,
+    backgroundColor: '#E50914',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  webInstallTextCol: {
+    flex: 1,
+    marginRight: 8,
+  },
+  webInstallTitle: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  webInstallSubtitle: {
+    color: '#999999',
+    fontSize: 11,
+    marginTop: 1,
+  },
+  webInstallBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E50914',
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+    borderRadius: 8,
+    marginRight: 8,
+  },
+  webInstallBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  webInstallCloseBtn: {
+    padding: 4,
+    borderRadius: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
   },
 });
 
