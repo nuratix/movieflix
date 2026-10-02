@@ -9,24 +9,25 @@ const BRAND_LOGO = require('./assets/movieflix_brand_logo.png');
 export default function WelcomeScreen({ onGetStarted }) {
   const insets = useSafeAreaInsets();
   const { height } = Dimensions.get('window');
-  const isCompact = height < 700;
+  const isCompact = height < 720;
 
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#0a0a0a" translucent />
 
-      {/* Moving tilted poster wall background */}
+      {/* 1. Moving tilted poster background */}
       <TiltedPostersBackground />
 
-      {/* Main Content Area - Anchored directly in viewport so Get Started button is ALWAYS visible */}
+      {/* 2. Absolute foreground layer guaranteed to sit on top of posters */}
       <View
         style={[
-          styles.mainLayout,
+          styles.foreground,
           {
-            paddingTop: insets.top + (isCompact ? 14 : 24),
-            paddingBottom: insets.bottom + (isCompact ? 16 : 24),
+            paddingTop: insets.top + (isCompact ? 16 : 28),
+            paddingBottom: insets.bottom + (isCompact ? 18 : 28),
           },
         ]}
+        pointerEvents="box-none"
       >
         {/* Top: MovieFlix Full Brand Logo */}
         <View style={styles.header}>
@@ -39,10 +40,10 @@ export default function WelcomeScreen({ onGetStarted }) {
 
         {/* Center: Hero Copy */}
         <View style={styles.heroCenter}>
-          <Text style={[styles.mainHeading, isCompact && { fontSize: 28, lineHeight: 34 }]}>
+          <Text style={[styles.mainHeading, isCompact && { fontSize: 28, lineHeight: 36, marginBottom: 10 }]}>
             Unlimited Movies,{'\n'}TV Shows & More.
           </Text>
-          <Text style={[styles.subHeading, isCompact && { fontSize: 13, lineHeight: 18, marginBottom: 14 }]}>
+          <Text style={[styles.subHeading, isCompact && { fontSize: 13, lineHeight: 19, marginBottom: 14 }]}>
             Watch anywhere. Discover blockbusters, live series, anime, and offline downloads.
           </Text>
 
@@ -88,20 +89,20 @@ const styles = StyleSheet.create({
     backgroundColor: '#0a0a0a',
     overflow: 'hidden',
   },
-  mainLayout: {
-    flex: 1,
+  foreground: {
+    ...StyleSheet.absoluteFillObject,
     justifyContent: 'space-between',
     paddingHorizontal: 24,
-    zIndex: 10,
+    zIndex: 100,
+    elevation: 25,
   },
   header: {
     alignItems: 'center',
     paddingTop: 8,
   },
   brandLogoImage: {
-    width: 230,
-    height: 48,
-    filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.8))',
+    width: 220,
+    height: 46,
   },
   heroCenter: {
     alignItems: 'center',

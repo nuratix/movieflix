@@ -2834,7 +2834,7 @@ function ReelApp() {
   // ─── NATIVE (APK) ONBOARDING & AUTH GATE ─────────────────────────────────
   if (Platform.OS !== 'web') {
     // 1. Custom in-app animated splash screen with moving posters and animated MovieFlix logo in center
-    if (!authInitDone || !splashFinished) {
+    if (!splashFinished) {
       return <CustomSplashScreen onFinish={() => setSplashFinished(true)} />;
     }
 
