@@ -194,6 +194,8 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     overflow: 'hidden',
     backgroundColor: '#0a0a0a',
+    zIndex: 0,
+    elevation: 0,
   },
   tiltedContainer: {
     ...StyleSheet.absoluteFillObject,

@@ -19,22 +19,21 @@ export default function WelcomeScreen({ onGetStarted }) {
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#0a0a0a" translucent />
 
-      {/* 1. Moving tilted poster wall in background */}
-      <TiltedPostersBackground />
+      {/* 1. Background Layer: Decorative poster wall + gradient strictly isolated behind foreground */}
+      <View style={styles.backgroundLayer} pointerEvents="none">
+        <TiltedPostersBackground />
+        <LinearGradient
+          colors={[
+            'rgba(10,10,10,0.72)',
+            'rgba(10,10,10,0.48)',
+            'rgba(10,10,10,0.92)',
+          ]}
+          locations={[0, 0.45, 0.90]}
+          style={StyleSheet.absoluteFillObject}
+        />
+      </View>
 
-      {/* 2. Rich dark gradient overlay so logo, text, and buttons stand out vividly */}
-      <LinearGradient
-        colors={[
-          'rgba(10,10,10,0.72)',
-          'rgba(10,10,10,0.48)',
-          'rgba(10,10,10,0.92)',
-        ]}
-        locations={[0, 0.45, 0.90]}
-        style={StyleSheet.absoluteFillObject}
-        pointerEvents="none"
-      />
-
-      {/* 3. Top-level UI layer firmly anchored on top of posters - 100% visible immediately */}
+      {/* 2. Foreground Layer: Primary flex content, guaranteed to sit in front with higher zIndex & elevation */}
       <View
         style={[
           styles.foreground,
@@ -102,14 +101,20 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#0a0a0a',
+    position: 'relative',
     overflow: 'hidden',
   },
-  foreground: {
+  backgroundLayer: {
     ...StyleSheet.absoluteFillObject,
+    zIndex: 0,
+    elevation: 0,
+  },
+  foreground: {
+    flex: 1,
     justifyContent: 'space-between',
     paddingHorizontal: 24,
-    zIndex: 100,
-    elevation: 25,
+    zIndex: 10,
+    elevation: 10,
   },
   header: {
     alignItems: 'center',
