@@ -1372,6 +1372,7 @@ function ReelApp() {
       setWebSeriesLatest(WEBSERIES_LATEST);
       setCartoonsList(CARTOONS);
       setHeroList(CURATED_HERO_ITEMS);
+      setLoading(false); // Render feed instantly with zero delay!
 
       // 3. Build diverse randomized grid of movies & series for bottom explore section
       const allPool = [
@@ -1598,17 +1599,10 @@ function ReelApp() {
     setDetailData(null);
     setDetailImdb(null);
     if (syncHistory && Platform.OS === 'web') {
-      if (typeof window !== 'undefined' && window.history && window.history.length > 1) {
-        window.history.back();
-      } else {
-        if (mainTab === 'Me') {
-          const sub = meSubTab ? `/me/${meSubTab.toLowerCase()}` : '/me';
-          navigateWeb(sub);
-        } else {
-          const cat = homeCategory === 'Movies' ? '/movies' : homeCategory === 'Series' ? '/series' : '/';
-          navigateWeb(cat);
-        }
-      }
+      const target = mainTab === 'Me'
+        ? (meSubTab ? `/me/${meSubTab.toLowerCase()}` : '/me')
+        : (homeCategory === 'Movies' ? '/movies' : (homeCategory === 'TV Series' || homeCategory === 'Series') ? '/series' : '/');
+      navigateWeb(target, true);
     }
   };
 
@@ -1637,8 +1631,13 @@ function ReelApp() {
     setCurrentSe(se);
     setCurrentEp(ep);
     setIsSeries(Boolean(seriesFlag));
-    setIsPlayerOpen(false);
-    setIsIntroLoading(true);
+    if (Platform.OS === 'web') {
+      setIsIntroLoading(false);
+      setIsPlayerOpen(true);
+    } else {
+      setIsPlayerOpen(false);
+      setIsIntroLoading(true);
+    }
     setLoadingStream(!offlineVideoUrl);
     setStreamError(null);
     setAvailableStreams([]);
@@ -1924,13 +1923,13 @@ function ReelApp() {
         const isSeriesTitle = Boolean(detailMovie.isSeries || detailData?.isSeries || detailMovie.subjectType === 2);
         const slug = getMovieSlug(detailMovie);
         const prefix = isSeriesTitle ? '/tv' : '/movie';
-        navigateWeb(`${prefix}/${slug}`);
+        navigateWeb(`${prefix}/${slug}`, true);
       } else if (mainTab === 'Me') {
         const sub = meSubTab ? `/me/${meSubTab.toLowerCase()}` : '/me';
-        navigateWeb(sub);
+        navigateWeb(sub, true);
       } else {
-        const cat = homeCategory === 'Movies' ? '/movies' : homeCategory === 'Series' ? '/series' : '/';
-        navigateWeb(cat);
+        const cat = homeCategory === 'Movies' ? '/movies' : (homeCategory === 'TV Series' || homeCategory === 'Series') ? '/series' : '/';
+        navigateWeb(cat, true);
       }
     }
   };
@@ -1997,6 +1996,23 @@ function ReelApp() {
     const findMovieBySlug = (slug) => {
       if (!slug) return null;
       const lower = slug.toLowerCase();
+
+      // Check active detailMovie or playerMovie first
+      if (detailMovie) {
+        const dSlug = (detailMovie.slug || '').toLowerCase();
+        const dId = String(detailMovie.subject_id || '').toLowerCase();
+        if (dSlug === lower || getMovieSlug(detailMovie).toLowerCase() === lower || dId === lower) {
+          return detailMovie;
+        }
+      }
+      if (playerMovie) {
+        const pSlug = (playerMovie.slug || '').toLowerCase();
+        const pId = String(playerMovie.subject_id || '').toLowerCase();
+        if (pSlug === lower || getMovieSlug(playerMovie).toLowerCase() === lower || pId === lower) {
+          return playerMovie;
+        }
+      }
+
       const allItems = [
         ...heroList,
         ...trendingNow,
@@ -2011,20 +2027,32 @@ function ReelApp() {
         ...myList,
         ...watchHistory.map((w) => w.movie).filter(Boolean),
       ];
+
+      // 1. Exact slug or getMovieSlug match
       const exact = allItems.find(
-        (i) => i.slug === slug || (i.slug && i.slug.toLowerCase() === lower)
+        (i) => i.slug === slug || (i.slug && i.slug.toLowerCase() === lower) || getMovieSlug(i).toLowerCase() === lower
       );
       if (exact) return exact;
-      const partial = allItems.find(
-        (i) => (i.slug && i.slug.toLowerCase().includes(lower)) || String(i.subject_id) === lower
-      );
+
+      // 2. Slug ending with subject_id (e.g. east-of-eden-eHk1HP0pn3a)
+      const slugParts = slug.split('-');
+      const possibleId = slugParts[slugParts.length - 1];
+      if (possibleId && possibleId.length >= 4) {
+        const idMatch = allItems.find(
+          (i) => String(i.subject_id || '').toLowerCase() === possibleId.toLowerCase()
+        );
+        if (idMatch) return idMatch;
+      }
+
+      // 3. Partial slug or name match
+      const partial = allItems.find((i) => {
+        const iSlug = (i.slug || '').toLowerCase();
+        const iName = (i.name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-');
+        return (iSlug && lower.includes(iSlug)) || (iName && lower.includes(iName));
+      });
       if (partial) return partial;
-      return (
-        allItems.find((i) => {
-          const s = (i.name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-');
-          return s === lower || s.startsWith(lower) || lower.startsWith(s);
-        }) || null
-      );
+
+      return null;
     };
 
     const handlePopState = async () => {
@@ -2050,6 +2078,12 @@ function ReelApp() {
         }
         if (movie) {
           launchPlayer(normalizeMovie(movie), se, ep, se > 0 || ep > 0 || Boolean(movie.isSeries), 0, null, null, false);
+        } else {
+          setIsIntroLoading(false);
+          setIsPlayerOpen(false);
+          setDetailMovie(null);
+          setMainTab('Home');
+          navigateWeb('/', true);
         }
         return;
       }
@@ -2065,6 +2099,10 @@ function ReelApp() {
         pathname.startsWith('/series/')
       ) {
         const slug = pathname.replace(/^\/(movie|tv|series)\//, '').split('/')[0];
+        if (detailMovie && (detailMovie.slug === slug || getMovieSlug(detailMovie) === slug)) {
+          return;
+        }
+
         let movie = findMovieBySlug(slug);
         if (!movie) {
           try {
@@ -2077,6 +2115,10 @@ function ReelApp() {
         }
         if (movie) {
           openDetail(normalizeMovie(movie), false);
+        } else {
+          setDetailMovie(null);
+          setMainTab('Home');
+          navigateWeb('/', true);
         }
         return;
       }
@@ -2103,7 +2145,7 @@ function ReelApp() {
       if (pathname === '/movies') {
         setHomeCategory('Movies');
       } else if (pathname === '/series' || pathname === '/tv') {
-        setHomeCategory('Series');
+        setHomeCategory('TV Series');
       } else {
         setHomeCategory('All');
       }
@@ -2115,6 +2157,7 @@ function ReelApp() {
     isPlayerOpen,
     isIntroLoading,
     detailMovie,
+    playerMovie,
     heroList,
     trendingNow,
     latestReleases,
@@ -2165,7 +2208,7 @@ function ReelApp() {
         return;
       }
       if (pathname === '/series' || pathname === '/tv') {
-        setHomeCategory('Series');
+        setHomeCategory('TV Series');
         return;
       }
       if (
@@ -2184,9 +2227,17 @@ function ReelApp() {
             const sData = await sRes.json();
             if (sData?.items?.[0]) {
               openDetail(normalizeMovie(sData.items[0]), false);
+            } else {
+              setDetailMovie(null);
+              setMainTab('Home');
+              navigateWeb('/', true);
             }
           }
-        } catch (e) {}
+        } catch (e) {
+          setDetailMovie(null);
+          setMainTab('Home');
+          navigateWeb('/', true);
+        }
         return;
       }
       if (pathname.startsWith('/watch/')) {
@@ -2204,9 +2255,19 @@ function ReelApp() {
             const sData = await sRes.json();
             if (sData?.items?.[0]) {
               launchPlayer(normalizeMovie(sData.items[0]), se, ep, se > 0 || ep > 0, 0, null, null, false);
+            } else {
+              setIsIntroLoading(false);
+              setIsPlayerOpen(false);
+              setMainTab('Home');
+              navigateWeb('/', true);
             }
           }
-        } catch (e) {}
+        } catch (e) {
+          setIsIntroLoading(false);
+          setIsPlayerOpen(false);
+          setMainTab('Home');
+          navigateWeb('/', true);
+        }
       }
     };
 
@@ -4102,6 +4163,20 @@ function ReelApp() {
             />
           ) : (
             <View style={styles.playerLoadingCentered}>
+              <View style={[styles.playerLoadingTopBar, { paddingTop: Math.max(insets.top, 14) }]}>
+                <TouchableOpacity
+                  style={styles.playerRoundGlassBtn}
+                  onPress={closePlayer}
+                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                >
+                  <Feather name="arrow-left" size={20} color="#FFFFFF" />
+                </TouchableOpacity>
+                <Text numberOfLines={1} style={styles.playerLoadingTitleText}>
+                  {playerMovie?.name || 'Movieflix'}
+                  {isSeries ? ` · S${currentSe}:E${currentEp}` : ''}
+                </Text>
+              </View>
+
               {loadingStream ? (
                 <View style={{ alignItems: 'center' }}>
                   <ActivityIndicator size="large" color="#e50914" />
@@ -4125,7 +4200,12 @@ function ReelApp() {
                     <Text style={styles.playerExitBtnText}>Exit Player</Text>
                   </TouchableOpacity>
                 </View>
-              ) : null}
+              ) : (
+                <View style={{ alignItems: 'center' }}>
+                  <ActivityIndicator size="large" color="#e50914" />
+                  <Text style={styles.playerStatusMessage}>Connecting to stream...</Text>
+                </View>
+              )}
             </View>
           )}
         </View>
@@ -4793,6 +4873,7 @@ function ReelCustomPlayer({
   const [currentSpeed, setCurrentSpeed] = useState('1.0×');
   const [isQualityModalOpen, setIsQualityModalOpen] = useState(false);
   const [isAudioSubsModalOpen, setIsAudioSubsModalOpen] = useState(false);
+  const [playerStatus, setPlayerStatus] = useState('loading');
 
   // Video Stretch / Zoom mode: 'contain' (Fit) | 'cover' (Zoom) | 'fill' (Stretch)
   const [contentFitMode, setContentFitMode] = useState('contain');
@@ -5224,16 +5305,24 @@ function ReelCustomPlayer({
       }
     });
 
+    const statusSub = player.addListener?.('statusChange', (e) => {
+      if (e?.status) {
+        setPlayerStatus(e.status);
+      }
+    });
+
     return () => {
       playSub?.remove?.();
       timeSub?.remove?.();
       audioSub?.remove?.();
       subTrackSub?.remove?.();
+      statusSub?.remove?.();
     };
   }, [player]);
 
   // Handle source switch smoothly and seek to resume time if set
   useEffect(() => {
+    setPlayerStatus('loading');
     if (videoUrl && player) {
       const src = buildVideoSource(videoUrl);
       const afterSwitch = () => {
@@ -5250,6 +5339,11 @@ function ReelCustomPlayer({
       }
     }
   }, [videoUrl, initialResumeTime]);
+
+  const isBufferingOrLoading =
+    playerStatus === 'loading' ||
+    playerStatus === 'idle' ||
+    (isPlaying && currentTime === 0 && duration === 0);
 
   // Auto-hide controls after 4 seconds
   const wakeControls = () => {
@@ -5624,6 +5718,20 @@ function ReelCustomPlayer({
         </Animated.View>
       )}
 
+      {/* STREAM BUFFERING / FETCHING LOADER OVERLAY */}
+      {!isInPiP && isBufferingOrLoading && (
+        <View style={styles.playerLoaderCenteredOverlay} pointerEvents="none">
+          <View style={styles.playerLoaderBox}>
+            <ActivityIndicator size="large" color="#e50914" />
+            <Text style={styles.playerLoaderText}>
+              {playerStatus === 'loading' || (isPlaying && currentTime === 0)
+                ? (isSeries ? `Buffering S${currentSeason}:E${currentEpisode}...` : 'Buffering Stream...')
+                : 'Connecting stream...'}
+            </Text>
+          </View>
+        </View>
+      )}
+
       {/* OVERLAY CONTROLS (FULLSCREEN SAFE-AREA POSITIONING) */}
       {!isInPiP && showControls && (
         <View
@@ -5722,12 +5830,16 @@ function ReelCustomPlayer({
               }}
               activeOpacity={0.8}
             >
-              <Feather
-                name={isPlaying ? "pause" : "play"}
-                size={36}
-                color="#FFFFFF"
-                style={!isPlaying ? { marginLeft: 4 } : {}}
-              />
+              {isBufferingOrLoading ? (
+                <ActivityIndicator size="small" color="#e50914" />
+              ) : (
+                <Feather
+                  name={isPlaying ? "pause" : "play"}
+                  size={36}
+                  color="#FFFFFF"
+                  style={!isPlaying ? { marginLeft: 4 } : {}}
+                />
+              )}
             </TouchableOpacity>
 
             {/* Seek Forward +10s */}
@@ -7250,6 +7362,47 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     marginTop: 12,
+  },
+  playerLoaderCenteredOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 9,
+  },
+  playerLoaderBox: {
+    backgroundColor: 'rgba(20, 20, 20, 0.88)',
+    borderRadius: 16,
+    paddingHorizontal: 24,
+    paddingVertical: 18,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+  },
+  playerLoaderText: {
+    color: '#f5f5f1',
+    fontSize: 13,
+    fontWeight: '600',
+    marginTop: 10,
+    letterSpacing: 0.3,
+  },
+  playerLoadingTopBar: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    zIndex: 10,
+  },
+  playerLoadingTitleText: {
+    color: '#f5f5f1',
+    fontSize: 15,
+    fontWeight: '700',
+    marginLeft: 14,
+    flex: 1,
   },
   playerErrorContainer: {
     alignItems: 'center',
