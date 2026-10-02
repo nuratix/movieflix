@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Allow: /api/download
+Allow: /api/sitemap
+
+Sitemap: https://movieflix-pi-six.vercel.app/sitemap.xml

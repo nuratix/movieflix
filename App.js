@@ -125,6 +125,42 @@ const authFetch = (action, payload = {}) => {
   });
 };
 
+/** Helper to dynamically update web SEO meta tags, OpenGraph, and Twitter Cards */
+const updateWebMetaTags = (title, description, image, url) => {
+  if (Platform.OS !== 'web' || typeof document === 'undefined') return;
+
+  if (title) {
+    document.title = title;
+    const ogTitle = document.querySelector('meta[property="og:title"]');
+    if (ogTitle) ogTitle.setAttribute('content', title);
+    const twTitle = document.querySelector('meta[name="twitter:title"]');
+    if (twTitle) twTitle.setAttribute('content', title);
+  }
+
+  if (description) {
+    const desc = document.querySelector('meta[name="description"]');
+    if (desc) desc.setAttribute('content', description);
+    const ogDesc = document.querySelector('meta[property="og:description"]');
+    if (ogDesc) ogDesc.setAttribute('content', description);
+    const twDesc = document.querySelector('meta[name="twitter:description"]');
+    if (twDesc) twDesc.setAttribute('content', description);
+  }
+
+  if (image) {
+    const ogImg = document.querySelector('meta[property="og:image"]');
+    if (ogImg) ogImg.setAttribute('content', image);
+    const twImg = document.querySelector('meta[name="twitter:image"]');
+    if (twImg) twImg.setAttribute('content', image);
+  }
+
+  if (url) {
+    const ogUrl = document.querySelector('meta[property="og:url"]');
+    if (ogUrl) ogUrl.setAttribute('content', url);
+    const canon = document.querySelector('link[rel="canonical"]');
+    if (canon) canon.setAttribute('href', url);
+  }
+};
+
 // Movieflix Header Icon & Netflix-Style Intro Video Asset
 const LOCAL_HEADER_ICON = require('./assets/header_icon.png');
 const LOCAL_INTRO_ASSET = require('./assets/intro.mp4');
@@ -2322,6 +2358,40 @@ function ReelApp() {
       navigateWeb(targetUrl);
     }
   }, [mainTab, homeCategory, meSubTab, detailMovie, isPlayerOpen, isIntroLoading, isAuthPageOpen, isPrivacyPageOpen, isDownloadPageOpen]);
+
+  // ─── DYNAMIC SEO & SOCIAL SHARING META TAGS ──────────────────────────────
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') return;
+
+    if (isDownloadPageOpen) {
+      updateWebMetaTags(
+        'Download MovieFlix Android APK (v1.1.3) - Free Movies & TV Shows',
+        'Download the official MovieFlix Android app. Stream & download movies and series in 4K/1080p offline with zero ads.',
+        'https://movieflix-pi-six.vercel.app/assets/icon.png',
+        'https://movieflix-pi-six.vercel.app/download'
+      );
+    } else if (isPrivacyPageOpen) {
+      updateWebMetaTags(
+        'Privacy Policy - MovieFlix',
+        'MovieFlix is built on zero tracking, zero personal data collection, and 100% user privacy. Read our transparent privacy policy.',
+        'https://movieflix-pi-six.vercel.app/assets/icon.png',
+        'https://movieflix-pi-six.vercel.app/privacy'
+      );
+    } else if (detailMovie) {
+      const title = `${detailMovie.name || 'Movie'} - Watch & Download Free on MovieFlix`;
+      const desc = detailMovie.desc || `Watch ${detailMovie.name || 'this title'} in full HD with subtitles and multi-audio on MovieFlix. 100% free streaming.`;
+      const img = detailMovie.poster_url || 'https://movieflix-pi-six.vercel.app/assets/icon.png';
+      const url = `https://movieflix-pi-six.vercel.app/movie/${encodeURIComponent(detailMovie.slug || 'watch')}`;
+      updateWebMetaTags(title, desc, img, url);
+    } else {
+      updateWebMetaTags(
+        'MovieFlix - Watch & Download Free Movies, TV Series & Official APK (v1.1.3)',
+        'Stream and download thousands of HD movies, web series, Hindi dubbed blockbusters, and anime in 4K/1080p with zero ads. Download the official MovieFlix Android APK.',
+        'https://movieflix-pi-six.vercel.app/assets/icon.png',
+        'https://movieflix-pi-six.vercel.app/'
+      );
+    }
+  }, [isDownloadPageOpen, isPrivacyPageOpen, detailMovie]);
 
   // 2. Handle Web Browser Back / Forward History (popstate)
   useEffect(() => {
