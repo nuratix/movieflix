@@ -71,6 +71,7 @@ import {
   WEBSERIES_LATEST,
   CARTOONS,
 } from './homeCatalog';
+import { getImdbData } from './imdbService';
 
 const API_BASE = "https://moviebo.vercel.app";
 
@@ -370,14 +371,17 @@ async function translateText(text, targetLang) {
 }
 
 // Fast, ultra-resilient SafeImage powered by expo-image with automatic error reset, bundled require() assets, and multi-protocol fallback
-function SafeImage({ uri, style, resizeMode = 'cover', contentPosition = 'center' }) {
+const SafeImage = React.memo(function SafeImage({ uri, style, resizeMode = 'cover', contentPosition = 'center' }) {
   const [hasError, setHasError] = useState(false);
-  const [useFallbackHttp, setUseFallbackHttp] = useState(false);
+  const isWeb = Platform.OS === 'web';
+  const prevUriRef = useRef(uri);
 
-  // Reset error state whenever URI changes
+  // Only reset error state if the actual URI prop changes to a new target
   useEffect(() => {
-    setHasError(false);
-    setUseFallbackHttp(false);
+    if (prevUriRef.current !== uri) {
+      prevUriRef.current = uri;
+      setHasError(false);
+    }
   }, [uri]);
 
   // 1. Packaged local asset (require('./assets/...'))
@@ -426,39 +430,43 @@ function SafeImage({ uri, style, resizeMode = 'cover', contentPosition = 'center
     );
   }
 
-  // Primary URL upgraded to HTTPS, fallback to HTTP if SSL handshake fails on CDN
+  // Upgrade HTTP to HTTPS for modern web & APK security
   let effectiveUri = cleanUri;
-  if (!useFallbackHttp && effectiveUri.startsWith('http://')) {
+  if (effectiveUri.startsWith('http://')) {
     effectiveUri = effectiveUri.replace('http://', 'https://');
-  } else if (useFallbackHttp && effectiveUri.startsWith('https://')) {
-    effectiveUri = effectiveUri.replace('https://', 'http://');
   }
+
+  // On Web: never pass custom headers to ExpoImage.
+  // Passing headers forces expo-image to run client-side fetch() with useHeaders(),
+  // which resets image to null on every parent re-render and causes images to flash/disappear!
+  const imageSource = useMemo(() => {
+    if (isWeb) {
+      return { uri: effectiveUri };
+    }
+    return {
+      uri: effectiveUri,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36',
+        'Referer': 'https://moviebox.ph/',
+        'Accept': 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
+      },
+    };
+  }, [effectiveUri, isWeb]);
 
   return (
     <ExpoImage
-      source={{
-        uri: effectiveUri,
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36',
-          'Referer': 'https://moviebox.ph/',
-          'Accept': 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
-        },
-      }}
+      source={imageSource}
       style={style}
       contentFit={resizeMode === 'contain' ? 'contain' : (resizeMode || 'cover')}
       contentPosition={contentPosition}
       cachePolicy="memory-disk"
       transition={150}
       onError={() => {
-        if (!useFallbackHttp && effectiveUri.startsWith('https://')) {
-          setUseFallbackHttp(true);
-        } else {
-          setHasError(true);
-        }
+        setHasError(true);
       }}
     />
   );
-}
+});
 
 // Reusable Butter-Smooth Animated Download Components
 function AnimatedDownloadSpinner({ size = 15, color = '#e50914' }) {
@@ -1155,6 +1163,7 @@ function ReelApp() {
   // Detail Modal State
   const [detailMovie, setDetailMovie] = useState(null);
   const [detailData, setDetailData] = useState(null);
+  const [detailImdb, setDetailImdb] = useState(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [selectedSeasonIdx, setSelectedSeasonIdx] = useState(0);
 
@@ -1162,6 +1171,7 @@ function ReelApp() {
   const [isPlayerOpen, setIsPlayerOpen] = useState(false);
   const [isIntroLoading, setIsIntroLoading] = useState(false);
   const [playerMovie, setPlayerMovie] = useState(null);
+  const [playerImdb, setPlayerImdb] = useState(null);
   const [currentSe, setCurrentSe] = useState(0);
   const [currentEp, setCurrentEp] = useState(0);
   const [isSeries, setIsSeries] = useState(false);
@@ -1423,7 +1433,11 @@ function ReelApp() {
     setDetailMovie(movie);
     setLoadingDetail(true);
     setDetailData(null);
+    setDetailImdb(null);
     setSelectedSeasonIdx(0);
+
+    // Fetch free IMDb ratings & cast asynchronously
+    getImdbData(movie?.name).then(setDetailImdb).catch(() => {});
 
     // Compute fresh related titles (not same, excluding current movie)
     const currentSlug = movie?.slug || '';
@@ -1514,6 +1528,8 @@ function ReelApp() {
     }
 
     setPlayerMovie(movie);
+    setPlayerImdb(null);
+    getImdbData(movie?.name).then(setPlayerImdb).catch(() => {});
     setCurrentSe(se);
     setCurrentEp(ep);
     setIsSeries(Boolean(seriesFlag));
@@ -3255,16 +3271,34 @@ function ReelApp() {
               </View>
             </View>
 
-            {/* Clean Title & Metadata (No Emojis, No FHD/Trending Tags) */}
+            {/* Clean Title & Metadata (IMDb Rating, Year, Content Rating, Duration) */}
             <View style={styles.detailTitleSection}>
               <Text style={styles.detailTitle}>{detailMovie?.name}</Text>
               <View style={styles.detailMetaRow}>
-                <Text style={styles.detailMatchScore}>98% match</Text>
+                {detailImdb?.rating ? (
+                  <View style={styles.imdbRatingBadge}>
+                    <Text style={styles.imdbRatingLogo}>IMDb</Text>
+                    <Text style={styles.imdbRatingValue}>{detailImdb.rating}</Text>
+                    {detailImdb.votes ? (
+                      <Text style={styles.imdbVotesText}>({detailImdb.votes})</Text>
+                    ) : null}
+                  </View>
+                ) : (
+                  <Text style={styles.detailMatchScore}>98% match</Text>
+                )}
+
                 <View style={styles.metaGlassPill}>
                   <Text style={styles.metaGlassPillText}>
-                    {detailData?.releaseDate ? detailData.releaseDate.split('-')[0] : '2026'}
+                    {detailImdb?.year || (detailData?.releaseDate ? detailData.releaseDate.split('-')[0] : '2026')}
                   </Text>
                 </View>
+
+                {Boolean(detailImdb?.rated && detailImdb.rated !== 'N/A') && (
+                  <View style={styles.metaGlassPill}>
+                    <Text style={styles.metaGlassPillText}>{detailImdb.rated}</Text>
+                  </View>
+                )}
+
                 {detailData?.durationSeconds ? (
                   <Text style={styles.detailDurationText}>
                     {Math.floor(detailData.durationSeconds / 60)}m
@@ -3320,14 +3354,14 @@ function ReelApp() {
               </TouchableOpacity>
             </View>
 
-            {/* Real Synopsis / Overview */}
+            {/* Real Synopsis / Overview & IMDb Cast & Actresses */}
             <View style={styles.detailOverviewSection}>
               {loadingDetail ? (
                 <ActivityIndicator size="small" color="#e50914" style={{ marginVertical: 16 }} />
               ) : (
                 <>
                   <Text style={styles.detailOverviewText}>
-                    {detailData?.description || "An engaging and captivating watch available to stream right now in high definition."}
+                    {detailImdb?.plot || detailData?.description || "An engaging and captivating watch available to stream right now in high definition."}
                   </Text>
                   {detailData?.genre && (
                     <View style={styles.detailGenresRow}>
@@ -3336,6 +3370,29 @@ function ReelApp() {
                           <Text style={styles.genrePillText}>{g.trim()}</Text>
                         </View>
                       ))}
+                    </View>
+                  )}
+
+                  {/* Starring Actresses & Actors from IMDb */}
+                  {Boolean(detailImdb?.actors && detailImdb.actors.length > 0) && (
+                    <View style={styles.detailCastSection}>
+                      <Text style={styles.detailCastHeading}>Starring</Text>
+                      <View style={styles.detailCastPillsRow}>
+                        {detailImdb.actors.map((actor, idx) => (
+                          <View key={`act-${idx}`} style={styles.detailActorPill}>
+                            <Feather name="user" size={12} color="#e50914" style={{ marginRight: 6 }} />
+                            <Text style={styles.detailActorPillText}>{actor}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    </View>
+                  )}
+
+                  {/* Director from IMDb */}
+                  {Boolean(detailImdb?.director && detailImdb.director !== 'N/A') && (
+                    <View style={styles.detailDirectorRow}>
+                      <Text style={styles.detailDirectorLabel}>Director:</Text>
+                      <Text style={styles.detailDirectorValue}>{detailImdb.director}</Text>
                     </View>
                   )}
                 </>
@@ -3598,6 +3655,7 @@ function ReelApp() {
             <ReelCustomPlayer
               videoUrl={activeStreamUrl}
               movie={playerMovie}
+              imdbData={playerImdb}
               isSeries={isSeries}
               currentSeason={currentSe}
               currentEpisode={currentEp}
@@ -4097,7 +4155,7 @@ function ReelApp() {
 // ----------------------------------------------------
 // CLEAN GLASS MOVIE CARD (PURE POSTER, NO TAGS OR BADGES)
 // ----------------------------------------------------
-function GlassMovieCard({ movie, onPress, isSeries = false, isTop10 = false, style }) {
+const GlassMovieCard = React.memo(function GlassMovieCard({ movie, onPress, isSeries = false, isTop10 = false, style }) {
   const { width: winW } = useWindowDimensions();
   const isDesk = winW >= 1024;
   const isTab = winW >= 700 && winW < 1024;
@@ -4121,7 +4179,7 @@ function GlassMovieCard({ movie, onPress, isSeries = false, isTop10 = false, sty
       </View>
     </TouchableOpacity>
   );
-}
+});
 
 // ----------------------------------------------------
 // SEPARATE MOVIEFLIX INTRO LOADING SCREEN
@@ -4280,6 +4338,7 @@ function MovieflixIntroLoadingScreen({
 function ReelCustomPlayer({
   videoUrl,
   movie,
+  imdbData,
   isSeries,
   currentSeason,
   currentEpisode,
@@ -4440,12 +4499,36 @@ function ReelCustomPlayer({
     });
   };
 
+  // Bulletproof 2x speed release helper: ONLY active during hold, immediately reverts on release
+  const end2xHold = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+    if (isLongPressActiveRef.current) {
+      isLongPressActiveRef.current = false;
+      setIs2xActive(false);
+      const restoreSpeed = originalSpeedRef.current || 1.0;
+      if (playerRef.current) {
+        playerRef.current.playbackRate = restoreSpeed;
+      }
+    }
+  };
+
   // PanResponder for Double Tap, Long Press 2x, Vertical Volume/Brightness Swipes, and Single Tap UI Toggle
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: (_, gestureState) => {
         return Math.abs(gestureState.dy) > 8;
+      },
+      onPanResponderTerminationRequest: () => true,
+      onPanResponderTerminate: () => {
+        end2xHold();
+        isDraggingRef.current = false;
+      },
+      onPanResponderEnd: () => {
+        end2xHold();
       },
       onPanResponderGrant: (evt) => {
         const { locationX } = evt.nativeEvent;
@@ -4458,7 +4541,7 @@ function ReelCustomPlayer({
         dragTypeRef.current = isLeft ? 'brightness' : 'volume';
         startDragValRef.current = isLeft ? brightnessRef.current : volumeRef.current;
 
-        // Long Press: 400ms hold -> 2× Speed
+        // Long Press: 400ms hold -> 2× Speed (ONLY while held down)
         if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
         longPressTimerRef.current = setTimeout(() => {
           if (!isDraggingRef.current) {
@@ -4468,22 +4551,28 @@ function ReelCustomPlayer({
               playerRef.current.playbackRate = 2.0;
             }
             setIs2xActive(true);
+
+            // Web: attach window listeners so releasing pointer/mouse anywhere in browser restores speed
+            if (Platform.OS === 'web' && typeof window !== 'undefined') {
+              const handleGlobalRelease = () => {
+                end2xHold();
+                window.removeEventListener('pointerup', handleGlobalRelease);
+                window.removeEventListener('mouseup', handleGlobalRelease);
+                window.removeEventListener('touchend', handleGlobalRelease);
+                window.removeEventListener('pointercancel', handleGlobalRelease);
+              };
+              window.addEventListener('pointerup', handleGlobalRelease, { once: true });
+              window.addEventListener('mouseup', handleGlobalRelease, { once: true });
+              window.addEventListener('touchend', handleGlobalRelease, { once: true });
+              window.addEventListener('pointercancel', handleGlobalRelease, { once: true });
+            }
           }
         }, 400);
       },
       onPanResponderMove: (_, gestureState) => {
         if (Math.abs(gestureState.dy) > 8) {
           isDraggingRef.current = true;
-          if (longPressTimerRef.current) {
-            clearTimeout(longPressTimerRef.current);
-          }
-          if (isLongPressActiveRef.current) {
-            isLongPressActiveRef.current = false;
-            setIs2xActive(false);
-            if (playerRef.current) {
-              playerRef.current.playbackRate = originalSpeedRef.current;
-            }
-          }
+          end2xHold();
 
           const screenH = windowHeight || 400;
           const delta = -gestureState.dy / (screenH * 0.55);
@@ -4510,15 +4599,14 @@ function ReelCustomPlayer({
       onPanResponderRelease: (evt) => {
         if (longPressTimerRef.current) {
           clearTimeout(longPressTimerRef.current);
+          longPressTimerRef.current = null;
         }
 
-        // If user was in 2× speed hold mode, restore original playback speed!
-        if (isLongPressActiveRef.current) {
-          isLongPressActiveRef.current = false;
-          setIs2xActive(false);
-          if (playerRef.current) {
-            playerRef.current.playbackRate = originalSpeedRef.current;
-          }
+        // If user was in 2× speed hold mode, restore original playback speed immediately!
+        const wasLongPress = isLongPressActiveRef.current;
+        end2xHold();
+
+        if (wasLongPress) {
           return;
         }
 
@@ -4571,6 +4659,7 @@ function ReelCustomPlayer({
 
   useEffect(() => {
     return () => {
+      end2xHold();
       if (singleTapTimerRef.current) clearTimeout(singleTapTimerRef.current);
       if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
       if (doubleTapTimerRef.current) clearTimeout(doubleTapTimerRef.current);
@@ -5140,6 +5229,11 @@ function ReelCustomPlayer({
                 {movie?.name}
                 {isSeries ? ` · S${currentSeason}:E${currentEpisode}` : ''}
               </Text>
+              {Boolean(imdbData?.rating) && (
+                <View style={styles.playerImdbBadge}>
+                  <Text style={styles.playerImdbBadgeText}>★ {imdbData.rating}</Text>
+                </View>
+              )}
             </View>
 
             {/* Right Quick Controls */}
@@ -6300,6 +6394,101 @@ const styles = StyleSheet.create({
   genrePillText: {
     color: '#a3a3a3',
     fontSize: 12,
+  },
+  imdbRatingBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(245, 197, 24, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(245, 197, 24, 0.45)',
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  imdbRatingLogo: {
+    backgroundColor: '#f5c518',
+    color: '#000000',
+    fontSize: 9,
+    fontWeight: '900',
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 3,
+    marginRight: 5,
+    letterSpacing: -0.2,
+  },
+  imdbRatingValue: {
+    color: '#f5c518',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  imdbVotesText: {
+    color: '#a3a3a3',
+    fontSize: 10,
+    marginLeft: 4,
+    fontWeight: '600',
+  },
+  detailCastSection: {
+    marginTop: 18,
+    marginBottom: 6,
+  },
+  detailCastHeading: {
+    color: '#a3a3a3',
+    fontSize: 11,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom: 10,
+  },
+  detailCastPillsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  detailActorPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  detailActorPillText: {
+    color: '#f5f5f1',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  detailDirectorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 12,
+    marginBottom: 4,
+  },
+  detailDirectorLabel: {
+    color: '#737373',
+    fontSize: 12,
+    fontWeight: '600',
+    marginRight: 6,
+  },
+  detailDirectorValue: {
+    color: '#d4d4d4',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  playerImdbBadge: {
+    backgroundColor: 'rgba(245, 197, 24, 0.18)',
+    borderWidth: 1,
+    borderColor: 'rgba(245, 197, 24, 0.5)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    marginLeft: 8,
+  },
+  playerImdbBadgeText: {
+    color: '#f5c518',
+    fontSize: 11,
+    fontWeight: '800',
   },
 
   // EPISODES SECTION
