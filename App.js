@@ -2351,10 +2351,23 @@ function ReelApp() {
   // Prevents blank screens on back navigation & direct URLs
   // =====================================================
 
-  // 1. Sync Web URL with Main Tabs when not viewing a modal/player
+  // 1. Sync Web URL with Main Tabs only when browsing known hub tabs
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof window === 'undefined') return;
-    if (detailMovie || isPlayerOpen || isIntroLoading || isAuthPageOpen || isPrivacyPageOpen || isDownloadPageOpen) return;
+    if (is404PageOpen || detailMovie || isPlayerOpen || isIntroLoading || isAuthPageOpen || isPrivacyPageOpen || isDownloadPageOpen) return;
+
+    const currentUrl = window.location.pathname || '/';
+
+    // Strictly check if current URL is a known tab URL before synchronizing
+    const isTabRoute =
+      currentUrl === '/' ||
+      currentUrl === '/movies' ||
+      currentUrl === '/series' ||
+      currentUrl === '/tv' ||
+      currentUrl === '/animation' ||
+      currentUrl.startsWith('/me');
+
+    if (!isTabRoute) return;
 
     let targetUrl = '/';
     if (mainTab === 'Me') {
@@ -2364,24 +2377,15 @@ function ReelApp() {
       else targetUrl = '/me';
     } else {
       if (homeCategory === 'Movies') targetUrl = '/movies';
-      else if (homeCategory === 'Series') targetUrl = '/series';
+      else if (homeCategory === 'TV Series' || homeCategory === 'Series') targetUrl = '/series';
+      else if (homeCategory === 'Animation') targetUrl = '/animation';
       else targetUrl = '/';
     }
 
-    const currentUrl = window.location.pathname;
-    if (
-      currentUrl !== targetUrl &&
-      !currentUrl.startsWith('/movie/') &&
-      !currentUrl.startsWith('/tv/') &&
-      !currentUrl.startsWith('/series/') &&
-      !currentUrl.startsWith('/watch/') &&
-      !currentUrl.startsWith('/auth') &&
-      !currentUrl.startsWith('/privacy') &&
-      !currentUrl.startsWith('/download')
-    ) {
+    if (currentUrl !== targetUrl) {
       navigateWeb(targetUrl);
     }
-  }, [mainTab, homeCategory, meSubTab, detailMovie, isPlayerOpen, isIntroLoading, isAuthPageOpen, isPrivacyPageOpen, isDownloadPageOpen]);
+  }, [mainTab, homeCategory, meSubTab, detailMovie, isPlayerOpen, isIntroLoading, isAuthPageOpen, isPrivacyPageOpen, isDownloadPageOpen, is404PageOpen]);
 
   // ─── DYNAMIC SEO & SOCIAL SHARING META TAGS ──────────────────────────────
   useEffect(() => {
@@ -3243,18 +3247,8 @@ function ReelApp() {
               )}
             </View>
 
-            {/* Header Right Actions: Explore Categories Navigation & Web APK Button */}
+            {/* Header Right Actions: Explore Categories Navigation */}
             <View style={styles.headerRightActions}>
-              {isWeb && (
-                <TouchableOpacity
-                  style={styles.headerApkBtn}
-                  onPress={handleOpenDownload}
-                  activeOpacity={0.8}
-                >
-                  <Ionicons name="logo-android" size={15} color="#FFFFFF" style={{ marginRight: 4 }} />
-                  <Text style={styles.headerApkBtnText}>APK</Text>
-                </TouchableOpacity>
-              )}
               <TouchableOpacity
                 style={styles.headerCategoriesBtn}
                 onPress={() => setIsCategoryModalOpen(true)}
@@ -4082,36 +4076,6 @@ function ReelApp() {
                       </TouchableOpacity>
                     </View>
                   </View>
-                </View>
-              )}
-
-              {/* ─── WEB INLINE BANNER: Prompt to download official Android APK ─── */}
-              {isWeb && !isDownloadPageOpen && (
-                <View style={styles.webInlineNoticeBanner}>
-                  <TouchableOpacity
-                    style={styles.webInlineNoticeTouch}
-                    onPress={handleOpenDownload}
-                    activeOpacity={0.85}
-                  >
-                    <View style={styles.webInlineNoticeIconBox}>
-                      <Ionicons name="logo-android" size={20} color="#FFFFFF" />
-                    </View>
-                    <View style={styles.webInlineNoticeTextWrap}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                        <Text style={styles.webInlineNoticeTitle}>Install Movieflix Android App</Text>
-                        <View style={styles.webInlineBadge}>
-                          <Text style={styles.webInlineBadgeText}>v1.1.3</Text>
-                        </View>
-                      </View>
-                      <Text style={styles.webInlineNoticeSub} numberOfLines={1}>
-                        Get the best experience with offline saves, ultra-smooth playback & 0 ads.
-                      </Text>
-                    </View>
-                    <View style={styles.webInlineNoticeBtn}>
-                      <Text style={styles.webInlineNoticeBtnText}>Download APK</Text>
-                      <Feather name="arrow-right" size={13} color="#FFFFFF" style={{ marginLeft: 4 }} />
-                    </View>
-                  </TouchableOpacity>
                 </View>
               )}
 
@@ -10658,87 +10622,6 @@ const styles = StyleSheet.create({
     padding: 6,
     borderRadius: 6,
     backgroundColor: 'rgba(255, 255, 255, 0.08)',
-  },
-  // ─── Header APK Button & Web Inline Notice Banner ─────────────────────────
-  headerApkBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#E50914',
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-    borderRadius: 8,
-    marginRight: 8,
-  },
-  headerApkBtnText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  webInlineNoticeBanner: {
-    marginHorizontal: 16,
-    marginTop: 12,
-    marginBottom: 6,
-    borderRadius: 14,
-    backgroundColor: 'rgba(22, 22, 22, 0.95)',
-    borderWidth: 1,
-    borderColor: 'rgba(229, 9, 20, 0.4)',
-    overflow: 'hidden',
-  },
-  webInlineNoticeTouch: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-  },
-  webInlineNoticeIconBox: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: '#E50914',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  webInlineNoticeTextWrap: {
-    flex: 1,
-    marginRight: 10,
-  },
-  webInlineNoticeTitle: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  webInlineBadge: {
-    backgroundColor: 'rgba(229, 9, 20, 0.22)',
-    borderWidth: 1,
-    borderColor: '#E50914',
-    borderRadius: 6,
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-    marginLeft: 8,
-  },
-  webInlineBadgeText: {
-    color: '#FF4D4D',
-    fontSize: 10,
-    fontWeight: '800',
-  },
-  webInlineNoticeSub: {
-    color: '#A0A0A0',
-    fontSize: 11,
-    marginTop: 2,
-  },
-  webInlineNoticeBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#E50914',
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 8,
-  },
-  webInlineNoticeBtnText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '700',
   },
 });
 
