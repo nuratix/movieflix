@@ -2866,10 +2866,6 @@ function ReelApp() {
       return (
         <WelcomeScreen
           onGetStarted={handleGetStarted}
-          onSignIn={() => {
-            setAuthMode('login');
-            setIsAuthPageOpen(true);
-          }}
         />
       );
     }

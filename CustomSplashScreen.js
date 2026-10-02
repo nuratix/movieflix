@@ -57,22 +57,22 @@ export default function CustomSplashScreen({ onFinish }) {
     <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
       <StatusBar barStyle="light-content" backgroundColor="#0a0a0a" translucent />
 
-      {/* Moving posters in background */}
-      <TiltedPostersBackground />
+      {/* Background Layer: posters + vignette, isolated behind foreground */}
+      <View style={styles.backgroundLayer} pointerEvents="none">
+        <TiltedPostersBackground />
+        <LinearGradient
+          colors={[
+            'rgba(10,10,10,0.30)',
+            'rgba(10,10,10,0.60)',
+            'rgba(10,10,10,0.92)',
+          ]}
+          locations={[0, 0.5, 0.95]}
+          style={StyleSheet.absoluteFillObject}
+        />
+      </View>
 
-      {/* Cinematic Vignette */}
-      <LinearGradient
-        colors={[
-          'rgba(10,10,10,0.30)',
-          'rgba(10,10,10,0.60)',
-          'rgba(10,10,10,0.92)',
-        ]}
-        locations={[0, 0.5, 0.95]}
-        style={StyleSheet.absoluteFillObject}
-      />
-
-      {/* Centered Animated Logo */}
-      <View style={styles.centerContainer} pointerEvents="none">
+      {/* Foreground: Centered Animated Logo */}
+      <View style={styles.centerContainer} pointerEvents="none" renderToHardwareTextureAndroid={true}>
         {Platform.OS === 'web' ? (
           <div
             style={{
@@ -124,12 +124,20 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     backgroundColor: '#0a0a0a',
     zIndex: 9999,
+    overflow: 'hidden',
+  },
+  backgroundLayer: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 0,
+    elevation: 0,
   },
   centerContainer: {
     ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 10,
+    elevation: 10,
+    backgroundColor: 'rgba(0,0,0,0.01)',
   },
   logoWrap: {
     alignItems: 'center',

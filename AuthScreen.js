@@ -91,6 +91,7 @@ export default function AuthScreen({
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.keyboardView}
+        renderToHardwareTextureAndroid={true}
       >
         <ScrollView
           contentContainerStyle={[
@@ -269,6 +270,7 @@ const styles = StyleSheet.create({
     height: '100%',
     zIndex: 10,
     elevation: 10,
+    backgroundColor: 'rgba(0,0,0,0.01)',
   },
   scrollContent: {
     flexGrow: 1,

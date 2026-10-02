@@ -115,9 +115,9 @@ export default function TiltedPostersBackground() {
   }, []);
 
   return (
-    <View style={styles.outerContainer} pointerEvents="none">
+    <View style={styles.outerContainer} pointerEvents="none" renderToHardwareTextureAndroid={false} needsOffscreenAlphaCompositing={true}>
       {/* Tilted full-screen grid centered and scaled to cover all viewports */}
-      <View style={styles.tiltedContainer}>
+      <View style={styles.tiltedContainer} renderToHardwareTextureAndroid={false}>
         {/* Row 1 (Left) */}
         <Animated.View style={[styles.row, { transform: [{ translateX: scrollLeftAnim1 }] }]}>
           {row1.map((item, i) => (
@@ -194,7 +194,7 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     overflow: 'hidden',
     backgroundColor: '#0a0a0a',
-    zIndex: 0,
+    zIndex: -1,
     elevation: 0,
   },
   tiltedContainer: {
