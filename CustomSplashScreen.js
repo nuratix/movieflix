@@ -39,16 +39,16 @@ export default function CustomSplashScreen({ onFinish }) {
       }),
     ]).start();
 
-    // 3. Complete splash after 2.4 seconds
+    // 3. Complete splash after 1.8 seconds
     const timer = setTimeout(() => {
       Animated.timing(fadeAnim, {
         toValue: 0,
-        duration: 350,
+        duration: 300,
         useNativeDriver: Platform.OS !== 'web',
       }).start(() => {
         if (onFinish) onFinish();
       });
-    }, 2400);
+    }, 1800);
 
     return () => clearTimeout(timer);
   }, []);
@@ -126,7 +126,7 @@ const styles = StyleSheet.create({
     zIndex: 9999,
   },
   centerContainer: {
-    flex: 1,
+    ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 10,

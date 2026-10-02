@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, StatusBar, Image, Dimensions } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import TiltedPostersBackground from './TiltedPostersBackground';
 
@@ -11,36 +12,50 @@ export default function WelcomeScreen({ onGetStarted }) {
   const { height } = Dimensions.get('window');
   const isCompact = height < 720;
 
+  const topPadding = (insets && insets.top ? insets.top : 24) + (isCompact ? 10 : 18);
+  const bottomPadding = (insets && insets.bottom ? insets.bottom : 20) + (isCompact ? 12 : 20);
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#0a0a0a" translucent />
 
-      {/* 1. Moving tilted poster background */}
+      {/* 1. Moving tilted poster wall in background */}
       <TiltedPostersBackground />
 
-      {/* 2. Absolute foreground layer guaranteed to sit on top of posters */}
+      {/* 2. Rich dark gradient overlay so logo, text, and buttons stand out vividly */}
+      <LinearGradient
+        colors={[
+          'rgba(10,10,10,0.72)',
+          'rgba(10,10,10,0.48)',
+          'rgba(10,10,10,0.92)',
+        ]}
+        locations={[0, 0.45, 0.90]}
+        style={StyleSheet.absoluteFillObject}
+        pointerEvents="none"
+      />
+
+      {/* 3. Top-level UI layer firmly anchored on top of posters - 100% visible immediately */}
       <View
         style={[
           styles.foreground,
           {
-            paddingTop: insets.top + (isCompact ? 16 : 28),
-            paddingBottom: insets.bottom + (isCompact ? 18 : 28),
+            paddingTop: topPadding,
+            paddingBottom: bottomPadding,
           },
         ]}
-        pointerEvents="box-none"
       >
         {/* Top: MovieFlix Full Brand Logo */}
         <View style={styles.header}>
           <Image
             source={BRAND_LOGO}
-            style={[styles.brandLogoImage, isCompact && { width: 200, height: 42 }]}
+            style={[styles.brandLogoImage, isCompact && { width: 190, height: 40 }]}
             resizeMode="contain"
           />
         </View>
 
         {/* Center: Hero Copy */}
         <View style={styles.heroCenter}>
-          <Text style={[styles.mainHeading, isCompact && { fontSize: 28, lineHeight: 36, marginBottom: 10 }]}>
+          <Text style={[styles.mainHeading, isCompact && { fontSize: 26, lineHeight: 33, marginBottom: 8 }]}>
             Unlimited Movies,{'\n'}TV Shows & More.
           </Text>
           <Text style={[styles.subHeading, isCompact && { fontSize: 13, lineHeight: 19, marginBottom: 14 }]}>
@@ -69,7 +84,7 @@ export default function WelcomeScreen({ onGetStarted }) {
           <TouchableOpacity
             style={[styles.getStartedBtn, isCompact && { paddingVertical: 14 }]}
             onPress={onGetStarted}
-            activeOpacity={0.88}
+            activeOpacity={0.82}
           >
             <Text style={styles.getStartedText}>Get Started</Text>
             <Feather name="arrow-right" size={20} color="#fff" style={{ marginLeft: 8 }} />

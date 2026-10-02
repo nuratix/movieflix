@@ -1126,6 +1126,8 @@ function ReelApp() {
       await AsyncStorage.setItem('@mf_seen_welcome', 'true');
     } catch (_) {}
     setHasSeenWelcome(true);
+    setSplashFinished(true);
+    setAuthInitDone(true);
     if (!authUserRef.current) {
       openAuthPage('register');
     }
@@ -2833,14 +2835,21 @@ function ReelApp() {
 
   // ─── NATIVE (APK) ONBOARDING & AUTH GATE ─────────────────────────────────
   if (Platform.OS !== 'web') {
-    // 1. Custom in-app animated splash screen with moving posters and animated MovieFlix logo in center
-    if (!splashFinished) {
-      return <CustomSplashScreen onFinish={() => setSplashFinished(true)} />;
-    }
-
-    // 2. Welcome screen (shown only on first launch on native APK)
+    // 1. Welcome screen (shown immediately on first launch so user sees logo, posters & Get Started)
     if (!hasSeenWelcome) {
       return <WelcomeScreen onGetStarted={handleGetStarted} />;
+    }
+
+    // 2. Custom in-app animated splash screen for returning users while session initializes
+    if (!splashFinished) {
+      return (
+        <CustomSplashScreen
+          onFinish={() => {
+            setSplashFinished(true);
+            setAuthInitDone(true);
+          }}
+        />
+      );
     }
 
     // 3. Native auth gate (clean minimal auth screen with moving posters)
