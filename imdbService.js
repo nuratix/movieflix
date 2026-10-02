@@ -5,10 +5,19 @@
 // ----------------------------------------------------
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 
 const IMDB_CACHE_PREFIX = '@movieflix_imdb_cache_v3:';
 const inMemoryCache = new Map();
 const actorPhotoCache = new Map();
+
+// Helper to route requests without CORS headers through the serverless proxy on web
+function safeFetchUrl(url) {
+  if (Platform.OS === 'web' && url.includes('media-imdb.com')) {
+    return `/api/proxy?url=${encodeURIComponent(url)}`;
+  }
+  return url;
+}
 
 // Free public OMDB keys pool
 const OMDB_KEYS = ['trilogy', '2b21cd75', '852233f0'];
@@ -56,7 +65,7 @@ export async function fetchActorPhoto(actorName) {
   try {
     const cleanQ = key.replace(/[^a-z0-9]/g, '');
     if (cleanQ) {
-      const res = await fetch(`https://v3.sg.media-imdb.com/suggestion/x/${cleanQ}.json`);
+      const res = await fetch(safeFetchUrl(`https://v3.sg.media-imdb.com/suggestion/x/${cleanQ}.json`));
       if (res.ok) {
         const data = await res.json();
         const img = data?.d?.[0]?.i?.imageUrl || null;
@@ -194,7 +203,7 @@ export async function getImdbData(title, year = '') {
     try {
       const q = clean.toLowerCase().replace(/[^a-z0-9]/g, '');
       if (q) {
-        const imdbUrl = `https://v3.sg.media-imdb.com/suggestion/x/${encodeURIComponent(q)}.json`;
+        const imdbUrl = safeFetchUrl(`https://v3.sg.media-imdb.com/suggestion/x/${encodeURIComponent(q)}.json`);
         const res = await fetch(imdbUrl);
         if (res.ok) {
           const data = await res.json();

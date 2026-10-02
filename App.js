@@ -1831,6 +1831,9 @@ function ReelApp() {
       };
       setAuthMode('login');
       setAuthError('');
+      if (detailMovie) {
+        setDetailMovie(null);
+      }
       setShowAuthModal(true);
       return;
     }
@@ -1899,7 +1902,7 @@ function ReelApp() {
       let effectiveEp = ep;
 
       const primaryUrl = `${API_BASE}/api/stream/${movie.subject_id}?detail_path=${movie.slug}&se=${effectiveSe}&ep=${effectiveEp}`;
-      const res = await fetch(primaryUrl);
+      const res = await apiFetch(primaryUrl);
       streamData = await res.json();
 
       // If no stream found, try automatic recovery:
@@ -1908,7 +1911,7 @@ function ReelApp() {
           // If called as series (se>0/ep>0) but has no stream, try movie mode (se=0, ep=0)
           try {
             const fbUrl = `${API_BASE}/api/stream/${movie.subject_id}?detail_path=${movie.slug}&se=0&ep=0`;
-            const fbRes = await fetch(fbUrl);
+            const fbRes = await apiFetch(fbUrl);
             const fbData = await fbRes.json();
             if (fbData?.sources && fbData.sources.length > 0) {
               streamData = fbData;
@@ -1923,7 +1926,7 @@ function ReelApp() {
           // If called as movie (se=0, ep=0) but has no stream, try series mode (se=1, ep=1)
           try {
             const fbUrl2 = `${API_BASE}/api/stream/${movie.subject_id}?detail_path=${movie.slug}&se=1&ep=1`;
-            const fbRes2 = await fetch(fbUrl2);
+            const fbRes2 = await apiFetch(fbUrl2);
             const fbData2 = await fbRes2.json();
             if (fbData2?.sources && fbData2.sources.length > 0) {
               streamData = fbData2;
@@ -1957,7 +1960,7 @@ function ReelApp() {
         let allCaptions = [];
         const seenLans = new Set();
         const capUrl = `${API_BASE}/api/stream/${movie.subject_id}/captions?detail_path=${movie.slug}&se=${effectiveSe}&ep=${effectiveEp}&title=${encodeURIComponent(movie.name || '')}`;
-        const capRes = await fetch(capUrl);
+        const capRes = await apiFetch(capUrl);
         const capData = await capRes.json();
         if (capData && Array.isArray(capData.captions)) {
           for (const c of capData.captions) {
@@ -2011,7 +2014,7 @@ function ReelApp() {
               if (allCaptions.length <= 4 && itm.subject_id !== movie.subject_id) {
                 try {
                   const sibCapUrl = `${API_BASE}/api/stream/${itm.subject_id}/captions?detail_path=${itm.slug}&se=${se}&ep=${ep}`;
-                  const sibRes = await fetch(sibCapUrl);
+                  const sibRes = await apiFetch(sibCapUrl);
                   const sibData = await sibRes.json();
                   if (sibData && Array.isArray(sibData.captions)) {
                     for (const sc of sibData.captions) {
@@ -10056,6 +10059,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 16,
+    zIndex: 999999,
   },
   authCard: {
     width: '100%',
