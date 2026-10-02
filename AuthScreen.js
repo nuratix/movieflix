@@ -10,8 +10,8 @@ import {
   Platform,
   ScrollView,
   StatusBar,
+  Image,
 } from 'react-native';
-import { Image as ExpoImage } from 'expo-image';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import TiltedPostersBackground from './TiltedPostersBackground';
@@ -92,10 +92,10 @@ export default function AuthScreen({
           <View style={styles.card}>
             {/* Brand Logo */}
             <View style={styles.brandRow}>
-              <ExpoImage
+              <Image
                 source={BRAND_LOGO}
                 style={styles.brandLogoImage}
-                contentFit="contain"
+                resizeMode="contain"
               />
             </View>
 

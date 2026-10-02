@@ -1,6 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, StatusBar, ScrollView } from 'react-native';
-import { Image as ExpoImage } from 'expo-image';
+import { View, Text, StyleSheet, TouchableOpacity, StatusBar, ScrollView, Image } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import TiltedPostersBackground from './TiltedPostersBackground';
@@ -12,7 +11,7 @@ export default function WelcomeScreen({ onGetStarted }) {
 
   return (
     <View style={styles.container}>
-      <StatusBar style="light" backgroundColor="#0a0a0a" translucent />
+      <StatusBar barStyle="light-content" backgroundColor="#0a0a0a" translucent />
 
       {/* Moving tilted poster wall background */}
       <TiltedPostersBackground />
@@ -23,7 +22,7 @@ export default function WelcomeScreen({ onGetStarted }) {
         contentContainerStyle={[
           styles.content,
           {
-            paddingTop: insets.top + 24,
+            paddingTop: insets.top + 28,
             paddingBottom: insets.bottom + 28,
           },
         ]}
@@ -33,14 +32,14 @@ export default function WelcomeScreen({ onGetStarted }) {
       >
         {/* Brand Header with real wide logo */}
         <View style={styles.header}>
-          <ExpoImage
+          <Image
             source={BRAND_LOGO}
             style={styles.brandLogoImage}
-            contentFit="contain"
+            resizeMode="contain"
           />
         </View>
 
-        {/* Hero Copy */}
+        {/* Hero Copy sitting proudly on top of visible posters */}
         <View style={styles.heroCenter}>
           <Text style={styles.mainHeading}>
             Unlimited Movies,{'\n'}TV Shows & More.
@@ -52,15 +51,15 @@ export default function WelcomeScreen({ onGetStarted }) {
           {/* Quick Perks */}
           <View style={styles.perksRow}>
             <View style={styles.perkBadge}>
-              <Feather name="check" size={13} color="#e50914" style={{ marginRight: 5 }} />
+              <Feather name="check" size={13} color="#e50914" style={{ marginRight: 6 }} />
               <Text style={styles.perkText}>4K Streaming</Text>
             </View>
             <View style={styles.perkBadge}>
-              <Feather name="check" size={13} color="#e50914" style={{ marginRight: 5 }} />
+              <Feather name="check" size={13} color="#e50914" style={{ marginRight: 6 }} />
               <Text style={styles.perkText}>Multi-Audio</Text>
             </View>
             <View style={styles.perkBadge}>
-              <Feather name="check" size={13} color="#e50914" style={{ marginRight: 5 }} />
+              <Feather name="check" size={13} color="#e50914" style={{ marginRight: 6 }} />
               <Text style={styles.perkText}>No Ads</Text>
             </View>
           </View>
@@ -93,12 +92,14 @@ const styles = StyleSheet.create({
   },
   scroll: {
     flex: 1,
+    backgroundColor: 'transparent',
   },
   content: {
     flexGrow: 1,
     justifyContent: 'space-between',
     paddingHorizontal: 24,
     minHeight: '100%',
+    backgroundColor: 'transparent',
   },
   header: {
     alignItems: 'center',
@@ -106,8 +107,8 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   brandLogoImage: {
-    width: 230,
-    height: 48,
+    width: 240,
+    height: 52,
   },
   heroCenter: {
     alignItems: 'center',
@@ -115,20 +116,26 @@ const styles = StyleSheet.create({
   },
   mainHeading: {
     color: '#ffffff',
-    fontSize: 32,
+    fontSize: 34,
     fontWeight: '900',
     textAlign: 'center',
-    lineHeight: 40,
+    lineHeight: 42,
     letterSpacing: -0.5,
-    marginBottom: 12,
+    marginBottom: 14,
+    textShadowColor: 'rgba(0, 0, 0, 0.95)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 10,
   },
   subHeading: {
-    color: '#a3a3a3',
+    color: '#f0f0f0',
     fontSize: 14,
     textAlign: 'center',
-    lineHeight: 21,
-    maxWidth: 320,
-    marginBottom: 20,
+    lineHeight: 22,
+    maxWidth: 330,
+    marginBottom: 22,
+    textShadowColor: 'rgba(0, 0, 0, 0.95)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 8,
   },
   perksRow: {
     flexDirection: 'row',
@@ -139,17 +146,22 @@ const styles = StyleSheet.create({
   perkBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    backgroundColor: 'rgba(18, 18, 22, 0.88)',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderColor: 'rgba(255, 255, 255, 0.16)',
     borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: 13,
+    paddingVertical: 7,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.4,
+    shadowRadius: 5,
+    elevation: 3,
   },
   perkText: {
-    color: '#f5f5f1',
+    color: '#ffffff',
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   footer: {
     alignItems: 'center',
@@ -167,7 +179,7 @@ const styles = StyleSheet.create({
     paddingVertical: 17,
     shadowColor: '#e50914',
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.5,
+    shadowOpacity: 0.55,
     shadowRadius: 20,
     elevation: 10,
     marginBottom: 12,
@@ -179,8 +191,11 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   footerNote: {
-    color: '#666',
+    color: '#d0d0d0',
     fontSize: 12,
     textAlign: 'center',
+    textShadowColor: 'rgba(0, 0, 0, 0.95)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 6,
   },
 });
