@@ -81,6 +81,12 @@ import WelcomeScreen from './WelcomeScreen';
 import AuthScreen from './AuthScreen';
 import CustomSplashScreen from './CustomSplashScreen';
 import PrivacyScreen, { PRIVACY_POLICY_URL } from './PrivacyScreen';
+import * as SplashScreen from 'expo-splash-screen';
+
+// Prevent native splash screen from hiding before custom splash animation mounts
+if (Platform.OS !== 'web') {
+  SplashScreen.preventAutoHideAsync().catch(() => {});
+}
 
 // ─── Backend API Base (Public Movieflix Server Proxy) ────────────────────────
 // On web: relative '' (same-origin, zero CORS issues, instant)

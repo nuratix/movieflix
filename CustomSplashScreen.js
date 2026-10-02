@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, StyleSheet, StatusBar } from 'react-native';
 import { WebView } from 'react-native-webview';
+import * as SplashScreen from 'expo-splash-screen';
 
 const SPLASH_HTML = `<!DOCTYPE html>
 <html lang="en">
@@ -108,6 +109,11 @@ const SPLASH_HTML = `<!DOCTYPE html>
 </html>`;
 
 export default function CustomSplashScreen({ onFinish }) {
+  useEffect(() => {
+    // Hide the native splash screen as soon as CustomSplashScreen is mounted
+    SplashScreen.hideAsync().catch(() => {});
+  }, []);
+
   const handleMessage = (event) => {
     try {
       const data = JSON.parse(event.nativeEvent.data);
