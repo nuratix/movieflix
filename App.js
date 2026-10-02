@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   Modal,
   Platform,
+  BackHandler,
   TouchableWithoutFeedback,
   useWindowDimensions,
   Animated,
@@ -883,7 +884,7 @@ function ReelApp() {
   // Navigation: 'Home' | 'Me'
   const [mainTab, setMainTab] = useState('Home');
   const [homeCategory, setHomeCategory] = useState('All'); // 'All' | 'Movies' | 'Series'
-  const [meSubTab, setMeSubTab] = useState('History'); // 'History' | 'MyList' | 'Downloads'
+  const [meSubTab, setMeSubTab] = useState(null); // null (clean buttons hub) | 'History' | 'MyList' | 'Downloads'
 
   // App Update State
   const [updateInfo, setUpdateInfo] = useState(null); // null | { hasUpdate, latestVersion, ... }
@@ -948,6 +949,20 @@ function ReelApp() {
   // References to ensure explore grid never fetches or shows the same items
   const catalogPoolRef = useRef([]);
   const shownSlugsRef = useRef(new Set());
+
+  // Handle Android Hardware Back Button for Me subpages
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    const onBackPress = () => {
+      if (mainTab === 'Me' && meSubTab !== null) {
+        setMeSubTab(null);
+        return true;
+      }
+      return false;
+    };
+    const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => sub.remove();
+  }, [mainTab, meSubTab]);
 
   // Hero auto-rotate poster every 3 seconds smoothly
   useEffect(() => {
@@ -2121,100 +2136,252 @@ function ReelApp() {
         {/* ==================================================== */}
         {mainTab === 'Me' ? (
           <View style={[styles.meScreenContainer, { paddingTop: insets.top + 10 }]}>
-            {/* User Profile Card */}
-            <View style={styles.meHeaderGlassCard}>
-              <View style={styles.meUserRow}>
-                <View style={styles.meAvatarWrapper}>
-                  <Ionicons name="person" size={24} color="#f5f5f1" />
-                  <View style={styles.meOnlineBadge} />
+            {meSubTab === null ? (
+              /* ─── ROOT ME HUB: PROFILE + BUTTONS + MINIMAL UPDATE ─── */
+              <>
+                {/* User Profile Card */}
+                <View style={styles.meHeaderGlassCard}>
+                  <View style={styles.meUserRow}>
+                    <View style={styles.meAvatarWrapper}>
+                      <Ionicons name="person" size={24} color="#f5f5f1" />
+                      <View style={styles.meOnlineBadge} />
+                    </View>
+                    <View style={styles.meUserInfo}>
+                      <Text style={styles.meUserName}>My Space</Text>
+                      <Text style={styles.meUserSubtext}>Local Device Storage</Text>
+                    </View>
+                  </View>
+
+                  {/* Quick Stats Counter Row */}
+                  <View style={styles.meStatsRow}>
+                    <TouchableOpacity
+                      style={styles.meStatBox}
+                      onPress={() => setMeSubTab('History')}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.meStatNumber}>{watchHistory.length}</Text>
+                      <Text style={styles.meStatLabel}>History</Text>
+                    </TouchableOpacity>
+                    <View style={styles.meStatDivider} />
+                    <TouchableOpacity
+                      style={styles.meStatBox}
+                      onPress={() => setMeSubTab('MyList')}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.meStatNumber}>{myList.length}</Text>
+                      <Text style={styles.meStatLabel}>In My List</Text>
+                    </TouchableOpacity>
+                    <View style={styles.meStatDivider} />
+                    <TouchableOpacity
+                      style={styles.meStatBox}
+                      onPress={() => setMeSubTab('Downloads')}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.meStatNumber}>{downloads.length}</Text>
+                      <Text style={styles.meStatLabel}>Downloads</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
-                <View style={styles.meUserInfo}>
-                  <Text style={styles.meUserName}>My Space</Text>
-                  <Text style={styles.meUserSubtext}>Local Device Storage</Text>
+
+                {/* Navigation Buttons Down The Page */}
+                <View style={styles.meNavSection}>
+                  <Text style={styles.meNavSectionHeader}>MY LIBRARY</Text>
+
+                  {/* Button 1: Watch History */}
+                  <TouchableOpacity
+                    style={styles.meNavCard}
+                    onPress={() => setMeSubTab('History')}
+                    activeOpacity={0.7}
+                  >
+                    <View style={[styles.meNavIconCircle, { backgroundColor: 'rgba(229, 9, 20, 0.12)', borderColor: 'rgba(229, 9, 20, 0.3)' }]}>
+                      <Ionicons name="time" size={20} color="#e50914" />
+                    </View>
+                    <View style={styles.meNavTextCol}>
+                      <View style={styles.meNavTitleRow}>
+                        <Text style={styles.meNavTitle}>Watch History</Text>
+                        {watchHistory.length > 0 && (
+                          <View style={styles.meNavBadge}>
+                            <Text style={styles.meNavBadgeText}>{watchHistory.length}</Text>
+                          </View>
+                        )}
+                      </View>
+                      <Text style={styles.meNavSubtitle}>
+                        {watchHistory.length > 0 ? `${watchHistory.length} in progress · Resume watching` : 'No recent watch history'}
+                      </Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={18} color="#737373" />
+                  </TouchableOpacity>
+
+                  {/* Button 2: My List */}
+                  <TouchableOpacity
+                    style={styles.meNavCard}
+                    onPress={() => setMeSubTab('MyList')}
+                    activeOpacity={0.7}
+                  >
+                    <View style={[styles.meNavIconCircle, { backgroundColor: 'rgba(59, 130, 246, 0.12)', borderColor: 'rgba(59, 130, 246, 0.3)' }]}>
+                      <Ionicons name="bookmark" size={20} color="#3b82f6" />
+                    </View>
+                    <View style={styles.meNavTextCol}>
+                      <View style={styles.meNavTitleRow}>
+                        <Text style={styles.meNavTitle}>My List</Text>
+                        {myList.length > 0 && (
+                          <View style={[styles.meNavBadge, { backgroundColor: 'rgba(59, 130, 246, 0.18)' }]}>
+                            <Text style={[styles.meNavBadgeText, { color: '#60a5fa' }]}>{myList.length}</Text>
+                          </View>
+                        )}
+                      </View>
+                      <Text style={styles.meNavSubtitle}>
+                        {myList.length > 0 ? `${myList.length} saved movies & TV shows` : 'Your saved favorites'}
+                      </Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={18} color="#737373" />
+                  </TouchableOpacity>
+
+                  {/* Button 3: Downloads */}
+                  <TouchableOpacity
+                    style={styles.meNavCard}
+                    onPress={() => setMeSubTab('Downloads')}
+                    activeOpacity={0.7}
+                  >
+                    <View style={[styles.meNavIconCircle, { backgroundColor: 'rgba(34, 197, 94, 0.12)', borderColor: 'rgba(34, 197, 94, 0.3)' }]}>
+                      <Ionicons name="cloud-download" size={20} color="#22c55e" />
+                    </View>
+                    <View style={styles.meNavTextCol}>
+                      <View style={styles.meNavTitleRow}>
+                        <Text style={styles.meNavTitle}>Offline Downloads</Text>
+                        {downloads.length > 0 && (
+                          <View style={[styles.meNavBadge, { backgroundColor: 'rgba(34, 197, 94, 0.18)' }]}>
+                            <Text style={[styles.meNavBadgeText, { color: '#4ade80' }]}>{downloads.length}</Text>
+                          </View>
+                        )}
+                      </View>
+                      <Text style={styles.meNavSubtitle}>
+                        {downloads.length > 0
+                          ? `${downloads.length} offline · ${formatBytes(downloads.reduce((acc, d) => acc + (d.sizeBytes || 0), 0))}`
+                          : 'Watch downloaded videos offline'}
+                      </Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={18} color="#737373" />
+                  </TouchableOpacity>
+                </View>
+
+                {/* Minimal App Updates Section */}
+                <View style={styles.minimalUpdateContainer}>
+                  <View style={styles.minimalUpdateHeader}>
+                    <View style={styles.minimalUpdateLeft}>
+                      <View style={styles.minimalUpdateIconCircle}>
+                        <Ionicons name="shield-checkmark-outline" size={16} color="#8e8e93" />
+                      </View>
+                      <View style={styles.minimalUpdateTextBox}>
+                        <View style={styles.minimalUpdateVersionRow}>
+                          <Text style={styles.minimalUpdateTitle}>Movieflix</Text>
+                          <Text style={styles.minimalUpdateVersionBadge}>v{CURRENT_APP_VERSION}</Text>
+                          {updateInfo?.hasUpdate && (
+                            <View style={styles.minimalUpdateNewBadge}>
+                              <Text style={styles.minimalUpdateNewBadgeText}>v{updateInfo.latestVersion}</Text>
+                            </View>
+                          )}
+                        </View>
+                        <Text style={styles.minimalUpdateSubtitle}>
+                          {updateInfo?.hasUpdate
+                            ? 'New version available'
+                            : updateInfo && !updateInfo.error
+                            ? 'App is up to date'
+                            : 'Check for latest improvements'}
+                        </Text>
+                      </View>
+                    </View>
+
+                    {updateInfo?.hasUpdate ? (
+                      <TouchableOpacity
+                        style={[styles.minimalUpdateNowBtn, isDownloadingApk && { opacity: 0.7 }]}
+                        onPress={handleDownloadAndInstallApk}
+                        activeOpacity={0.8}
+                        disabled={isDownloadingApk}
+                      >
+                        {isDownloadingApk ? (
+                          <ActivityIndicator size="small" color="#FFFFFF" style={{ marginRight: 5 }} />
+                        ) : (
+                          <Ionicons name="arrow-down-circle" size={14} color="#FFFFFF" style={{ marginRight: 5 }} />
+                        )}
+                        <Text style={styles.minimalUpdateNowBtnText}>
+                          {isDownloadingApk ? 'Updating...' : 'Update'}
+                        </Text>
+                      </TouchableOpacity>
+                    ) : (
+                      <TouchableOpacity
+                        style={[styles.minimalCheckBtn, isCheckingUpdate && { opacity: 0.6 }]}
+                        onPress={handleCheckForUpdate}
+                        activeOpacity={0.7}
+                        disabled={isCheckingUpdate}
+                      >
+                        {isCheckingUpdate ? (
+                          <ActivityIndicator size="small" color="#e50914" style={{ marginRight: 5 }} />
+                        ) : (
+                          <Ionicons name="refresh-outline" size={14} color="#a3a3a3" style={{ marginRight: 5 }} />
+                        )}
+                        <Text style={styles.minimalCheckBtnText}>
+                          {isCheckingUpdate ? 'Checking...' : 'Check'}
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+
+                  {/* Minimal Download Progress Bar */}
+                  {isDownloadingApk && apkDownloadProgress && (
+                    <View style={styles.minimalProgressBarTrack}>
+                      <View style={[styles.minimalProgressBarFill, { width: `${apkDownloadProgress.percent || 0}%` }]} />
+                      <Text style={styles.minimalProgressText}>
+                        {apkDownloadProgress.percent}% ({apkDownloadProgress.writtenFormatted} / {apkDownloadProgress.totalFormatted})
+                      </Text>
+                    </View>
+                  )}
+
+                  {/* Minimal Download Error */}
+                  {apkDownloadError && (
+                    <View style={styles.minimalErrorRow}>
+                      <Ionicons name="alert-circle-outline" size={12} color="#ef4444" style={{ marginRight: 4 }} />
+                      <Text style={styles.minimalErrorText} numberOfLines={1}>{apkDownloadError}</Text>
+                    </View>
+                  )}
+                </View>
+              </>
+            ) : (
+              /* ─── DEDICATED SUBPAGE HEADER ─── */
+              <View style={styles.meSubPageHeader}>
+                <TouchableOpacity
+                  style={styles.meSubPageBackBtn}
+                  onPress={() => setMeSubTab(null)}
+                  activeOpacity={0.7}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Ionicons name="chevron-back" size={20} color="#FFFFFF" />
+                  <Text style={styles.meSubPageBackText}>Back</Text>
+                </TouchableOpacity>
+
+                <Text style={styles.meSubPageTitle}>
+                  {meSubTab === 'History' && 'Watch History'}
+                  {meSubTab === 'MyList' && 'My List'}
+                  {meSubTab === 'Downloads' && 'Offline Downloads'}
+                </Text>
+
+                <View style={styles.meSubPageHeaderRight}>
+                  {meSubTab === 'History' && watchHistory.length > 0 && (
+                    <TouchableOpacity onPress={handleClearHistory} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                      <Text style={styles.clearAllBtnText}>Clear All</Text>
+                    </TouchableOpacity>
+                  )}
+                  {meSubTab === 'MyList' && (
+                    <Text style={styles.storageInfoText}>{myList.length} titles</Text>
+                  )}
+                  {meSubTab === 'Downloads' && downloads.length > 0 && (
+                    <Text style={styles.storageInfoText}>
+                      {formatBytes(downloads.reduce((acc, d) => acc + (d.sizeBytes || 0), 0))}
+                    </Text>
+                  )}
                 </View>
               </View>
-
-              {/* Quick Stats Counter Row */}
-              <View style={styles.meStatsRow}>
-                <TouchableOpacity
-                  style={styles.meStatBox}
-                  onPress={() => setMeSubTab('History')}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.meStatNumber}>{watchHistory.length}</Text>
-                  <Text style={styles.meStatLabel}>History</Text>
-                </TouchableOpacity>
-                <View style={styles.meStatDivider} />
-                <TouchableOpacity
-                  style={styles.meStatBox}
-                  onPress={() => setMeSubTab('MyList')}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.meStatNumber}>{myList.length}</Text>
-                  <Text style={styles.meStatLabel}>In My List</Text>
-                </TouchableOpacity>
-                <View style={styles.meStatDivider} />
-                <TouchableOpacity
-                  style={styles.meStatBox}
-                  onPress={() => setMeSubTab('Downloads')}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.meStatNumber}>{downloads.length}</Text>
-                  <Text style={styles.meStatLabel}>Downloads</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            {/* Segment Switcher Bar: Watch History | My List | Downloads */}
-            <View style={styles.meSegmentBar}>
-              <TouchableOpacity
-                style={[styles.meSegmentTab, meSubTab === 'History' && styles.meSegmentTabActive]}
-                onPress={() => setMeSubTab('History')}
-                activeOpacity={0.8}
-              >
-                <Ionicons
-                  name="time-outline"
-                  size={15}
-                  color={meSubTab === 'History' ? '#FFFFFF' : '#8e8e93'}
-                  style={{ marginRight: 5 }}
-                />
-                <Text style={[styles.meSegmentTabText, meSubTab === 'History' && styles.meSegmentTabTextActive]}>
-                  History ({watchHistory.length})
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.meSegmentTab, meSubTab === 'MyList' && styles.meSegmentTabActive]}
-                onPress={() => setMeSubTab('MyList')}
-                activeOpacity={0.8}
-              >
-                <Ionicons
-                  name="bookmark-outline"
-                  size={15}
-                  color={meSubTab === 'MyList' ? '#FFFFFF' : '#8e8e93'}
-                  style={{ marginRight: 5 }}
-                />
-                <Text style={[styles.meSegmentTabText, meSubTab === 'MyList' && styles.meSegmentTabTextActive]}>
-                  My List ({myList.length})
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.meSegmentTab, meSubTab === 'Downloads' && styles.meSegmentTabActive]}
-                onPress={() => setMeSubTab('Downloads')}
-                activeOpacity={0.8}
-              >
-                <Ionicons
-                  name="cloud-download-outline"
-                  size={15}
-                  color={meSubTab === 'Downloads' ? '#FFFFFF' : '#8e8e93'}
-                  style={{ marginRight: 5 }}
-                />
-                <Text style={[styles.meSegmentTabText, meSubTab === 'Downloads' && styles.meSegmentTabTextActive]}>
-                  Downloads ({downloads.length})
-                </Text>
-              </TouchableOpacity>
-            </View>
+            )}
 
             {/* SUB-SECTION 1: WATCH HISTORY */}
             {meSubTab === 'History' && (
@@ -2438,103 +2605,6 @@ function ReelApp() {
                 )}
               </View>
             )}
-
-            {/* ====================================================== */}
-            {/* CHECK FOR UPDATES CARD                                  */}
-            {/* ====================================================== */}
-            <View style={styles.updateCheckCard}>
-              {/* Header row */}
-              <View style={styles.updateCheckHeaderRow}>
-                <View style={styles.updateCheckIconBox}>
-                  <Ionicons name="cloud-download-outline" size={20} color="#e50914" />
-                </View>
-                <View style={{ flex: 1, marginLeft: 12 }}>
-                  <Text style={styles.updateCheckTitle}>App Updates</Text>
-                  <Text style={styles.updateCheckSubtitle}>
-                    Current version: <Text style={{ color: '#e50914', fontWeight: '700' }}>v{CURRENT_APP_VERSION}</Text>
-                  </Text>
-                </View>
-                {updateInfo?.hasUpdate && (
-                  <View style={styles.updateAvailableBadge}>
-                    <Text style={styles.updateAvailableBadgeText}>NEW</Text>
-                  </View>
-                )}
-              </View>
-
-              {/* Update available banner */}
-              {updateInfo?.hasUpdate && (
-                <View style={styles.updateBannerBox}>
-                  <Ionicons name="arrow-up-circle" size={16} color="#46d369" style={{ marginRight: 8 }} />
-                  <Text style={styles.updateBannerText}>
-                    v{updateInfo.latestVersion} is available — {updateInfo.releaseTitle}
-                  </Text>
-                </View>
-              )}
-              {updateInfo && !updateInfo.hasUpdate && !updateInfo.error && (
-                <View style={[styles.updateBannerBox, { backgroundColor: 'rgba(70, 211, 105, 0.08)', borderColor: 'rgba(70, 211, 105, 0.18)' }]}>
-                  <Ionicons name="checkmark-circle" size={16} color="#46d369" style={{ marginRight: 8 }} />
-                  <Text style={[styles.updateBannerText, { color: '#46d369' }]}>You have the latest version!</Text>
-                </View>
-              )}
-
-              {/* Action Buttons */}
-              <View style={styles.updateCheckBtnRow}>
-                <TouchableOpacity
-                  style={[styles.updateCheckBtn, isCheckingUpdate && { opacity: 0.6 }]}
-                  onPress={handleCheckForUpdate}
-                  activeOpacity={0.8}
-                  disabled={isCheckingUpdate}
-                >
-                  {isCheckingUpdate ? (
-                    <ActivityIndicator size="small" color="#FFFFFF" style={{ marginRight: 6 }} />
-                  ) : (
-                    <Ionicons name="refresh-outline" size={15} color="#FFFFFF" style={{ marginRight: 6 }} />
-                  )}
-                  <Text style={styles.updateCheckBtnText}>
-                    {isCheckingUpdate ? 'Checking...' : 'Check for Update'}
-                  </Text>
-                </TouchableOpacity>
-
-                {updateInfo?.hasUpdate && (
-                  <TouchableOpacity
-                    style={[styles.updateInstallBtn, isDownloadingApk && { opacity: 0.7 }]}
-                    onPress={handleDownloadAndInstallApk}
-                    activeOpacity={0.8}
-                    disabled={isDownloadingApk}
-                  >
-                    {isDownloadingApk ? (
-                      <ActivityIndicator size="small" color="#FFFFFF" style={{ marginRight: 6 }} />
-                    ) : (
-                      <Ionicons name="download-outline" size={15} color="#FFFFFF" style={{ marginRight: 6 }} />
-                    )}
-                    <Text style={styles.updateCheckBtnText}>
-                      {isDownloadingApk ? 'Downloading...' : 'Update Now'}
-                    </Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-
-              {/* Download Progress Bar */}
-              {isDownloadingApk && apkDownloadProgress && (
-                <View style={styles.apkProgressContainer}>
-                  <View style={styles.apkProgressBarTrack}>
-                    <View style={[styles.apkProgressBarFill, { width: `${apkDownloadProgress.percent || 0}%` }]} />
-                  </View>
-                  <Text style={styles.apkProgressText}>
-                    {apkDownloadProgress.percent}% · {apkDownloadProgress.writtenFormatted} / {apkDownloadProgress.totalFormatted}
-                  </Text>
-                </View>
-              )}
-
-              {/* Download Error */}
-              {apkDownloadError && (
-                <View style={styles.apkErrorBox}>
-                  <Ionicons name="alert-circle-outline" size={14} color="#e50914" style={{ marginRight: 6 }} />
-                  <Text style={styles.apkErrorText} numberOfLines={2}>{apkDownloadError}</Text>
-                </View>
-              )}
-            </View>
-
           </View>
         ) : (
           /* ==================================================== */
@@ -3916,7 +3986,10 @@ function ReelApp() {
 
         <TouchableOpacity
           style={[styles.bottomNavTab, mainTab === 'Me' && styles.bottomNavTabActive]}
-          onPress={() => setMainTab('Me')}
+          onPress={() => {
+            setMainTab('Me');
+            setMeSubTab(null);
+          }}
           activeOpacity={0.7}
         >
           <View style={{ position: 'relative' }}>
@@ -6729,6 +6802,236 @@ const styles = StyleSheet.create({
   meSegmentTabTextActive: {
     color: '#FFFFFF',
     fontWeight: '700',
+  },
+
+  // ME HUB NAVIGATION BUTTONS (PAGE DOWN)
+  meNavSection: {
+    marginBottom: 20,
+  },
+  meNavSectionHeader: {
+    color: '#737373',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    marginBottom: 10,
+    marginLeft: 4,
+  },
+  meNavCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.07)',
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    marginBottom: 10,
+  },
+  meNavIconCircle: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+  },
+  meNavTextCol: {
+    flex: 1,
+    marginLeft: 14,
+    marginRight: 8,
+  },
+  meNavTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 3,
+  },
+  meNavTitle: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  meNavSubtitle: {
+    color: '#8e8e93',
+    fontSize: 12,
+    fontWeight: '400',
+  },
+  meNavBadge: {
+    backgroundColor: 'rgba(229, 9, 20, 0.15)',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+    marginLeft: 8,
+  },
+  meNavBadgeText: {
+    color: '#e50914',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+
+  // MINIMAL APP UPDATES SECTION
+  minimalUpdateContainer: {
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.06)',
+    padding: 14,
+    marginTop: 6,
+    marginBottom: 28,
+  },
+  minimalUpdateHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  minimalUpdateLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 10,
+  },
+  minimalUpdateIconCircle: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  minimalUpdateTextBox: {
+    marginLeft: 10,
+    flex: 1,
+  },
+  minimalUpdateVersionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  minimalUpdateTitle: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  minimalUpdateVersionBadge: {
+    color: '#8e8e93',
+    fontSize: 11,
+    fontWeight: '600',
+    marginLeft: 6,
+  },
+  minimalUpdateNewBadge: {
+    backgroundColor: '#22c55e',
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 6,
+    marginLeft: 6,
+  },
+  minimalUpdateNewBadgeText: {
+    color: '#000000',
+    fontSize: 9,
+    fontWeight: '800',
+  },
+  minimalUpdateSubtitle: {
+    color: '#737373',
+    fontSize: 11,
+    marginTop: 1,
+  },
+  minimalCheckBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.07)',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  minimalCheckBtnText: {
+    color: '#d4d4d4',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  minimalUpdateNowBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#e50914',
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    shadowColor: '#e50914',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  minimalUpdateNowBtnText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  minimalProgressBarTrack: {
+    height: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderRadius: 2,
+    overflow: 'hidden',
+    marginTop: 10,
+  },
+  minimalProgressBarFill: {
+    height: '100%',
+    backgroundColor: '#e50914',
+  },
+  minimalProgressText: {
+    color: '#a3a3a3',
+    fontSize: 10,
+    fontWeight: '600',
+    marginTop: 4,
+    textAlign: 'right',
+  },
+  minimalErrorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 6,
+  },
+  minimalErrorText: {
+    color: '#ef4444',
+    fontSize: 11,
+    flex: 1,
+  },
+
+  // SUBPAGE HEADER STYLES
+  meSubPageContainer: {
+    marginBottom: 20,
+  },
+  meSubPageHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    marginBottom: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.06)',
+  },
+  meSubPageBackBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+    paddingRight: 10,
+  },
+  meSubPageBackText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '600',
+    marginLeft: 2,
+  },
+  meSubPageTitle: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  meSubPageHeaderRight: {
+    minWidth: 50,
+    alignItems: 'flex-end',
   },
   meTabSection: {
     marginBottom: 20,
