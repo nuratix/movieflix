@@ -108,6 +108,31 @@ const exitFullscreenSystemBar = async () => {
   }
 };
 
+// Web Deep Linking & Streaming Slug Helpers
+export function getMovieSlug(movie) {
+  if (!movie) return '';
+  if (movie.slug) return String(movie.slug);
+  const nameSlug = (movie.name || 'title')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  if (movie.subject_id) return `${nameSlug}-${movie.subject_id}`;
+  return nameSlug || 'title';
+}
+
+export const navigateWeb = (url, replace = false, state = {}) => {
+  if (Platform.OS !== 'web' || typeof window === 'undefined' || !window.history) return;
+  try {
+    const current = window.location.pathname + window.location.search;
+    if (current === url) return;
+    if (replace) {
+      window.history.replaceState({ url, ...state }, '', url);
+    } else {
+      window.history.pushState({ url, ...state }, '', url);
+    }
+  } catch (e) {}
+};
+
 // Preload and cache the intro video to internal storage for instant 0-lag playback
 const preloadIntroVideoAsync = async () => {
   try {
@@ -1166,6 +1191,7 @@ function ReelApp() {
   const [detailImdb, setDetailImdb] = useState(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [selectedSeasonIdx, setSelectedSeasonIdx] = useState(0);
+  const detailScrollRef = useRef(null);
 
   // Player State
   const [isPlayerOpen, setIsPlayerOpen] = useState(false);
@@ -1429,12 +1455,26 @@ function ReelApp() {
   };
 
   // Open Detail Modal
-  const openDetail = async (movie) => {
+  const openDetail = async (movie, syncHistory = true) => {
+    if (!movie) return;
     setDetailMovie(movie);
     setLoadingDetail(true);
     setDetailData(null);
     setDetailImdb(null);
     setSelectedSeasonIdx(0);
+
+    // Smoothly scroll detail modal to top when opening or switching movies
+    if (detailScrollRef.current?.scrollTo) {
+      detailScrollRef.current.scrollTo({ y: 0, animated: false });
+    }
+
+    // Sync Web URL slug immediately
+    if (syncHistory && Platform.OS === 'web') {
+      const isSeriesTitle = Boolean(movie?.isSeries || movie?.subjectType === 2);
+      const slug = getMovieSlug(movie);
+      const prefix = isSeriesTitle ? '/tv' : '/movie';
+      navigateWeb(`${prefix}/${slug}`);
+    }
 
     // Fetch free IMDb ratings & cast asynchronously
     getImdbData(movie?.name).then(setDetailImdb).catch(() => {});
@@ -1505,10 +1545,33 @@ function ReelApp() {
         seasons,
         isSeries: Boolean(isRealSeries),
       });
+
+      // Update URL with confirmed prefix if series vs movie was determined
+      if (syncHistory && Platform.OS === 'web') {
+        const slug = getMovieSlug(movie);
+        const prefix = isRealSeries ? '/tv' : '/movie';
+        navigateWeb(`${prefix}/${slug}`, true);
+      }
     } catch (err) {
       console.error("Detail fetch error:", err);
     } finally {
       setLoadingDetail(false);
+    }
+  };
+
+  // Close Detail Modal & Synchronize Web Route
+  const closeDetail = (syncHistory = true) => {
+    setDetailMovie(null);
+    setDetailData(null);
+    setDetailImdb(null);
+    if (syncHistory && Platform.OS === 'web') {
+      if (mainTab === 'Me') {
+        const sub = meSubTab ? `/me/${meSubTab.toLowerCase()}` : '/me';
+        navigateWeb(sub);
+      } else {
+        const cat = homeCategory === 'Movies' ? '/movies' : homeCategory === 'Series' ? '/series' : '/';
+        navigateWeb(cat);
+      }
     }
   };
 
@@ -1520,7 +1583,8 @@ function ReelApp() {
     seriesFlag = false,
     resumeTime = 0,
     offlineVideoUrl = null,
-    offlineSubUrl = null
+    offlineSubUrl = null,
+    syncHistory = true
   ) => {
     if (!offlineVideoUrl && isOffline) {
       showToast('You are offline. Connect to internet to stream, or watch your downloads in Me > Downloads!');
@@ -1542,6 +1606,13 @@ function ReelApp() {
     setAvailableCaptions([]);
     setAvailableAudioVariants([]);
     setPlayerResumeTime(resumeTime || 0);
+
+    // Sync Web URL to /watch/:slug
+    if (syncHistory && Platform.OS === 'web') {
+      const slug = getMovieSlug(movie);
+      const query = (seriesFlag || se > 0 || ep > 0) ? `?season=${se}&episode=${ep}` : '';
+      navigateWeb(`/watch/${slug}${query}`);
+    }
 
     enterFullscreenSystemBar();
 
@@ -1778,7 +1849,7 @@ function ReelApp() {
   };
 
   // Close Player & Restore Portrait
-  const closePlayer = async () => {
+  const closePlayer = async (syncHistory = true) => {
     setIsIntroLoading(false);
     setIsPlayerOpen(false);
     if (Platform.OS !== 'web') {
@@ -1806,6 +1877,22 @@ function ReelApp() {
     exitFullscreenSystemBar();
     // Refresh watch history immediately on exit
     getWatchHistory().then(setWatchHistory).catch(() => {});
+
+    // Sync Web URL back to movie detail or previous tab
+    if (syncHistory && Platform.OS === 'web') {
+      if (detailMovie) {
+        const isSeriesTitle = Boolean(detailMovie.isSeries || detailData?.isSeries || detailMovie.subjectType === 2);
+        const slug = getMovieSlug(detailMovie);
+        const prefix = isSeriesTitle ? '/tv' : '/movie';
+        navigateWeb(`${prefix}/${slug}`);
+      } else if (mainTab === 'Me') {
+        const sub = meSubTab ? `/me/${meSubTab.toLowerCase()}` : '/me';
+        navigateWeb(sub);
+      } else {
+        const cat = homeCategory === 'Movies' ? '/movies' : homeCategory === 'Series' ? '/series' : '/';
+        navigateWeb(cat);
+      }
+    }
   };
 
   // Switch Video Quality
@@ -1828,6 +1915,250 @@ function ReelApp() {
       launchPlayer(playerMovie, nextSeasonObj.se, 1, true);
     }
   };
+
+  // =====================================================
+  // WEB URL SLUG ROUTING & BROWSER HISTORY SYNCHRONIZATION
+  // Prevents blank screens on back navigation & direct URLs
+  // =====================================================
+
+  // 1. Sync Web URL with Main Tabs when not viewing a modal/player
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    if (detailMovie || isPlayerOpen || isIntroLoading) return;
+
+    let targetUrl = '/';
+    if (mainTab === 'Me') {
+      if (meSubTab === 'History') targetUrl = '/me/history';
+      else if (meSubTab === 'MyList') targetUrl = '/me/mylist';
+      else if (meSubTab === 'Downloads') targetUrl = '/me/downloads';
+      else targetUrl = '/me';
+    } else {
+      if (homeCategory === 'Movies') targetUrl = '/movies';
+      else if (homeCategory === 'Series') targetUrl = '/series';
+      else targetUrl = '/';
+    }
+
+    const currentUrl = window.location.pathname;
+    if (
+      currentUrl !== targetUrl &&
+      !currentUrl.startsWith('/movie/') &&
+      !currentUrl.startsWith('/tv/') &&
+      !currentUrl.startsWith('/series/') &&
+      !currentUrl.startsWith('/watch/')
+    ) {
+      navigateWeb(targetUrl);
+    }
+  }, [mainTab, homeCategory, meSubTab, detailMovie, isPlayerOpen, isIntroLoading]);
+
+  // 2. Handle Web Browser Back / Forward History (popstate)
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+
+    const findMovieBySlug = (slug) => {
+      if (!slug) return null;
+      const lower = slug.toLowerCase();
+      const allItems = [
+        ...heroList,
+        ...trendingNow,
+        ...latestReleases,
+        ...netflixPopular,
+        ...hindiMoviesList,
+        ...animeTrending,
+        ...animeLatest,
+        ...webSeriesLatest,
+        ...cartoonsList,
+        ...exploreGridList,
+        ...myList,
+        ...watchHistory.map((w) => w.movie).filter(Boolean),
+      ];
+      const exact = allItems.find(
+        (i) => i.slug === slug || (i.slug && i.slug.toLowerCase() === lower)
+      );
+      if (exact) return exact;
+      const partial = allItems.find(
+        (i) => (i.slug && i.slug.toLowerCase().includes(lower)) || String(i.subject_id) === lower
+      );
+      if (partial) return partial;
+      return (
+        allItems.find((i) => {
+          const s = (i.name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-');
+          return s === lower || s.startsWith(lower) || lower.startsWith(s);
+        }) || null
+      );
+    };
+
+    const handlePopState = async () => {
+      const pathname = window.location.pathname || '/';
+      const search = window.location.search || '';
+
+      // Route: /watch/:slug
+      if (pathname.startsWith('/watch/')) {
+        const slug = pathname.replace('/watch/', '').split('/')[0];
+        const params = new URLSearchParams(search);
+        const se = parseInt(params.get('season') || params.get('se') || '0', 10);
+        const ep = parseInt(params.get('episode') || params.get('ep') || '0', 10);
+
+        let movie = findMovieBySlug(slug);
+        if (!movie) {
+          try {
+            const res = await fetch(`${API_BASE}/detail/${slug}`);
+            const data = await res.json();
+            if (data?.data?.subject) {
+              movie = { ...data.data.subject, slug };
+            }
+          } catch (e) {}
+        }
+        if (movie) {
+          launchPlayer(movie, se, ep, se > 0 || ep > 0 || Boolean(movie.isSeries), 0, null, null, false);
+        }
+        return;
+      }
+
+      // If user navigated away from /watch/:
+      if (isPlayerOpen || isIntroLoading) {
+        setIsIntroLoading(false);
+        setIsPlayerOpen(false);
+      }
+
+      // Route: /movie/:slug or /tv/:slug or /series/:slug
+      if (
+        pathname.startsWith('/movie/') ||
+        pathname.startsWith('/tv/') ||
+        pathname.startsWith('/series/')
+      ) {
+        const slug = pathname.replace(/^\/(movie|tv|series)\//, '').split('/')[0];
+        let movie = findMovieBySlug(slug);
+        if (!movie) {
+          try {
+            const res = await fetch(`${API_BASE}/detail/${slug}`);
+            const data = await res.json();
+            if (data?.data?.subject) {
+              movie = { ...data.data.subject, slug };
+            }
+          } catch (e) {}
+        }
+        if (movie) {
+          openDetail(movie, false);
+        }
+        return;
+      }
+
+      // If user navigated away from detail modal:
+      if (detailMovie) {
+        setDetailMovie(null);
+        setDetailData(null);
+        setDetailImdb(null);
+      }
+
+      // Route: /me and subtabs
+      if (pathname.startsWith('/me')) {
+        setMainTab('Me');
+        if (pathname.includes('/history')) setMeSubTab('History');
+        else if (pathname.includes('/mylist')) setMeSubTab('MyList');
+        else if (pathname.includes('/downloads')) setMeSubTab('Downloads');
+        else setMeSubTab(null);
+        return;
+      }
+
+      // Route: Home categories
+      setMainTab('Home');
+      if (pathname === '/movies') {
+        setHomeCategory('Movies');
+      } else if (pathname === '/series' || pathname === '/tv') {
+        setHomeCategory('Series');
+      } else {
+        setHomeCategory('All');
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [
+    isPlayerOpen,
+    isIntroLoading,
+    detailMovie,
+    heroList,
+    trendingNow,
+    latestReleases,
+    netflixPopular,
+    hindiMoviesList,
+    animeTrending,
+    animeLatest,
+    webSeriesLatest,
+    cartoonsList,
+    exploreGridList,
+    myList,
+    watchHistory,
+  ]);
+
+  // 3. Initial URL resolution (Deep Linking on direct refresh or bookmark load)
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    const pathname = window.location.pathname || '/';
+    const search = window.location.search || '';
+
+    if (pathname === '/' || pathname === '') return;
+
+    const initialRouteResolver = async () => {
+      if (pathname.startsWith('/me')) {
+        setMainTab('Me');
+        if (pathname.includes('/history')) setMeSubTab('History');
+        else if (pathname.includes('/mylist')) setMeSubTab('MyList');
+        else if (pathname.includes('/downloads')) setMeSubTab('Downloads');
+        return;
+      }
+      if (pathname === '/movies') {
+        setHomeCategory('Movies');
+        return;
+      }
+      if (pathname === '/series' || pathname === '/tv') {
+        setHomeCategory('Series');
+        return;
+      }
+      if (
+        pathname.startsWith('/movie/') ||
+        pathname.startsWith('/tv/') ||
+        pathname.startsWith('/series/')
+      ) {
+        const slug = pathname.replace(/^\/(movie|tv|series)\//, '').split('/')[0];
+        try {
+          const res = await fetch(`${API_BASE}/detail/${slug}`);
+          const data = await res.json();
+          if (data?.data?.subject) {
+            openDetail({ ...data.data.subject, slug }, false);
+          } else {
+            const sRes = await fetch(`${API_BASE}/search?q=${encodeURIComponent(slug.replace(/-/g, ' '))}`);
+            const sData = await sRes.json();
+            if (sData?.items?.[0]) {
+              openDetail(sData.items[0], false);
+            }
+          }
+        } catch (e) {}
+        return;
+      }
+      if (pathname.startsWith('/watch/')) {
+        const slug = pathname.replace('/watch/', '').split('/')[0];
+        const params = new URLSearchParams(search);
+        const se = parseInt(params.get('season') || params.get('se') || '0', 10);
+        const ep = parseInt(params.get('episode') || params.get('ep') || '0', 10);
+        try {
+          const res = await fetch(`${API_BASE}/detail/${slug}`);
+          const data = await res.json();
+          if (data?.data?.subject) {
+            launchPlayer({ ...data.data.subject, slug }, se, ep, se > 0 || ep > 0, 0, null, null, false);
+          } else {
+            const sRes = await fetch(`${API_BASE}/search?q=${encodeURIComponent(slug.replace(/-/g, ' '))}`);
+            const sData = await sRes.json();
+            if (sData?.items?.[0]) {
+              launchPlayer(sData.items[0], se, ep, se > 0 || ep > 0, 0, null, null, false);
+            }
+          }
+        } catch (e) {}
+      }
+    };
+
+    initialRouteResolver();
+  }, []);
 
   // Helper to parse episodes array
   const getEpisodesArray = (seasonObj) => {
@@ -3228,7 +3559,7 @@ function ReelApp() {
         visible={Boolean(detailMovie)}
         animationType="slide"
         transparent={false}
-        onRequestClose={() => setDetailMovie(null)}
+        onRequestClose={closeDetail}
       >
         <View style={styles.detailContainer}>
           <StatusBar style="light" backgroundColor="#0a0a0a" translucent />
@@ -3236,13 +3567,17 @@ function ReelApp() {
           {/* Close Button Top Right */}
           <TouchableOpacity
             style={[styles.detailCloseButton, { top: insets.top + 12 }]}
-            onPress={() => setDetailMovie(null)}
+            onPress={closeDetail}
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
           >
             <Feather name="x" size={20} color="#FFFFFF" />
           </TouchableOpacity>
 
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}>
+          <ScrollView
+            ref={detailScrollRef}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}
+          >
             {/* Real-Ratio Movie Poster & Ambient Backdrop (Play Page) */}
             <View style={styles.detailHeroBackdrop}>
               {/* Soft ambient background */}
@@ -3373,18 +3708,61 @@ function ReelApp() {
                     </View>
                   )}
 
-                  {/* Starring Actresses & Actors from IMDb */}
+                  {/* Cast & Actresses with Photos from IMDb / TVMaze */}
                   {Boolean(detailImdb?.actors && detailImdb.actors.length > 0) && (
                     <View style={styles.detailCastSection}>
-                      <Text style={styles.detailCastHeading}>Starring</Text>
-                      <View style={styles.detailCastPillsRow}>
-                        {detailImdb.actors.map((actor, idx) => (
-                          <View key={`act-${idx}`} style={styles.detailActorPill}>
-                            <Feather name="user" size={12} color="#e50914" style={{ marginRight: 6 }} />
-                            <Text style={styles.detailActorPillText}>{actor}</Text>
-                          </View>
-                        ))}
+                      <View style={styles.detailCastHeaderRow}>
+                        <Text style={styles.detailCastHeading}>
+                          {detailData?.isSeries
+                            ? `Cast & Actresses ${detailData?.seasons?.[selectedSeasonIdx]?.se ? `(Season ${detailData.seasons[selectedSeasonIdx].se})` : ''}`
+                            : 'Starring Cast & Actresses'}
+                        </Text>
+                        <Text style={styles.detailCastCountBadge}>{detailImdb.actors.length} Cast</Text>
                       </View>
+                      <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={styles.detailCastScrollTrack}
+                      >
+                        {detailImdb.actors.map((castItem, idx) => {
+                          const item = typeof castItem === 'string'
+                            ? { name: castItem, character: '', image: null }
+                            : castItem;
+                          const initials = (item.name || '')
+                            .split(' ')
+                            .map((w) => w[0])
+                            .filter(Boolean)
+                            .slice(0, 2)
+                            .join('')
+                            .toUpperCase() || '★';
+
+                          return (
+                            <View key={`cast-card-${item.name}-${idx}`} style={styles.detailCastCard}>
+                              <View style={styles.detailCastAvatarWrapper}>
+                                {item.image ? (
+                                  <SafeImage
+                                    uri={item.image}
+                                    style={styles.detailCastAvatar}
+                                    resizeMode="cover"
+                                  />
+                                ) : (
+                                  <View style={styles.detailCastAvatarFallback}>
+                                    <Text style={styles.detailCastInitials}>{initials}</Text>
+                                  </View>
+                                )}
+                              </View>
+                              <Text numberOfLines={2} ellipsizeMode="tail" style={styles.detailCastNameText}>
+                                {item.name}
+                              </Text>
+                              {Boolean(item.character) && (
+                                <Text numberOfLines={1} ellipsizeMode="tail" style={styles.detailCastRoleText}>
+                                  {item.character}
+                                </Text>
+                              )}
+                            </View>
+                          );
+                        })}
+                      </ScrollView>
                     </View>
                   )}
 
@@ -3464,8 +3842,7 @@ function ReelApp() {
                       key={`rec-${item.slug || item.subject_id}-${idx}`}
                       movie={item}
                       onPress={() => {
-                        setDetailMovie(null);
-                        setTimeout(() => openDetail(item), 150);
+                        openDetail(item);
                       }}
                     />
                   ))}
@@ -5229,11 +5606,6 @@ function ReelCustomPlayer({
                 {movie?.name}
                 {isSeries ? ` · S${currentSeason}:E${currentEpisode}` : ''}
               </Text>
-              {Boolean(imdbData?.rating) && (
-                <View style={styles.playerImdbBadge}>
-                  <Text style={styles.playerImdbBadgeText}>★ {imdbData.rating}</Text>
-                </View>
-              )}
             </View>
 
             {/* Right Quick Controls */}
@@ -6428,36 +6800,78 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   detailCastSection: {
-    marginTop: 18,
-    marginBottom: 6,
+    marginTop: 22,
+    marginBottom: 8,
+  },
+  detailCastHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
   },
   detailCastHeading: {
-    color: '#a3a3a3',
-    fontSize: 11,
+    color: '#e5e5e5',
+    fontSize: 12,
     fontWeight: '800',
     textTransform: 'uppercase',
     letterSpacing: 0.8,
-    marginBottom: 10,
   },
-  detailCastPillsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  detailActorPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.06)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.12)',
-    paddingHorizontal: 11,
-    paddingVertical: 6,
-    borderRadius: 20,
-  },
-  detailActorPillText: {
-    color: '#f5f5f1',
-    fontSize: 12,
+  detailCastCountBadge: {
+    color: '#8e8e93',
+    fontSize: 11,
     fontWeight: '600',
+  },
+  detailCastScrollTrack: {
+    flexDirection: 'row',
+    paddingVertical: 4,
+    paddingRight: 16,
+  },
+  detailCastCard: {
+    width: 80,
+    marginRight: 12,
+    alignItems: 'center',
+  },
+  detailCastAvatarWrapper: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    overflow: 'hidden',
+    backgroundColor: '#1a1a1a',
+    borderWidth: 2,
+    borderColor: 'rgba(229, 9, 20, 0.45)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  detailCastAvatar: {
+    width: '100%',
+    height: '100%',
+  },
+  detailCastAvatarFallback: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#1f1f1f',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  detailCastInitials: {
+    color: '#e50914',
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  detailCastNameText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginTop: 8,
+    lineHeight: 14,
+  },
+  detailCastRoleText: {
+    color: '#8e8e93',
+    fontSize: 10,
+    fontWeight: '500',
+    textAlign: 'center',
+    marginTop: 2,
   },
   detailDirectorRow: {
     flexDirection: 'row',

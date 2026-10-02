@@ -1,13 +1,14 @@
 // ----------------------------------------------------
 // FREE IMDb API SERVICE (WEB & APK SUPPORTED)
-// Fetches real IMDb Rating, Actresses/Actors, Director, and Meta
+// Fetches real IMDb Rating, Actresses/Actors with photos, Director, and Meta
 // Multi-source resilient with in-memory & AsyncStorage caching
 // ----------------------------------------------------
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const IMDB_CACHE_PREFIX = '@movieflix_imdb_cache_v2:';
+const IMDB_CACHE_PREFIX = '@movieflix_imdb_cache_v3:';
 const inMemoryCache = new Map();
+const actorPhotoCache = new Map();
 
 // Free public OMDB keys pool
 const OMDB_KEYS = ['trilogy', '2b21cd75', '852233f0'];
@@ -27,10 +28,55 @@ export function sanitizeTitle(rawTitle) {
 }
 
 /**
- * Fetch movie/show info from Free IMDb APIs
+ * Fetch portrait photo for an actor from free public APIs (TVMaze / IMDb)
+ * @param {string} actorName
+ * @returns {Promise<string|null>}
+ */
+export async function fetchActorPhoto(actorName) {
+  if (!actorName || typeof actorName !== 'string') return null;
+  const key = actorName.trim().toLowerCase();
+  if (actorPhotoCache.has(key)) {
+    return actorPhotoCache.get(key);
+  }
+
+  // 1. Try TVMaze People Search (fast & high quality)
+  try {
+    const res = await fetch(`https://api.tvmaze.com/search/people?q=${encodeURIComponent(actorName.trim())}`);
+    if (res.ok) {
+      const data = await res.json();
+      const img = data?.[0]?.person?.image?.medium || data?.[0]?.person?.image?.original || null;
+      if (img) {
+        actorPhotoCache.set(key, img);
+        return img;
+      }
+    }
+  } catch (e) {}
+
+  // 2. Try IMDb Suggestion Search
+  try {
+    const cleanQ = key.replace(/[^a-z0-9]/g, '');
+    if (cleanQ) {
+      const res = await fetch(`https://v3.sg.media-imdb.com/suggestion/x/${cleanQ}.json`);
+      if (res.ok) {
+        const data = await res.json();
+        const img = data?.d?.[0]?.i?.imageUrl || null;
+        if (img) {
+          actorPhotoCache.set(key, img);
+          return img;
+        }
+      }
+    }
+  } catch (e) {}
+
+  actorPhotoCache.set(key, null);
+  return null;
+}
+
+/**
+ * Fetch movie/show info from Free IMDb APIs with cast photos and character roles
  * @param {string} title - Movie or Series name
  * @param {string} [year] - Optional release year
- * @returns {Promise<{ rating: string|null, votes: string|null, actors: string[], director: string|null, rated: string|null, plot: string|null, imdbId: string|null }>}
+ * @returns {Promise<{ rating: string|null, votes: string|null, actors: Array<{name: string, character: string, image: string|null}>, director: string|null, rated: string|null, plot: string|null, imdbId: string|null }>}
  */
 export async function getImdbData(title, year = '') {
   const clean = sanitizeTitle(title);
@@ -56,8 +102,43 @@ export async function getImdbData(title, year = '') {
   }
 
   let finalResult = null;
+  let tvMazeCast = null;
 
-  // 3. Query OMDB API (Real IMDb ratings and actors)
+  // 3. Query TVMaze API in parallel or first for rich Cast with character roles & images
+  try {
+    const tvUrl = `https://api.tvmaze.com/singlesearch/shows?q=${encodeURIComponent(clean)}&embed=cast`;
+    const tvRes = await fetch(tvUrl);
+    if (tvRes.ok) {
+      const tvData = await tvRes.json();
+      if (tvData) {
+        const rawCast = tvData._embedded?.cast || [];
+        if (rawCast.length > 0) {
+          tvMazeCast = rawCast.map((c) => ({
+            name: c.person?.name || '',
+            character: c.character?.name || '',
+            image: c.person?.image?.medium || c.person?.image?.original || null,
+          })).filter((c) => Boolean(c.name));
+        }
+
+        finalResult = {
+          rating: tvData.rating?.average ? String(tvData.rating.average) : null,
+          votes: null,
+          actors: tvMazeCast || [],
+          director: null,
+          genre: Array.isArray(tvData.genres) ? tvData.genres.join(', ') : null,
+          rated: null,
+          plot: tvData.summary ? tvData.summary.replace(/<[^>]+>/g, '').trim() : null,
+          imdbId: tvData.externals?.imdb ? tvData.externals.imdb : null,
+          year: tvData.premiered ? String(tvData.premiered).split('-')[0] : null,
+          source: 'tvmaze',
+        };
+      }
+    }
+  } catch (e) {
+    // Continue to OMDB
+  }
+
+  // 4. Query OMDB API (Real official IMDb ratings, votes, director, actors)
   for (const apiKey of OMDB_KEYS) {
     try {
       let url = `https://www.omdbapi.com/?t=${encodeURIComponent(clean)}&apikey=${apiKey}`;
@@ -69,62 +150,47 @@ export async function getImdbData(title, year = '') {
       if (res.ok) {
         const data = await res.json();
         if (data && data.Response === 'True') {
-          const actors = data.Actors && data.Actors !== 'N/A'
+          const rawActorNames = data.Actors && data.Actors !== 'N/A'
             ? data.Actors.split(',').map((a) => a.trim()).filter(Boolean)
             : [];
 
+          const omdbRating = data.imdbRating && data.imdbRating !== 'N/A' ? data.imdbRating : null;
+          const omdbVotes = data.imdbVotes && data.imdbVotes !== 'N/A' ? data.imdbVotes : null;
+          const omdbDirector = data.Director && data.Director !== 'N/A' ? data.Director : null;
+          const omdbPlot = data.Plot && data.Plot !== 'N/A' ? data.Plot : null;
+
+          // If TVMaze already provided full cast with photos, keep those; otherwise prepare actor objects
+          let castToUse = tvMazeCast && tvMazeCast.length > 0 ? tvMazeCast : null;
+          if (!castToUse && rawActorNames.length > 0) {
+            castToUse = rawActorNames.map((name) => ({
+              name,
+              character: '',
+              image: null,
+            }));
+          }
+
           finalResult = {
-            rating: data.imdbRating && data.imdbRating !== 'N/A' ? data.imdbRating : null,
-            votes: data.imdbVotes && data.imdbVotes !== 'N/A' ? data.imdbVotes : null,
-            actors: actors,
-            director: data.Director && data.Director !== 'N/A' ? data.Director : null,
-            genre: data.Genre && data.Genre !== 'N/A' ? data.Genre : null,
-            rated: data.Rated && data.Rated !== 'N/A' ? data.Rated : null,
-            plot: data.Plot && data.Plot !== 'N/A' ? data.Plot : null,
-            imdbId: data.imdbID || null,
+            rating: omdbRating || finalResult?.rating || null,
+            votes: omdbVotes || finalResult?.votes || null,
+            actors: castToUse || finalResult?.actors || [],
+            director: omdbDirector || finalResult?.director || null,
+            genre: (data.Genre && data.Genre !== 'N/A') ? data.Genre : (finalResult?.genre || null),
+            rated: (data.Rated && data.Rated !== 'N/A') ? data.Rated : (finalResult?.rated || null),
+            plot: omdbPlot || finalResult?.plot || null,
+            imdbId: data.imdbID || finalResult?.imdbId || null,
+            year: data.Year || finalResult?.year || null,
             source: 'imdb',
           };
           break;
         }
       }
     } catch (err) {
-      // Try next
+      // Try next OMDB key
     }
   }
 
-  // 4. Fallback A: TVMaze API (100% Free, no key needed, great for TV shows / series)
-  if (!finalResult || !finalResult.rating || finalResult.actors.length === 0) {
-    try {
-      const tvUrl = `https://api.tvmaze.com/singlesearch/shows?q=${encodeURIComponent(clean)}&embed=cast`;
-      const tvRes = await fetch(tvUrl);
-      if (tvRes.ok) {
-        const tvData = await tvRes.json();
-        if (tvData) {
-          const castList = (tvData._embedded?.cast || [])
-            .map((c) => c.person?.name)
-            .filter(Boolean)
-            .slice(0, 6);
-
-          finalResult = {
-            rating: finalResult?.rating || (tvData.rating?.average ? String(tvData.rating.average) : null),
-            votes: finalResult?.votes || null,
-            actors: finalResult?.actors?.length ? finalResult.actors : castList,
-            director: finalResult?.director || null,
-            genre: finalResult?.genre || (Array.isArray(tvData.genres) ? tvData.genres.join(', ') : null),
-            rated: finalResult?.rated || null,
-            plot: finalResult?.plot || (tvData.summary ? tvData.summary.replace(/<[^>]+>/g, '') : null),
-            imdbId: finalResult?.imdbId || (tvData.externals?.imdb ? tvData.externals.imdb : null),
-            source: 'tvmaze',
-          };
-        }
-      }
-    } catch (e) {
-      // Ignore
-    }
-  }
-
-  // 5. Fallback B: Official IMDb suggestion API (Public, free)
-  if (!finalResult || finalResult.actors.length === 0) {
+  // 5. Fallback: Official IMDb suggestion API (Public, free)
+  if (!finalResult || (!finalResult.rating && (!finalResult.actors || finalResult.actors.length === 0))) {
     try {
       const q = clean.toLowerCase().replace(/[^a-z0-9]/g, '');
       if (q) {
@@ -136,18 +202,23 @@ export async function getImdbData(title, year = '') {
             const entry = data.d.find((item) => item.qid === 'movie' || item.qid === 'tvSeries' || item.q === 'feature') || data.d[0];
             if (entry) {
               const rawStars = entry.s || '';
-              const actors = rawStars.split(',').map((a) => a.trim()).filter(Boolean);
+              const starNames = rawStars.split(',').map((a) => a.trim()).filter(Boolean);
+              const suggestActors = starNames.map((name) => ({
+                name,
+                character: '',
+                image: null,
+              }));
 
               finalResult = {
                 rating: finalResult?.rating || null,
                 votes: finalResult?.votes || null,
-                actors: finalResult?.actors?.length ? finalResult.actors : actors,
+                actors: (finalResult?.actors && finalResult.actors.length > 0) ? finalResult.actors : suggestActors,
                 director: finalResult?.director || null,
                 genre: finalResult?.genre || null,
                 rated: finalResult?.rated || null,
                 plot: finalResult?.plot || null,
                 imdbId: finalResult?.imdbId || (entry.id || null),
-                year: entry.y ? String(entry.y) : null,
+                year: entry.y ? String(entry.y) : (finalResult?.year || null),
                 source: 'imdb_suggest',
               };
             }
@@ -157,6 +228,24 @@ export async function getImdbData(title, year = '') {
     } catch (err) {
       // Ignore
     }
+  }
+
+  // 6. Enrich any actors missing photos (e.g. from OMDB or IMDb suggestion)
+  if (finalResult && Array.isArray(finalResult.actors) && finalResult.actors.length > 0) {
+    const enriched = await Promise.all(
+      finalResult.actors.slice(0, 15).map(async (act) => {
+        if (typeof act === 'string') {
+          const img = await fetchActorPhoto(act);
+          return { name: act, character: '', image: img };
+        }
+        if (!act.image) {
+          const img = await fetchActorPhoto(act.name);
+          return { ...act, image: img };
+        }
+        return act;
+      })
+    );
+    finalResult.actors = enriched;
   }
 
   if (finalResult) {
