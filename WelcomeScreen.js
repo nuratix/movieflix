@@ -1,11 +1,11 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, StatusBar } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, StatusBar, ScrollView } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import TiltedPostersBackground from './TiltedPostersBackground';
 
-const LOCAL_HEADER_ICON = require('./assets/header_icon.png');
+const BRAND_LOGO = require('./assets/movieflix_brand_logo.png');
 
 export default function WelcomeScreen({ onGetStarted }) {
   const insets = useSafeAreaInsets();
@@ -17,14 +17,27 @@ export default function WelcomeScreen({ onGetStarted }) {
       {/* Moving tilted poster wall background */}
       <TiltedPostersBackground />
 
-      {/* Content Container */}
-      <View style={[styles.content, { paddingTop: insets.top + 30, paddingBottom: insets.bottom + 36 }]}>
-        {/* Brand Header */}
+      {/* Scrollable Content Container to ensure button is always reachable */}
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={[
+          styles.content,
+          {
+            paddingTop: insets.top + 24,
+            paddingBottom: insets.bottom + 28,
+          },
+        ]}
+        showsVerticalScrollIndicator={false}
+        bounces={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        {/* Brand Header with real wide logo */}
         <View style={styles.header}>
-          <View style={styles.logoHalo}>
-            <ExpoImage source={LOCAL_HEADER_ICON} style={styles.logoImage} contentFit="contain" />
-          </View>
-          <Text style={styles.brandTitle}>Movieflix</Text>
+          <ExpoImage
+            source={BRAND_LOGO}
+            style={styles.brandLogoImage}
+            contentFit="contain"
+          />
         </View>
 
         {/* Hero Copy */}
@@ -67,7 +80,7 @@ export default function WelcomeScreen({ onGetStarted }) {
             Instant free access • No credit card required
           </Text>
         </View>
-      </View>
+      </ScrollView>
     </View>
   );
 }
@@ -76,62 +89,46 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#0a0a0a',
+    overflow: 'hidden',
+  },
+  scroll: {
+    flex: 1,
   },
   content: {
-    flex: 1,
+    flexGrow: 1,
     justifyContent: 'space-between',
-    paddingHorizontal: 28,
+    paddingHorizontal: 24,
+    minHeight: '100%',
   },
   header: {
     alignItems: 'center',
+    paddingTop: 10,
+    marginBottom: 20,
   },
-  logoHalo: {
-    width: 74,
-    height: 74,
-    borderRadius: 22,
-    backgroundColor: 'rgba(229, 9, 20, 0.12)',
-    borderWidth: 1.5,
-    borderColor: 'rgba(229, 9, 20, 0.35)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 10,
-    shadowColor: '#e50914',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.45,
-    shadowRadius: 18,
-    elevation: 8,
-  },
-  logoImage: {
-    width: 50,
-    height: 50,
-  },
-  brandTitle: {
-    color: '#fff',
-    fontSize: 22,
-    fontWeight: '900',
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
+  brandLogoImage: {
+    width: 230,
+    height: 48,
   },
   heroCenter: {
     alignItems: 'center',
-    marginVertical: 'auto',
+    marginVertical: 20,
   },
   mainHeading: {
     color: '#ffffff',
-    fontSize: 34,
+    fontSize: 32,
     fontWeight: '900',
     textAlign: 'center',
-    lineHeight: 42,
+    lineHeight: 40,
     letterSpacing: -0.5,
-    marginBottom: 14,
+    marginBottom: 12,
   },
   subHeading: {
     color: '#a3a3a3',
-    fontSize: 15,
+    fontSize: 14,
     textAlign: 'center',
-    lineHeight: 22,
-    maxWidth: 340,
-    marginBottom: 24,
+    lineHeight: 21,
+    maxWidth: 320,
+    marginBottom: 20,
   },
   perksRow: {
     flexDirection: 'row',
@@ -157,22 +154,23 @@ const styles = StyleSheet.create({
   footer: {
     alignItems: 'center',
     width: '100%',
+    paddingTop: 10,
   },
   getStartedBtn: {
     width: '100%',
-    maxWidth: 420,
+    maxWidth: 400,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#e50914',
     borderRadius: 16,
-    paddingVertical: 18,
+    paddingVertical: 17,
     shadowColor: '#e50914',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.5,
     shadowRadius: 20,
     elevation: 10,
-    marginBottom: 14,
+    marginBottom: 12,
   },
   getStartedText: {
     color: '#ffffff',

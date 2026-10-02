@@ -1990,107 +1990,111 @@ function ReelApp() {
                           streamData.sources[0];
         setActiveStreamUrl(preferred.url);
         setActiveResolution(preferred.resolution);
+        setLoadingStream(false);
       } else {
         setStreamError(
           seriesFlag
             ? `No stream found for Season ${effectiveSe}, Episode ${effectiveEp}.`
             : "No direct stream link found for this title."
         );
+        setLoadingStream(false);
       }
 
-      // 2. Fetch Subtitles/Captions using the resolved effectiveSe and effectiveEp
-      try {
-        let allCaptions = [];
-        const seenLans = new Set();
-        const capUrl = `${API_BASE}/api/stream/${movie.subject_id}/captions?detail_path=${movie.slug}&se=${effectiveSe}&ep=${effectiveEp}&title=${encodeURIComponent(movie.name || '')}`;
-        const capRes = await apiFetch(capUrl);
-        const capData = await capRes.json();
-        if (capData && Array.isArray(capData.captions)) {
-          for (const c of capData.captions) {
-            const key = c.lanName || c.lan;
-            if (key && !seenLans.has(key)) {
-              seenLans.add(key);
-              allCaptions.push(c);
+      // 2. Fetch Subtitles/Captions and Audio Variants in the background without blocking stream playback
+      (async () => {
+        try {
+          let allCaptions = [];
+          const seenLans = new Set();
+          const capUrl = `${API_BASE}/api/stream/${movie.subject_id}/captions?detail_path=${movie.slug}&se=${effectiveSe}&ep=${effectiveEp}&title=${encodeURIComponent(movie.name || '')}`;
+          const capRes = await apiFetch(capUrl);
+          const capData = await capRes.json();
+          if (capData && Array.isArray(capData.captions)) {
+            for (const c of capData.captions) {
+              const key = c.lanName || c.lan;
+              if (key && !seenLans.has(key)) {
+                seenLans.add(key);
+                allCaptions.push(c);
+              }
             }
           }
-        }
 
-        // Clean name/slug to find franchise siblings across languages
-        const cleanName = (movie.name || '').replace(/\[.*?\]/g, '').replace(/S\d+(-S\d+)?/gi, '').trim();
-        const cleanSlug = (movie.slug || '').replace(/-(english|hindi|french|spanish|dubbed|dub|tamil|telugu)[^a-zA-Z0-9].*/i, '').replace(/-/g, ' ').trim();
-        const searchQuery = cleanName || cleanSlug;
+          // Clean name/slug to find franchise siblings across languages
+          const cleanName = (movie.name || '').replace(/\[.*?\]/g, '').replace(/S\d+(-S\d+)?/gi, '').trim();
+          const cleanSlug = (movie.slug || '').replace(/-(english|hindi|french|spanish|dubbed|dub|tamil|telugu)[^a-zA-Z0-9].*/i, '').replace(/-/g, ' ').trim();
+          const searchQuery = cleanName || cleanSlug;
 
-        if (searchQuery) {
-          try {
-            const sRes = await apiFetch(`${API_BASE}/search?q=${encodeURIComponent(searchQuery)}`);
-            const sData = await sRes.json();
-            const items = sData?.items || [];
+          if (searchQuery) {
+            try {
+              const sRes = await apiFetch(`${API_BASE}/search?q=${encodeURIComponent(searchQuery)}`);
+              const sData = await sRes.json();
+              const items = sData?.items || [];
 
-            // Detect audio dub variants
-            const detectedVariants = [];
-            const seenDubLabels = new Set();
+              // Detect audio dub variants
+              const detectedVariants = [];
+              const seenDubLabels = new Set();
 
-            for (const itm of items.slice(0, 8)) {
-              const nm = itm.name || '';
-              const slg = itm.slug || '';
-              let label = null;
-              if (nm.includes('[Hindi]') || slg.includes('-hindi-')) label = 'Hindi Dub';
-              else if (nm.includes('[English]') || slg.includes('-english-')) label = 'English Dub';
-              else if (nm.includes('[French]') || slg.includes('-french-')) label = 'French Dub';
-              else if (nm.includes('[Spanish]') || slg.includes('-spanish-')) label = 'Spanish Dub';
-              else if (nm.includes('[Tamil]') || slg.includes('-tamil-')) label = 'Tamil Dub';
-              else if (nm.includes('[Telugu]') || slg.includes('-telugu-')) label = 'Telugu Dub';
-              else if (!/\[(Hindi|English|French|Spanish|Tamil|Telugu)\]/i.test(nm)) label = 'Original Audio';
+              for (const itm of items.slice(0, 8)) {
+                const nm = itm.name || '';
+                const slg = itm.slug || '';
+                let label = null;
+                if (nm.includes('[Hindi]') || slg.includes('-hindi-')) label = 'Hindi Dub';
+                else if (nm.includes('[English]') || slg.includes('-english-')) label = 'English Dub';
+                else if (nm.includes('[French]') || slg.includes('-french-')) label = 'French Dub';
+                else if (nm.includes('[Spanish]') || slg.includes('-spanish-')) label = 'Spanish Dub';
+                else if (nm.includes('[Tamil]') || slg.includes('-tamil-')) label = 'Tamil Dub';
+                else if (nm.includes('[Telugu]') || slg.includes('-telugu-')) label = 'Telugu Dub';
+                else if (!/\[(Hindi|English|French|Spanish|Tamil|Telugu)\]/i.test(nm)) label = 'Original Audio';
 
-              if (label && !seenDubLabels.has(label)) {
-                seenDubLabels.add(label);
-                detectedVariants.push({
-                  label,
-                  name: nm,
-                  subject_id: itm.subject_id,
-                  slug: slg,
-                  isCurrent: itm.subject_id === movie.subject_id || slg === movie.slug,
-                });
-              }
+                if (label && !seenDubLabels.has(label)) {
+                  seenDubLabels.add(label);
+                  detectedVariants.push({
+                    label,
+                    name: nm,
+                    subject_id: itm.subject_id,
+                    slug: slg,
+                    isCurrent: itm.subject_id === movie.subject_id || slg === movie.slug,
+                  });
+                }
 
-              // Sibling subtitle collection if we don't have all languages yet
-              if (allCaptions.length <= 4 && itm.subject_id !== movie.subject_id) {
-                try {
-                  const sibCapUrl = `${API_BASE}/api/stream/${itm.subject_id}/captions?detail_path=${itm.slug}&se=${se}&ep=${ep}`;
-                  const sibRes = await apiFetch(sibCapUrl);
-                  const sibData = await sibRes.json();
-                  if (sibData && Array.isArray(sibData.captions)) {
-                    for (const sc of sibData.captions) {
-                      const key = sc.lanName || sc.lan;
-                      if (key && !seenLans.has(key)) {
-                        seenLans.add(key);
-                        allCaptions.push(sc);
+                // Sibling subtitle collection if we don't have all languages yet
+                if (allCaptions.length <= 4 && itm.subject_id !== movie.subject_id) {
+                  try {
+                    const sibCapUrl = `${API_BASE}/api/stream/${itm.subject_id}/captions?detail_path=${itm.slug}&se=${se}&ep=${ep}`;
+                    const sibRes = await apiFetch(sibCapUrl);
+                    const sibData = await sibRes.json();
+                    if (sibData && Array.isArray(sibData.captions)) {
+                      for (const sc of sibData.captions) {
+                        const key = sc.lanName || sc.lan;
+                        if (key && !seenLans.has(key)) {
+                          seenLans.add(key);
+                          allCaptions.push(sc);
+                        }
                       }
                     }
-                  }
-                } catch (se) {}
+                  } catch (se) {}
+                }
               }
-            }
 
-            if (!detectedVariants.some(v => v.isCurrent)) {
-              detectedVariants.unshift({
-                label: 'Original Audio (Default)',
-                name: movie.name || 'Current Stream',
-                subject_id: movie.subject_id,
-                slug: movie.slug,
-                isCurrent: true,
-              });
+              if (!detectedVariants.some(v => v.isCurrent)) {
+                detectedVariants.unshift({
+                  label: 'Original Audio (Default)',
+                  name: movie.name || 'Current Stream',
+                  subject_id: movie.subject_id,
+                  slug: movie.slug,
+                  isCurrent: true,
+                });
+              }
+              setAvailableAudioVariants(detectedVariants);
+            } catch (se) {
+              console.log("Audio variants/sibling subs lookup:", se);
             }
-            setAvailableAudioVariants(detectedVariants);
-          } catch (se) {
-            console.log("Audio variants/sibling subs lookup:", se);
           }
-        }
 
-        setAvailableCaptions(allCaptions);
-      } catch (ce) {
-        console.log("Captions fetch skipped:", ce);
-      }
+          setAvailableCaptions(allCaptions);
+        } catch (ce) {
+          console.log("Captions fetch skipped:", ce);
+        }
+      })();
     } catch (err) {
       console.error("Stream extraction error:", err);
       setStreamError("Failed to connect to stream server.");

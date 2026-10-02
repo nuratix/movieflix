@@ -60,7 +60,7 @@ export default function TiltedPostersBackground() {
   }, []);
 
   return (
-    <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
+    <View style={[StyleSheet.absoluteFillObject, { overflow: 'hidden' }]} pointerEvents="none">
       {/* Container tilted diagonally */}
       <View style={styles.tiltedContainer}>
         {/* Row 1 */}

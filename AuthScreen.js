@@ -16,7 +16,7 @@ import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import TiltedPostersBackground from './TiltedPostersBackground';
 
-const LOCAL_HEADER_ICON = require('./assets/header_icon.png');
+const BRAND_LOGO = require('./assets/movieflix_brand_logo.png');
 
 export default function AuthScreen({
   initialMode = 'login',
@@ -90,12 +90,13 @@ export default function AuthScreen({
         >
           {/* Main Floating Glass Card */}
           <View style={styles.card}>
-            {/* Brand Logo & Title */}
+            {/* Brand Logo */}
             <View style={styles.brandRow}>
-              <View style={styles.logoHalo}>
-                <ExpoImage source={LOCAL_HEADER_ICON} style={styles.logoImage} contentFit="contain" />
-              </View>
-              <Text style={styles.brandTitle}>Movieflix</Text>
+              <ExpoImage
+                source={BRAND_LOGO}
+                style={styles.brandLogoImage}
+                contentFit="contain"
+              />
             </View>
 
             {/* Segment Switcher Tabs */}
@@ -225,6 +226,10 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#0a0a0a',
+    overflow: 'hidden',
+    height: Platform.OS === 'web' ? '100vh' : '100%',
+    maxHeight: Platform.OS === 'web' ? '100vh' : '100%',
+    width: '100%',
   },
   closeBtn: {
     position: 'absolute',
@@ -241,6 +246,8 @@ const styles = StyleSheet.create({
   },
   keyboardView: {
     flex: 1,
+    width: '100%',
+    height: '100%',
   },
   scrollContent: {
     flexGrow: 1,
@@ -266,32 +273,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 20,
   },
-  logoHalo: {
-    width: 68,
-    height: 68,
-    borderRadius: 20,
-    backgroundColor: 'rgba(229, 9, 20, 0.14)',
-    borderWidth: 1.5,
-    borderColor: 'rgba(229, 9, 20, 0.35)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 10,
-    shadowColor: '#e50914',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.45,
-    shadowRadius: 16,
-    elevation: 8,
-  },
-  logoImage: {
-    width: 44,
+  brandLogoImage: {
+    width: 210,
     height: 44,
-  },
-  brandTitle: {
-    color: '#ffffff',
-    fontSize: 22,
-    fontWeight: '900',
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
   },
   segmentRow: {
     flexDirection: 'row',
