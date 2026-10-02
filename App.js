@@ -74,6 +74,7 @@ import {
 import { getImdbData } from './imdbService';
 import WelcomeScreen from './WelcomeScreen';
 import AuthScreen from './AuthScreen';
+import CustomSplashScreen from './CustomSplashScreen';
 
 // ─── API Base & Secret Key (from .env / Vercel env vars) ────────────────────
 let rawBase = process.env.EXPO_PUBLIC_API_BASE || 'https://moviebo.vercel.app';
@@ -1024,6 +1025,7 @@ function ReelApp() {
   const [authError, setAuthError] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
   const [authInitDone, setAuthInitDone] = useState(false);
+  const [splashFinished, setSplashFinished] = useState(false);
 
   // Sync access token to module-level var so apiFetch picks it up automatically
   useEffect(() => { _authToken = authAccessToken; }, [authAccessToken]);
@@ -2831,21 +2833,9 @@ function ReelApp() {
 
   // ─── NATIVE (APK) ONBOARDING & AUTH GATE ─────────────────────────────────
   if (Platform.OS !== 'web') {
-    // 1. Splash while checking session
-    if (!authInitDone) {
-      return (
-        <View style={{ flex: 1, backgroundColor: '#0a0a0a', alignItems: 'center', justifyContent: 'center' }}>
-          <StatusBar style="light" backgroundColor="#0a0a0a" translucent />
-          <View style={{ width: 72, height: 72, borderRadius: 20, backgroundColor: 'rgba(229, 9, 20, 0.12)',
-            borderWidth: 1.5, borderColor: 'rgba(229, 9, 20, 0.35)', alignItems: 'center', justifyContent: 'center',
-            shadowColor: '#e50914', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.45, shadowRadius: 18, elevation: 8 }}>
-            <ExpoImage source={LOCAL_HEADER_ICON} style={{ width: 44, height: 44 }} contentFit="contain" />
-          </View>
-          <Text style={{ color: '#fff', fontSize: 22, fontWeight: '800', letterSpacing: 1.2, marginTop: 14 }}>
-            Movieflix
-          </Text>
-        </View>
-      );
+    // 1. Custom in-app animated splash screen with moving posters and animated MovieFlix logo in center
+    if (!authInitDone || !splashFinished) {
+      return <CustomSplashScreen onFinish={() => setSplashFinished(true)} />;
     }
 
     // 2. Welcome screen (shown only on first launch on native APK)

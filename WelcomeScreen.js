@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, StatusBar, ScrollView, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, StatusBar, Image, Dimensions } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import TiltedPostersBackground from './TiltedPostersBackground';
@@ -8,6 +8,8 @@ const BRAND_LOGO = require('./assets/movieflix_brand_logo.png');
 
 export default function WelcomeScreen({ onGetStarted }) {
   const insets = useSafeAreaInsets();
+  const { height } = Dimensions.get('window');
+  const isCompact = height < 700;
 
   return (
     <View style={styles.container}>
@@ -16,39 +18,35 @@ export default function WelcomeScreen({ onGetStarted }) {
       {/* Moving tilted poster wall background */}
       <TiltedPostersBackground />
 
-      {/* Scrollable Content Container to ensure button is always reachable */}
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={[
-          styles.content,
+      {/* Main Content Area - Anchored directly in viewport so Get Started button is ALWAYS visible */}
+      <View
+        style={[
+          styles.mainLayout,
           {
-            paddingTop: insets.top + 28,
-            paddingBottom: insets.bottom + 28,
+            paddingTop: insets.top + (isCompact ? 14 : 24),
+            paddingBottom: insets.bottom + (isCompact ? 16 : 24),
           },
         ]}
-        showsVerticalScrollIndicator={false}
-        bounces={false}
-        keyboardShouldPersistTaps="handled"
       >
-        {/* Brand Header with real wide logo */}
+        {/* Top: MovieFlix Full Brand Logo */}
         <View style={styles.header}>
           <Image
             source={BRAND_LOGO}
-            style={styles.brandLogoImage}
+            style={[styles.brandLogoImage, isCompact && { width: 200, height: 42 }]}
             resizeMode="contain"
           />
         </View>
 
-        {/* Hero Copy sitting proudly on top of visible posters */}
+        {/* Center: Hero Copy */}
         <View style={styles.heroCenter}>
-          <Text style={styles.mainHeading}>
+          <Text style={[styles.mainHeading, isCompact && { fontSize: 28, lineHeight: 34 }]}>
             Unlimited Movies,{'\n'}TV Shows & More.
           </Text>
-          <Text style={styles.subHeading}>
-            Watch anywhere. Discover blockbuster entertainment, live series, anime, and offline downloads.
+          <Text style={[styles.subHeading, isCompact && { fontSize: 13, lineHeight: 18, marginBottom: 14 }]}>
+            Watch anywhere. Discover blockbusters, live series, anime, and offline downloads.
           </Text>
 
-          {/* Quick Perks */}
+          {/* Feature Badges */}
           <View style={styles.perksRow}>
             <View style={styles.perkBadge}>
               <Feather name="check" size={13} color="#e50914" style={{ marginRight: 6 }} />
@@ -65,10 +63,10 @@ export default function WelcomeScreen({ onGetStarted }) {
           </View>
         </View>
 
-        {/* Action Button */}
+        {/* Bottom: Always Visible Get Started Button */}
         <View style={styles.footer}>
           <TouchableOpacity
-            style={styles.getStartedBtn}
+            style={[styles.getStartedBtn, isCompact && { paddingVertical: 14 }]}
             onPress={onGetStarted}
             activeOpacity={0.88}
           >
@@ -79,7 +77,7 @@ export default function WelcomeScreen({ onGetStarted }) {
             Instant free access • No credit card required
           </Text>
         </View>
-      </ScrollView>
+      </View>
     </View>
   );
 }
@@ -90,29 +88,24 @@ const styles = StyleSheet.create({
     backgroundColor: '#0a0a0a',
     overflow: 'hidden',
   },
-  scroll: {
+  mainLayout: {
     flex: 1,
-    backgroundColor: 'transparent',
-  },
-  content: {
-    flexGrow: 1,
     justifyContent: 'space-between',
     paddingHorizontal: 24,
-    minHeight: '100%',
-    backgroundColor: 'transparent',
+    zIndex: 10,
   },
   header: {
     alignItems: 'center',
-    paddingTop: 10,
-    marginBottom: 20,
+    paddingTop: 8,
   },
   brandLogoImage: {
-    width: 240,
-    height: 52,
+    width: 230,
+    height: 48,
+    filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.8))',
   },
   heroCenter: {
     alignItems: 'center',
-    marginVertical: 20,
+    marginVertical: 10,
   },
   mainHeading: {
     color: '#ffffff',
@@ -121,7 +114,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 42,
     letterSpacing: -0.5,
-    marginBottom: 14,
+    marginBottom: 12,
     textShadowColor: 'rgba(0, 0, 0, 0.95)',
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 10,
@@ -130,9 +123,9 @@ const styles = StyleSheet.create({
     color: '#f0f0f0',
     fontSize: 14,
     textAlign: 'center',
-    lineHeight: 22,
-    maxWidth: 330,
-    marginBottom: 22,
+    lineHeight: 21,
+    maxWidth: 340,
+    marginBottom: 18,
     textShadowColor: 'rgba(0, 0, 0, 0.95)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 8,
@@ -166,7 +159,7 @@ const styles = StyleSheet.create({
   footer: {
     alignItems: 'center',
     width: '100%',
-    paddingTop: 10,
+    paddingBottom: 4,
   },
   getStartedBtn: {
     width: '100%',
@@ -182,7 +175,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.55,
     shadowRadius: 20,
     elevation: 10,
-    marginBottom: 12,
+    marginBottom: 10,
   },
   getStartedText: {
     color: '#ffffff',
