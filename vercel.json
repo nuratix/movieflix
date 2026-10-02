@@ -45,7 +45,27 @@
       "destination": "/api/sitemap"
     },
     {
-      "source": "/((?!api/).*)",
+      "source": "/assets/icon.png",
+      "destination": "/api/icon"
+    },
+    {
+      "source": "/assets/icon-512.png",
+      "destination": "/api/icon?size=512"
+    },
+    {
+      "source": "/assets/og-banner.png",
+      "destination": "/api/og-image"
+    },
+    {
+      "source": "/icon.png",
+      "destination": "/api/icon"
+    },
+    {
+      "source": "/og-image.png",
+      "destination": "/api/og-image"
+    },
+    {
+      "source": "/((?!api/|assets/|favicon\\.ico|sitemap\\.xml|robots\\.txt|404\\.html|.*\\.(?:png|jpg|jpeg|gif|svg|ico|webp|mp4|json|js|css|ttf|woff|woff2)$).*)",
       "destination": "/index.html"
     }
   ],
@@ -65,6 +85,27 @@
         {
           "key": "Cache-Control",
           "value": "public, max-age=31536000, immutable"
+        },
+        {
+          "key": "Access-Control-Allow-Origin",
+          "value": "*"
+        }
+      ]
+    },
+    {
+      "source": "/(.*\\.png)",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "image/png"
+        },
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        },
+        {
+          "key": "Access-Control-Allow-Origin",
+          "value": "*"
         }
       ]
     },

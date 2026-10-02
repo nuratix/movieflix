@@ -82,6 +82,7 @@ import AuthScreen from './AuthScreen';
 import CustomSplashScreen from './CustomSplashScreen';
 import PrivacyScreen, { PRIVACY_POLICY_URL } from './PrivacyScreen';
 import DownloadScreen from './DownloadScreen';
+import NotFoundScreen from './NotFoundScreen';
 import * as SplashScreen from 'expo-splash-screen';
 
 // Prevent native splash screen from hiding before custom splash animation mounts
@@ -1070,6 +1071,8 @@ function ReelApp() {
   const [splashFinished, setSplashFinished] = useState(false);
   const [isPrivacyPageOpen, setIsPrivacyPageOpen] = useState(false);
   const [isDownloadPageOpen, setIsDownloadPageOpen] = useState(false);
+  const [is404PageOpen, setIs404PageOpen] = useState(false);
+  const [notFoundPath, setNotFoundPath] = useState('');
   const [showWebInstallBanner, setShowWebInstallBanner] = useState(true);
   const [securityStatus, setSecurityStatus] = useState({ verified: true, authentic: true, isTampered: false });
 
@@ -1186,6 +1189,7 @@ function ReelApp() {
       if (detailMovie) setDetailMovie(null);
       if (isPlayerOpen) setIsPlayerOpen(false);
       if (isDownloadPageOpen) setIsDownloadPageOpen(false);
+      if (is404PageOpen) setIs404PageOpen(false);
       setIsPrivacyPageOpen(true);
       navigateWeb('/privacy', false);
     }
@@ -1202,6 +1206,7 @@ function ReelApp() {
     if (detailMovie) setDetailMovie(null);
     if (isPlayerOpen) setIsPlayerOpen(false);
     if (isPrivacyPageOpen) setIsPrivacyPageOpen(false);
+    if (is404PageOpen) setIs404PageOpen(false);
     setIsDownloadPageOpen(true);
     if (Platform.OS === 'web') {
       navigateWeb('/download', false);
@@ -1210,6 +1215,25 @@ function ReelApp() {
 
   const closeDownloadPage = () => {
     setIsDownloadPageOpen(false);
+    if (Platform.OS === 'web') {
+      navigateWeb('/', true);
+    }
+  };
+
+  const handleOpenNotFound = (badPath = '') => {
+    if (detailMovie) setDetailMovie(null);
+    if (isPlayerOpen) setIsPlayerOpen(false);
+    if (isDownloadPageOpen) setIsDownloadPageOpen(false);
+    if (isPrivacyPageOpen) setIsPrivacyPageOpen(false);
+    if (isAuthPageOpen) setIsAuthPageOpen(false);
+    setNotFoundPath(badPath);
+    setIs404PageOpen(true);
+  };
+
+  const closeNotFoundPage = () => {
+    setIs404PageOpen(false);
+    setNotFoundPath('');
+    setMainTab('Home');
     if (Platform.OS === 'web') {
       navigateWeb('/', true);
     }
@@ -2363,35 +2387,42 @@ function ReelApp() {
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof document === 'undefined') return;
 
-    if (isDownloadPageOpen) {
+    if (is404PageOpen) {
+      updateWebMetaTags(
+        '404 - Page Not Found | MovieFlix',
+        'The page you are looking for does not exist on MovieFlix. Browse thousands of free movies and TV shows or download our Android APK.',
+        'https://movieflix-pi-six.vercel.app/assets/og-banner.png',
+        typeof window !== 'undefined' ? window.location.href : 'https://movieflix-pi-six.vercel.app/404'
+      );
+    } else if (isDownloadPageOpen) {
       updateWebMetaTags(
         'Download MovieFlix Android APK (v1.1.3) - Free Movies & TV Shows',
         'Download the official MovieFlix Android app. Stream & download movies and series in 4K/1080p offline with zero ads.',
-        'https://movieflix-pi-six.vercel.app/assets/icon.png',
+        'https://movieflix-pi-six.vercel.app/assets/og-banner.png',
         'https://movieflix-pi-six.vercel.app/download'
       );
     } else if (isPrivacyPageOpen) {
       updateWebMetaTags(
         'Privacy Policy - MovieFlix',
         'MovieFlix is built on zero tracking, zero personal data collection, and 100% user privacy. Read our transparent privacy policy.',
-        'https://movieflix-pi-six.vercel.app/assets/icon.png',
+        'https://movieflix-pi-six.vercel.app/assets/og-banner.png',
         'https://movieflix-pi-six.vercel.app/privacy'
       );
     } else if (detailMovie) {
       const title = `${detailMovie.name || 'Movie'} - Watch & Download Free on MovieFlix`;
       const desc = detailMovie.desc || `Watch ${detailMovie.name || 'this title'} in full HD with subtitles and multi-audio on MovieFlix. 100% free streaming.`;
-      const img = detailMovie.poster_url || 'https://movieflix-pi-six.vercel.app/assets/icon.png';
+      const img = detailMovie.poster_url || 'https://movieflix-pi-six.vercel.app/assets/og-banner.png';
       const url = `https://movieflix-pi-six.vercel.app/movie/${encodeURIComponent(detailMovie.slug || 'watch')}`;
       updateWebMetaTags(title, desc, img, url);
     } else {
       updateWebMetaTags(
         'MovieFlix - Watch & Download Free Movies, TV Series & Official APK (v1.1.3)',
         'Stream and download thousands of HD movies, web series, Hindi dubbed blockbusters, and anime in 4K/1080p with zero ads. Download the official MovieFlix Android APK.',
-        'https://movieflix-pi-six.vercel.app/assets/icon.png',
+        'https://movieflix-pi-six.vercel.app/assets/og-banner.png',
         'https://movieflix-pi-six.vercel.app/'
       );
     }
-  }, [isDownloadPageOpen, isPrivacyPageOpen, detailMovie]);
+  }, [isDownloadPageOpen, isPrivacyPageOpen, is404PageOpen, detailMovie]);
 
   // 2. Handle Web Browser Back / Forward History (popstate)
   useEffect(() => {
@@ -2520,8 +2551,7 @@ function ReelApp() {
           setIsIntroLoading(false);
           setIsPlayerOpen(false);
           setDetailMovie(null);
-          setMainTab('Home');
-          navigateWeb('/', true);
+          handleOpenNotFound(pathname);
         }
         return;
       }
@@ -2555,8 +2585,7 @@ function ReelApp() {
           openDetail(normalizeMovie(movie), false);
         } else {
           setDetailMovie(null);
-          setMainTab('Home');
-          navigateWeb('/', true);
+          handleOpenNotFound(pathname);
         }
         return;
       }
@@ -2568,8 +2597,16 @@ function ReelApp() {
       setIsIntroLoading(false);
       setIsPlayerOpen(false);
 
+      // Route: /404
+      if (pathname.startsWith('/404')) {
+        handleOpenNotFound(pathname);
+        return;
+      }
+
       // Route: /me and subtabs
       if (pathname.startsWith('/me')) {
+        setIs404PageOpen(false);
+        setNotFoundPath('');
         setMainTab('Me');
         if (pathname.includes('/history')) setMeSubTab('History');
         else if (pathname.includes('/mylist')) setMeSubTab('MyList');
@@ -2579,14 +2616,37 @@ function ReelApp() {
       }
 
       // Route: Home categories
-      setMainTab('Home');
-      if (pathname === '/movies') {
-        setHomeCategory('Movies');
-      } else if (pathname === '/series' || pathname === '/tv') {
-        setHomeCategory('TV Series');
-      } else {
+      if (pathname === '/' || pathname === '') {
+        setIs404PageOpen(false);
+        setNotFoundPath('');
+        setMainTab('Home');
         setHomeCategory('All');
+        return;
       }
+      if (pathname === '/movies') {
+        setIs404PageOpen(false);
+        setNotFoundPath('');
+        setMainTab('Home');
+        setHomeCategory('Movies');
+        return;
+      }
+      if (pathname === '/series' || pathname === '/tv') {
+        setIs404PageOpen(false);
+        setNotFoundPath('');
+        setMainTab('Home');
+        setHomeCategory('TV Series');
+        return;
+      }
+      if (pathname === '/animation') {
+        setIs404PageOpen(false);
+        setNotFoundPath('');
+        setMainTab('Home');
+        setHomeCategory('Animation');
+        return;
+      }
+
+      // Unrecognized route: display minimal 404 without redirecting
+      handleOpenNotFound(pathname);
     };
 
     window.addEventListener('popstate', handlePopState);
@@ -2634,6 +2694,10 @@ function ReelApp() {
         } catch (e) {}
       }
 
+      if (pathname.startsWith('/404')) {
+        handleOpenNotFound(pathname);
+        return;
+      }
       if (pathname.startsWith('/auth')) {
         setIsAuthPageOpen(true);
         return;
@@ -2669,6 +2733,10 @@ function ReelApp() {
         setHomeCategory('TV Series');
         return;
       }
+      if (pathname === '/animation') {
+        setHomeCategory('Animation');
+        return;
+      }
       if (
         pathname.startsWith('/movie/') ||
         pathname.startsWith('/tv/') ||
@@ -2687,14 +2755,12 @@ function ReelApp() {
               openDetail(normalizeMovie(sData.items[0]), false);
             } else {
               setDetailMovie(null);
-              setMainTab('Home');
-              navigateWeb('/', true);
+              handleOpenNotFound(pathname);
             }
           }
         } catch (e) {
           setDetailMovie(null);
-          setMainTab('Home');
-          navigateWeb('/', true);
+          handleOpenNotFound(pathname);
         }
         return;
       }
@@ -2716,17 +2782,19 @@ function ReelApp() {
             } else {
               setIsIntroLoading(false);
               setIsPlayerOpen(false);
-              setMainTab('Home');
-              navigateWeb('/', true);
+              handleOpenNotFound(pathname);
             }
           }
         } catch (e) {
           setIsIntroLoading(false);
           setIsPlayerOpen(false);
-          setMainTab('Home');
-          navigateWeb('/', true);
+          handleOpenNotFound(pathname);
         }
+        return;
       }
+
+      // Any other unrecognized route on initial load: show 404 without redirecting
+      handleOpenNotFound(pathname);
     };
 
     initialRouteResolver();
@@ -3105,6 +3173,17 @@ function ReelApp() {
     );
   }
 
+  // ─── 404 PAGE VIEW (DIRECT ROUTE OR NOT FOUND ON WEB) ─────────────────────
+  if (is404PageOpen) {
+    return (
+      <NotFoundScreen
+        path={notFoundPath}
+        onGoHome={closeNotFoundPage}
+        onOpenDownload={handleOpenDownload}
+      />
+    );
+  }
+
   return (
     <View style={styles.appContainer}>
       <StatusBar style="light" backgroundColor="#0a0a0a" translucent />
@@ -3164,8 +3243,18 @@ function ReelApp() {
               )}
             </View>
 
-            {/* Header Right Actions: Explore Categories Navigation */}
+            {/* Header Right Actions: Explore Categories Navigation & Web APK Button */}
             <View style={styles.headerRightActions}>
+              {isWeb && (
+                <TouchableOpacity
+                  style={styles.headerApkBtn}
+                  onPress={handleOpenDownload}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="logo-android" size={15} color="#FFFFFF" style={{ marginRight: 4 }} />
+                  <Text style={styles.headerApkBtnText}>APK</Text>
+                </TouchableOpacity>
+              )}
               <TouchableOpacity
                 style={styles.headerCategoriesBtn}
                 onPress={() => setIsCategoryModalOpen(true)}
@@ -3995,6 +4084,37 @@ function ReelApp() {
                   </View>
                 </View>
               )}
+
+              {/* ─── WEB INLINE BANNER: Prompt to download official Android APK ─── */}
+              {isWeb && !isDownloadPageOpen && (
+                <View style={styles.webInlineNoticeBanner}>
+                  <TouchableOpacity
+                    style={styles.webInlineNoticeTouch}
+                    onPress={handleOpenDownload}
+                    activeOpacity={0.85}
+                  >
+                    <View style={styles.webInlineNoticeIconBox}>
+                      <Ionicons name="logo-android" size={20} color="#FFFFFF" />
+                    </View>
+                    <View style={styles.webInlineNoticeTextWrap}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <Text style={styles.webInlineNoticeTitle}>Install Movieflix Android App</Text>
+                        <View style={styles.webInlineBadge}>
+                          <Text style={styles.webInlineBadgeText}>v1.1.3</Text>
+                        </View>
+                      </View>
+                      <Text style={styles.webInlineNoticeSub} numberOfLines={1}>
+                        Get the best experience with offline saves, ultra-smooth playback & 0 ads.
+                      </Text>
+                    </View>
+                    <View style={styles.webInlineNoticeBtn}>
+                      <Text style={styles.webInlineNoticeBtnText}>Download APK</Text>
+                      <Feather name="arrow-right" size={13} color="#FFFFFF" style={{ marginLeft: 4 }} />
+                    </View>
+                  </TouchableOpacity>
+                </View>
+              )}
+
               {/* HERO BANNER SECTION (CLASSIC FULL-BLEED CINEMATIC BANNER) */}
               {heroItem && homeCategory === 'All' && (
                 <View style={styles.heroSection}>
@@ -5330,6 +5450,44 @@ function ReelApp() {
         <View style={[styles.toastFloatingContainer, { top: insets.top + 16 }]}>
           <Feather name="info" size={16} color="#e50914" style={{ marginRight: 8 }} />
           <Text style={styles.toastFloatingText}>{toastMsg}</Text>
+        </View>
+      )}
+
+      {/* ─── WEB ONLY: Install APK for Better Experience Floating Banner ─── */}
+      {isWeb && showWebInstallBanner && !isDownloadPageOpen && !isPlayerOpen && !is404PageOpen && (
+        <View style={styles.webInstallBanner} pointerEvents="box-none">
+          <View style={styles.webInstallInner} pointerEvents="auto">
+            <TouchableOpacity
+              style={styles.webInstallContent}
+              onPress={handleOpenDownload}
+              activeOpacity={0.85}
+            >
+              <View style={styles.webInstallIconBox}>
+                <Ionicons name="logo-android" size={20} color="#FFFFFF" />
+              </View>
+              <View style={styles.webInstallTextCol}>
+                <Text style={styles.webInstallTitle} numberOfLines={1}>
+                  Install Movieflix APK for a better experience
+                </Text>
+                <Text style={styles.webInstallSubtitle} numberOfLines={1}>
+                  Tap to download latest v1.1.3 · Faster stream · 0 ads
+                </Text>
+              </View>
+              <View style={styles.webInstallBtn}>
+                <Text style={styles.webInstallBtnText}>Install APK</Text>
+                <Feather name="arrow-right" size={13} color="#FFFFFF" style={{ marginLeft: 3 }} />
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.webInstallCloseBtn}
+              onPress={() => setShowWebInstallBanner(false)}
+              activeOpacity={0.7}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Feather name="x" size={15} color="#888888" />
+            </TouchableOpacity>
+          </View>
         </View>
       )}
     </View>
@@ -6803,44 +6961,6 @@ function ReelCustomPlayer({
           </View>
         </TouchableOpacity>
       </Modal>
-
-      {/* ─── WEB ONLY: Install APK for Better Experience Prompt ────────── */}
-      {Platform.OS === 'web' && showWebInstallBanner && !isDownloadPageOpen && !isPlayerOpen && (
-        <View style={styles.webInstallBanner}>
-          <View style={styles.webInstallInner}>
-            <TouchableOpacity
-              style={styles.webInstallContent}
-              onPress={handleOpenDownload}
-              activeOpacity={0.85}
-            >
-              <View style={styles.webInstallIconBox}>
-                <Ionicons name="logo-android" size={19} color="#FFFFFF" />
-              </View>
-              <View style={styles.webInstallTextCol}>
-                <Text style={styles.webInstallTitle} numberOfLines={1}>
-                  Install Movieflix APK for a better experience
-                </Text>
-                <Text style={styles.webInstallSubtitle} numberOfLines={1}>
-                  Tap to download latest v1.1.3 · Offline saves · 0 ads
-                </Text>
-              </View>
-              <View style={styles.webInstallBtn}>
-                <Text style={styles.webInstallBtnText}>Install APK</Text>
-                <Feather name="arrow-right" size={13} color="#FFFFFF" style={{ marginLeft: 3 }} />
-              </View>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.webInstallCloseBtn}
-              onPress={() => setShowWebInstallBanner(false)}
-              activeOpacity={0.7}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            >
-              <Feather name="x" size={15} color="#888888" />
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
 
     </View>
   );
@@ -10468,28 +10588,29 @@ const styles = StyleSheet.create({
   // ─── Web Install APK Floating Banner ────────────────────────────────────
   webInstallBanner: {
     position: Platform.OS === 'web' ? 'fixed' : 'absolute',
-    bottom: Platform.OS === 'web' ? 70 : 60,
-    left: 14,
-    right: 14,
-    maxWidth: 540,
-    alignSelf: 'center',
-    marginHorizontal: 'auto',
-    zIndex: 99999,
+    bottom: Platform.OS === 'web' ? 76 : 64,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    zIndex: 999999,
+    paddingHorizontal: 12,
   },
   webInstallInner: {
+    width: '100%',
+    maxWidth: 540,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(15, 15, 15, 0.94)',
+    backgroundColor: 'rgba(18, 18, 18, 0.96)',
     borderWidth: 1,
-    borderColor: 'rgba(229, 9, 20, 0.45)',
+    borderColor: 'rgba(229, 9, 20, 0.55)',
     borderRadius: 14,
-    paddingVertical: 9,
-    paddingHorizontal: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
     shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.55,
-    shadowRadius: 14,
-    elevation: 10,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.65,
+    shadowRadius: 18,
+    elevation: 25,
   },
   webInstallContent: {
     flex: 1,
@@ -10497,9 +10618,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   webInstallIconBox: {
-    width: 34,
-    height: 34,
-    borderRadius: 9,
+    width: 36,
+    height: 36,
+    borderRadius: 10,
     backgroundColor: '#E50914',
     alignItems: 'center',
     justifyContent: 'center',
@@ -10534,9 +10655,90 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   webInstallCloseBtn: {
-    padding: 4,
+    padding: 6,
     borderRadius: 6,
     backgroundColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  // ─── Header APK Button & Web Inline Notice Banner ─────────────────────────
+  headerApkBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E50914',
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 8,
+    marginRight: 8,
+  },
+  headerApkBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  webInlineNoticeBanner: {
+    marginHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 6,
+    borderRadius: 14,
+    backgroundColor: 'rgba(22, 22, 22, 0.95)',
+    borderWidth: 1,
+    borderColor: 'rgba(229, 9, 20, 0.4)',
+    overflow: 'hidden',
+  },
+  webInlineNoticeTouch: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+  },
+  webInlineNoticeIconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: '#E50914',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  webInlineNoticeTextWrap: {
+    flex: 1,
+    marginRight: 10,
+  },
+  webInlineNoticeTitle: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  webInlineBadge: {
+    backgroundColor: 'rgba(229, 9, 20, 0.22)',
+    borderWidth: 1,
+    borderColor: '#E50914',
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    marginLeft: 8,
+  },
+  webInlineBadgeText: {
+    color: '#FF4D4D',
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  webInlineNoticeSub: {
+    color: '#A0A0A0',
+    fontSize: 11,
+    marginTop: 2,
+  },
+  webInlineNoticeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E50914',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 8,
+  },
+  webInlineNoticeBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
   },
 });
 

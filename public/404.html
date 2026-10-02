@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>404 - Page Not Found | MovieFlix</title>
+    <meta name="robots" content="noindex, follow" />
+    <meta name="theme-color" content="#0a0a0a" />
+    <link rel="icon" type="image/png" href="/assets/icon-512.png" />
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        background-color: #0a0a0a;
+        color: #ffffff;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+      }
+      header {
+        background: rgba(10, 10, 10, 0.95);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        padding: 14px 20px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .brand {
+        color: #e50914;
+        font-size: 20px;
+        font-weight: 900;
+        letter-spacing: 1.5px;
+        text-decoration: none;
+      }
+      .apk-btn {
+        background: #e50914;
+        color: #ffffff;
+        text-decoration: none;
+        padding: 6px 12px;
+        border-radius: 8px;
+        font-size: 13px;
+        font-weight: 700;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+      main {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+      }
+      .card {
+        background: rgba(18, 18, 18, 0.96);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 18px;
+        padding: 40px 32px;
+        max-width: 480px;
+        width: 100%;
+        text-align: center;
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+      }
+      .badge-404 {
+        display: inline-block;
+        background: rgba(229, 9, 20, 0.12);
+        border: 1px solid rgba(229, 9, 20, 0.35);
+        border-radius: 12px;
+        padding: 8px 24px;
+        color: #e50914;
+        font-size: 36px;
+        font-weight: 900;
+        letter-spacing: 4px;
+        margin-bottom: 16px;
+      }
+      h1 {
+        font-size: 22px;
+        font-weight: 800;
+        margin-bottom: 10px;
+      }
+      p {
+        color: #999999;
+        font-size: 14px;
+        line-height: 22px;
+        margin-bottom: 24px;
+      }
+      .btn-group {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+      .primary-btn {
+        background: #e50914;
+        color: #ffffff;
+        text-decoration: none;
+        padding: 12px 20px;
+        border-radius: 10px;
+        font-size: 14px;
+        font-weight: 700;
+        transition: background 0.2s;
+      }
+      .primary-btn:hover {
+        background: #b80710;
+      }
+      .secondary-btn {
+        background: rgba(255, 255, 255, 0.06);
+        color: #ffffff;
+        border: 1px solid rgba(229, 9, 20, 0.35);
+        text-decoration: none;
+        padding: 12px 20px;
+        border-radius: 10px;
+        font-size: 13px;
+        font-weight: 600;
+        transition: background 0.2s;
+      }
+      .secondary-btn:hover {
+        background: rgba(255, 255, 255, 0.12);
+      }
+      footer {
+        padding: 16px;
+        text-align: center;
+        color: #555555;
+        font-size: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <a href="/" class="brand">MovieFlix</a>
+      <a href="/download" class="apk-btn">Download APK</a>
+    </header>
+    <main>
+      <div class="card">
+        <div class="badge-404">404</div>
+        <h1>Page Not Found</h1>
+        <p>The page or title you are looking for doesn't exist, has been removed, or the link may be broken.</p>
+        <div class="btn-group">
+          <a href="/" class="primary-btn">Go to Home</a>
+          <a href="/download" class="secondary-btn">Get Android APK (v1.1.3)</a>
+        </div>
+      </div>
+    </main>
+    <footer>
+      Stream free HD movies & series on MovieFlix with zero ads
+    </footer>
+  </body>
+</html>
