@@ -64,6 +64,7 @@ import {
 } from './updateService';
 import {
   verifyAppSecurityAsync,
+  OFFICIAL_DOWNLOAD_ORIGIN,
 } from './securityService';
 import {
   TRENDING_NOW,
@@ -88,7 +89,7 @@ if (!rawBase.endsWith('.vercel.app') && rawBase.includes('moviebo.vercel')) {
   rawBase = 'https://moviebo.vercel.app';
 }
 const API_BASE = rawBase;
-const API_KEY = process.env.EXPO_PUBLIC_API_KEY || '';
+const API_KEY = process.env.EXPO_PUBLIC_API_KEY || 'mf_sk_a9x72kQpLmN3wRv8';
 
 // Auth API endpoint (connected to Neon Database on movieflix)
 // On web: relative '/api/auth' (same-origin, zero CORS, instant)
@@ -1045,7 +1046,7 @@ function ReelApp() {
       // 0. Perform APK build server security & fingerprint integrity check
       if (Platform.OS !== 'web') {
         try {
-          const secRes = await verifyAppSecurityAsync(API_BASE);
+          const secRes = await verifyAppSecurityAsync(OFFICIAL_DOWNLOAD_ORIGIN);
           if (secRes) {
             setSecurityStatus(secRes);
           }
@@ -1572,7 +1573,7 @@ function ReelApp() {
 
     // Real-time native network connectivity detection
     const unsubscribeNetInfo = NetInfo.addEventListener((netState) => {
-      const offline = !netState.isConnected || (netState.isInternetReachable === false);
+      const offline = netState.isConnected === false;
       setIsOffline(offline);
       if (!offline) {
         fetchContent();
@@ -1580,7 +1581,7 @@ function ReelApp() {
     });
 
     NetInfo.fetch().then((netState) => {
-      const offline = !netState.isConnected || (netState.isInternetReachable === false);
+      const offline = netState.isConnected === false;
       setIsOffline(offline);
     }).catch(() => {});
 
@@ -1701,7 +1702,11 @@ function ReelApp() {
         const homeRes = await apiFetch(`${API_BASE}/home`);
         if (homeRes.ok) {
           setIsOffline(false);
-          const homeData = await homeRes.json();
+          const homeText = await homeRes.text();
+          let homeData = null;
+          try {
+            homeData = JSON.parse(homeText);
+          } catch (_) {}
           if (homeData && Array.isArray(homeData.sections)) {
             const serverCats = [
               { id: 'All', label: 'All Titles', icon: 'sparkles' },
@@ -1732,7 +1737,7 @@ function ReelApp() {
       } catch (catErr) {
         console.log("Server categories live fetch note:", catErr);
         NetInfo.fetch().then((netState) => {
-          if (!netState.isConnected || netState.isInternetReachable === false) {
+          if (netState.isConnected === false) {
             setIsOffline(true);
           }
         }).catch(() => {});
@@ -2150,7 +2155,7 @@ function ReelApp() {
     setLoadingStream(true);
     try {
       const url = `${API_BASE}/api/stream/${variant.subject_id}?detail_path=${variant.slug}&se=${currentSe}&ep=${currentEp}`;
-      const res = await fetch(url);
+      const res = await apiFetch(url);
       const data = await res.json();
       if (data && data.sources && data.sources.length > 0) {
         setAvailableStreams(data.sources);
@@ -2694,7 +2699,7 @@ function ReelApp() {
 
     try {
       const streamUrl = `${API_BASE}/api/stream/${movie.subject_id}?detail_path=${movie.slug}&se=${se}&ep=${ep}`;
-      const sRes = await fetch(streamUrl);
+      const sRes = await apiFetch(streamUrl);
       const sJson = await sRes.json();
       const sources = sJson?.sources || [];
       setDownloadSources(sources);
@@ -2709,7 +2714,7 @@ function ReelApp() {
       }
 
       const capUrl = `${API_BASE}/api/stream/${movie.subject_id}/captions?detail_path=${movie.slug}&se=${se}&ep=${ep}&title=${encodeURIComponent(movie.name || '')}`;
-      const cRes = await fetch(capUrl);
+      const cRes = await apiFetch(capUrl);
       const cJson = await cRes.json();
       setDownloadCaptions(cJson?.captions || []);
     } catch (e) {
@@ -2727,7 +2732,7 @@ function ReelApp() {
     const se = downloadDetail?.seasons?.[newSeIdx]?.se || 1;
     try {
       const streamUrl = `${API_BASE}/api/stream/${downloadMovie.subject_id}?detail_path=${downloadMovie.slug}&se=${se}&ep=${newEp}`;
-      const sRes = await fetch(streamUrl);
+      const sRes = await apiFetch(streamUrl);
       const sJson = await sRes.json();
       const sources = sJson?.sources || [];
       setDownloadSources(sources);
@@ -2741,7 +2746,7 @@ function ReelApp() {
       }
 
       const capUrl = `${API_BASE}/api/stream/${downloadMovie.subject_id}/captions?detail_path=${downloadMovie.slug}&se=${se}&ep=${newEp}&title=${encodeURIComponent(downloadMovie.name || '')}`;
-      const cRes = await fetch(capUrl);
+      const cRes = await apiFetch(capUrl);
       const cJson = await cRes.json();
       setDownloadCaptions(cJson?.captions || []);
     } catch (e) {
@@ -2806,7 +2811,7 @@ function ReelApp() {
             }
           } else {
             const streamUrl = `${API_BASE}/api/stream/${downloadMovie.subject_id}?detail_path=${downloadMovie.slug}&se=${se}&ep=${ep}`;
-            const sRes = await fetch(streamUrl);
+            const sRes = await apiFetch(streamUrl);
             const sJson = await sRes.json();
             const sources = sJson?.sources || [];
             targetSource = sources.find(s => s.resolution === downloadQuality) || sources[0];
@@ -2814,7 +2819,7 @@ function ReelApp() {
             if (downloadSubtitle !== 'None') {
               try {
                 const capUrl = `${API_BASE}/api/stream/${downloadMovie.subject_id}/captions?detail_path=${downloadMovie.slug}&se=${se}&ep=${ep}&title=${encodeURIComponent(downloadMovie.name || '')}`;
-                const cRes = await fetch(capUrl);
+                const cRes = await apiFetch(capUrl);
                 const cJson = await cRes.json();
                 const caps = cJson?.captions || [];
                 const matchedCap = caps.find(c => {
@@ -3683,7 +3688,7 @@ function ReelApp() {
                           showToast('Checking connection...');
                           try {
                             const net = await NetInfo.fetch();
-                            const stillOffline = !net.isConnected || (net.isInternetReachable === false);
+                            const stillOffline = net.isConnected === false;
                             setIsOffline(stillOffline);
                             if (!stillOffline) {
                               showToast('Back online! 🌐');
@@ -3777,7 +3782,7 @@ function ReelApp() {
                   showToast('Checking connection...');
                   try {
                     const net = await NetInfo.fetch();
-                    const stillOffline = !net.isConnected || (net.isInternetReachable === false);
+                    const stillOffline = net.isConnected === false;
                     setIsOffline(stillOffline);
                     if (!stillOffline) {
                       showToast('Connected! Restoring feed... 🌐');
@@ -3831,7 +3836,7 @@ function ReelApp() {
                           showToast('Checking connection...');
                           try {
                             const net = await NetInfo.fetch();
-                            const stillOffline = !net.isConnected || (net.isInternetReachable === false);
+                            const stillOffline = net.isConnected === false;
                             setIsOffline(stillOffline);
                             if (!stillOffline) {
                               showToast('Back online! Syncing feed... 🌐');

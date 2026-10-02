@@ -48,7 +48,7 @@ export function detectInjectionArtifacts() {
 /**
  * Perform comprehensive Build Server Security & Authenticity Verification
  */
-export async function verifyAppSecurityAsync(apiBase = 'https://moviebo.vercel.app') {
+export async function verifyAppSecurityAsync(apiBase = OFFICIAL_DOWNLOAD_ORIGIN) {
   // Web browser visits: verify origin
   if (Platform.OS === 'web') {
     return {
