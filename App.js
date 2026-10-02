@@ -1173,10 +1173,10 @@ function ReelApp() {
         return;
       }
 
-      // Success
       setAuthUser(data.user);
       setAuthAccessToken(data.access_token);
       setAuthRefreshToken(data.refresh_token);
+      setSplashFinished(true);
       await AsyncStorage.setItem('@mf_session', JSON.stringify({
         user: data.user,
         accessToken: data.access_token,
