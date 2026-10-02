@@ -31,6 +31,8 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
+    "build": "expo export -p web",
+    "build:web": "expo export -p web",
     "postinstall": "node -e \"const fs=require('fs'),p='./node_modules/expo-notifications/build/warnOfExpoGoPushUsage.js';if(fs.existsSync(p)){let c=fs.readFileSync(p,'utf8');c=c.replace(/throw new Error\\(message\\);/g,'console.warn(message);');fs.writeFileSync(p,c);}\""
   },
   "private": true

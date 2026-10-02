@@ -413,7 +413,7 @@ function SafeImage({ uri, style, resizeMode = 'cover', contentPosition = 'center
   if (!cleanUri || hasError) {
     return (
       <View style={[style, styles.fallbackImageContainer]}>
-        <Ionicons name="film-outline" size={24} color="#3a3a3c" />
+        <Feather name="film" size={22} color="#3a3a3c" />
       </View>
     );
   }
@@ -475,7 +475,7 @@ function AnimatedDownloadSpinner({ size = 15, color = '#e50914' }) {
 
   return (
     <Animated.View style={{ transform: [{ rotate: spin }] }}>
-      <Ionicons name="sync" size={size} color={color} />
+      <Feather name="loader" size={size} color={color} />
     </Animated.View>
   );
 }
@@ -878,8 +878,20 @@ export default function App() {
 
 function ReelApp() {
   const insets = useSafeAreaInsets();
-  const { width: windowWidth } = useWindowDimensions();
-  const exploreCardWidth = Math.max(90, Math.floor((windowWidth - 32 - 16) / 3));
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const isWeb = Platform.OS === 'web';
+  const isDesktop = windowWidth >= 1024;
+  const isTablet = windowWidth >= 700 && windowWidth < 1024;
+  const numGridCols = isDesktop ? 6 : isTablet ? 4 : 3;
+  const contentMaxWidth = 1440;
+  const effectiveGridWidth = Math.min(windowWidth, contentMaxWidth);
+  const gridGap = isDesktop ? 16 : 10;
+  const gridPadding = isDesktop ? 48 : 32;
+  const exploreCardWidth = Math.max(
+    100,
+    Math.floor((effectiveGridWidth - gridPadding - (numGridCols - 1) * gridGap) / numGridCols)
+  );
+  const horizontalCardWidth = isDesktop ? 180 : isTablet ? 150 : 130;
 
   // Navigation: 'Home' | 'Me'
   const [mainTab, setMainTab] = useState('Home');
@@ -1210,31 +1222,33 @@ function ReelApp() {
     fetchContent();
     loadAllLocalData();
 
-    // Check if we should prompt user for notification permission
-    AsyncStorage.getItem('@notification_prompt_answered').then((answered) => {
-      if (!answered) {
-        checkNotificationPermissionStatus().then((status) => {
-          if (status !== 'granted') {
-            setTimeout(() => {
-              setShowNotificationPrompt(true);
-            }, 1800);
-          }
-        }).catch(() => {});
-      }
-    }).catch(() => {});
-
-    // Silent background update check after 3s (non-blocking)
-    setTimeout(() => {
-      checkForUpdateAsync().then((info) => {
-        if (info && info.hasUpdate) {
-          setUpdateInfo(info);
-          // Auto-show update modal if a new version is available
-          setIsUpdateModalOpen(true);
-        } else if (info) {
-          setUpdateInfo(info);
+    // Only prompt for notifications and check for updates on native mobile (disabled on web)
+    if (Platform.OS !== 'web') {
+      AsyncStorage.getItem('@notification_prompt_answered').then((answered) => {
+        if (!answered) {
+          checkNotificationPermissionStatus().then((status) => {
+            if (status !== 'granted') {
+              setTimeout(() => {
+                setShowNotificationPrompt(true);
+              }, 1800);
+            }
+          }).catch(() => {});
         }
       }).catch(() => {});
-    }, 3000);
+
+      // Silent background update check after 3s (non-blocking)
+      setTimeout(() => {
+        checkForUpdateAsync().then((info) => {
+          if (info && info.hasUpdate) {
+            setUpdateInfo(info);
+            // Auto-show update modal if a new version is available
+            setIsUpdateModalOpen(true);
+          } else if (info) {
+            setUpdateInfo(info);
+          }
+        }).catch(() => {});
+      }, 3000);
+    }
 
     return () => {
       unsubscribeNetInfo();
@@ -1507,13 +1521,15 @@ function ReelApp() {
 
     enterFullscreenSystemBar();
 
-    // Smooth landscape transition without sudden screen flash
-    setTimeout(() => {
-      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE).catch((e) => {
-        console.log("Landscape lock note:", e);
-      });
-      enterFullscreenSystemBar();
-    }, 150);
+    // Smooth landscape transition without sudden screen flash (mobile only)
+    if (Platform.OS !== 'web') {
+      setTimeout(() => {
+        ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE).catch((e) => {
+          console.log("Landscape lock note:", e);
+        });
+        enterFullscreenSystemBar();
+      }, 150);
+    }
 
     if (offlineVideoUrl) {
       if (offlineSubUrl) {
@@ -1741,10 +1757,12 @@ function ReelApp() {
   const closePlayer = async () => {
     setIsIntroLoading(false);
     setIsPlayerOpen(false);
-    try {
-      await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
-    } catch (e) {
-      console.log("Portrait restore error:", e);
+    if (Platform.OS !== 'web') {
+      try {
+        await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
+      } catch (e) {
+        console.log("Portrait restore error:", e);
+      }
     }
     exitFullscreenSystemBar();
     // Refresh watch history immediately on exit
@@ -2074,7 +2092,7 @@ function ReelApp() {
 
             {/* Clean Glass Search Capsule */}
             <View style={styles.searchCapsule}>
-              <Ionicons name="search" size={16} color="#a3a3a3" style={{ marginRight: 6 }} />
+              <Feather name="search" size={15} color="#a3a3a3" style={{ marginRight: 6 }} />
               <TextInput
                 value={searchQuery}
                 onChangeText={handleSearch}
@@ -2085,7 +2103,7 @@ function ReelApp() {
               />
               {searchQuery.length > 0 && (
                 <TouchableOpacity onPress={() => handleSearch('')} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                  <Ionicons name="close-circle" size={16} color="#a3a3a3" />
+                  <Feather name="x-circle" size={15} color="#a3a3a3" />
                 </TouchableOpacity>
               )}
             </View>
@@ -2097,7 +2115,7 @@ function ReelApp() {
                 onPress={() => setIsCategoryModalOpen(true)}
                 activeOpacity={0.8}
               >
-                <Ionicons name="compass-outline" size={20} color="#f5f5f1" />
+                <Feather name="grid" size={18} color="#f5f5f1" />
               </TouchableOpacity>
             </View>
           </View>
@@ -2143,7 +2161,7 @@ function ReelApp() {
                 <View style={styles.meHeaderGlassCard}>
                   <View style={styles.meUserRow}>
                     <View style={styles.meAvatarWrapper}>
-                      <Ionicons name="person" size={24} color="#f5f5f1" />
+                      <Feather name="user" size={24} color="#f5f5f1" />
                       <View style={styles.meOnlineBadge} />
                     </View>
                     <View style={styles.meUserInfo}>
@@ -2171,15 +2189,19 @@ function ReelApp() {
                       <Text style={styles.meStatNumber}>{myList.length}</Text>
                       <Text style={styles.meStatLabel}>In My List</Text>
                     </TouchableOpacity>
-                    <View style={styles.meStatDivider} />
-                    <TouchableOpacity
-                      style={styles.meStatBox}
-                      onPress={() => setMeSubTab('Downloads')}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={styles.meStatNumber}>{downloads.length}</Text>
-                      <Text style={styles.meStatLabel}>Downloads</Text>
-                    </TouchableOpacity>
+                    {!isWeb && (
+                      <>
+                        <View style={styles.meStatDivider} />
+                        <TouchableOpacity
+                          style={styles.meStatBox}
+                          onPress={() => setMeSubTab('Downloads')}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={styles.meStatNumber}>{downloads.length}</Text>
+                          <Text style={styles.meStatLabel}>Downloads</Text>
+                        </TouchableOpacity>
+                      </>
+                    )}
                   </View>
                 </View>
 
@@ -2193,8 +2215,8 @@ function ReelApp() {
                     onPress={() => setMeSubTab('History')}
                     activeOpacity={0.7}
                   >
-                    <View style={[styles.meNavIconCircle, { backgroundColor: 'rgba(229, 9, 20, 0.12)', borderColor: 'rgba(229, 9, 20, 0.3)' }]}>
-                      <Ionicons name="time" size={20} color="#e50914" />
+                    <View style={[styles.meNavIconCircle, { backgroundColor: 'rgba(229, 9, 20, 0.12)', borderColor: 'rgba(229, 9, 20, 0.28)' }]}>
+                      <Feather name="clock" size={19} color="#e50914" />
                     </View>
                     <View style={styles.meNavTextCol}>
                       <View style={styles.meNavTitleRow}>
@@ -2209,7 +2231,7 @@ function ReelApp() {
                         {watchHistory.length > 0 ? `${watchHistory.length} in progress · Resume watching` : 'No recent watch history'}
                       </Text>
                     </View>
-                    <Ionicons name="chevron-forward" size={18} color="#737373" />
+                    <Feather name="chevron-right" size={18} color="#737373" />
                   </TouchableOpacity>
 
                   {/* Button 2: My List */}
@@ -2218,15 +2240,15 @@ function ReelApp() {
                     onPress={() => setMeSubTab('MyList')}
                     activeOpacity={0.7}
                   >
-                    <View style={[styles.meNavIconCircle, { backgroundColor: 'rgba(59, 130, 246, 0.12)', borderColor: 'rgba(59, 130, 246, 0.3)' }]}>
-                      <Ionicons name="bookmark" size={20} color="#3b82f6" />
+                    <View style={[styles.meNavIconCircle, { backgroundColor: 'rgba(229, 9, 20, 0.12)', borderColor: 'rgba(229, 9, 20, 0.28)' }]}>
+                      <Feather name="bookmark" size={19} color="#e50914" />
                     </View>
                     <View style={styles.meNavTextCol}>
                       <View style={styles.meNavTitleRow}>
                         <Text style={styles.meNavTitle}>My List</Text>
                         {myList.length > 0 && (
-                          <View style={[styles.meNavBadge, { backgroundColor: 'rgba(59, 130, 246, 0.18)' }]}>
-                            <Text style={[styles.meNavBadgeText, { color: '#60a5fa' }]}>{myList.length}</Text>
+                          <View style={styles.meNavBadge}>
+                            <Text style={styles.meNavBadgeText}>{myList.length}</Text>
                           </View>
                         )}
                       </View>
@@ -2234,117 +2256,121 @@ function ReelApp() {
                         {myList.length > 0 ? `${myList.length} saved movies & TV shows` : 'Your saved favorites'}
                       </Text>
                     </View>
-                    <Ionicons name="chevron-forward" size={18} color="#737373" />
+                    <Feather name="chevron-right" size={18} color="#737373" />
                   </TouchableOpacity>
 
-                  {/* Button 3: Downloads */}
-                  <TouchableOpacity
-                    style={styles.meNavCard}
-                    onPress={() => setMeSubTab('Downloads')}
-                    activeOpacity={0.7}
-                  >
-                    <View style={[styles.meNavIconCircle, { backgroundColor: 'rgba(34, 197, 94, 0.12)', borderColor: 'rgba(34, 197, 94, 0.3)' }]}>
-                      <Ionicons name="cloud-download" size={20} color="#22c55e" />
-                    </View>
-                    <View style={styles.meNavTextCol}>
-                      <View style={styles.meNavTitleRow}>
-                        <Text style={styles.meNavTitle}>Offline Downloads</Text>
-                        {downloads.length > 0 && (
-                          <View style={[styles.meNavBadge, { backgroundColor: 'rgba(34, 197, 94, 0.18)' }]}>
-                            <Text style={[styles.meNavBadgeText, { color: '#4ade80' }]}>{downloads.length}</Text>
-                          </View>
-                        )}
+                  {/* Button 3: Downloads (Native Mobile Only) */}
+                  {!isWeb && (
+                    <TouchableOpacity
+                      style={styles.meNavCard}
+                      onPress={() => setMeSubTab('Downloads')}
+                      activeOpacity={0.7}
+                    >
+                      <View style={[styles.meNavIconCircle, { backgroundColor: 'rgba(229, 9, 20, 0.12)', borderColor: 'rgba(229, 9, 20, 0.28)' }]}>
+                        <Feather name="download" size={19} color="#e50914" />
                       </View>
-                      <Text style={styles.meNavSubtitle}>
-                        {downloads.length > 0
-                          ? `${downloads.length} offline · ${formatBytes(downloads.reduce((acc, d) => acc + (d.sizeBytes || 0), 0))}`
-                          : 'Watch downloaded videos offline'}
-                      </Text>
-                    </View>
-                    <Ionicons name="chevron-forward" size={18} color="#737373" />
-                  </TouchableOpacity>
-                </View>
-
-                {/* Minimal App Updates Section */}
-                <View style={styles.minimalUpdateContainer}>
-                  <View style={styles.minimalUpdateHeader}>
-                    <View style={styles.minimalUpdateLeft}>
-                      <View style={styles.minimalUpdateIconCircle}>
-                        <Ionicons name="shield-checkmark-outline" size={16} color="#8e8e93" />
-                      </View>
-                      <View style={styles.minimalUpdateTextBox}>
-                        <View style={styles.minimalUpdateVersionRow}>
-                          <Text style={styles.minimalUpdateTitle}>Movieflix</Text>
-                          <Text style={styles.minimalUpdateVersionBadge}>v{CURRENT_APP_VERSION}</Text>
-                          {updateInfo?.hasUpdate && (
-                            <View style={styles.minimalUpdateNewBadge}>
-                              <Text style={styles.minimalUpdateNewBadgeText}>v{updateInfo.latestVersion}</Text>
+                      <View style={styles.meNavTextCol}>
+                        <View style={styles.meNavTitleRow}>
+                          <Text style={styles.meNavTitle}>Offline Downloads</Text>
+                          {downloads.length > 0 && (
+                            <View style={styles.meNavBadge}>
+                              <Text style={styles.meNavBadgeText}>{downloads.length}</Text>
                             </View>
                           )}
                         </View>
-                        <Text style={styles.minimalUpdateSubtitle}>
-                          {updateInfo?.hasUpdate
-                            ? 'New version available'
-                            : updateInfo && !updateInfo.error
-                            ? 'App is up to date'
-                            : 'Check for latest improvements'}
+                        <Text style={styles.meNavSubtitle}>
+                          {downloads.length > 0
+                            ? `${downloads.length} offline · ${formatBytes(downloads.reduce((acc, d) => acc + (d.sizeBytes || 0), 0))}`
+                            : 'Watch downloaded videos offline'}
                         </Text>
                       </View>
-                    </View>
-
-                    {updateInfo?.hasUpdate ? (
-                      <TouchableOpacity
-                        style={[styles.minimalUpdateNowBtn, isDownloadingApk && { opacity: 0.7 }]}
-                        onPress={handleDownloadAndInstallApk}
-                        activeOpacity={0.8}
-                        disabled={isDownloadingApk}
-                      >
-                        {isDownloadingApk ? (
-                          <ActivityIndicator size="small" color="#FFFFFF" style={{ marginRight: 5 }} />
-                        ) : (
-                          <Ionicons name="arrow-down-circle" size={14} color="#FFFFFF" style={{ marginRight: 5 }} />
-                        )}
-                        <Text style={styles.minimalUpdateNowBtnText}>
-                          {isDownloadingApk ? 'Updating...' : 'Update'}
-                        </Text>
-                      </TouchableOpacity>
-                    ) : (
-                      <TouchableOpacity
-                        style={[styles.minimalCheckBtn, isCheckingUpdate && { opacity: 0.6 }]}
-                        onPress={handleCheckForUpdate}
-                        activeOpacity={0.7}
-                        disabled={isCheckingUpdate}
-                      >
-                        {isCheckingUpdate ? (
-                          <ActivityIndicator size="small" color="#e50914" style={{ marginRight: 5 }} />
-                        ) : (
-                          <Ionicons name="refresh-outline" size={14} color="#a3a3a3" style={{ marginRight: 5 }} />
-                        )}
-                        <Text style={styles.minimalCheckBtnText}>
-                          {isCheckingUpdate ? 'Checking...' : 'Check'}
-                        </Text>
-                      </TouchableOpacity>
-                    )}
-                  </View>
-
-                  {/* Minimal Download Progress Bar */}
-                  {isDownloadingApk && apkDownloadProgress && (
-                    <View style={styles.minimalProgressBarTrack}>
-                      <View style={[styles.minimalProgressBarFill, { width: `${apkDownloadProgress.percent || 0}%` }]} />
-                      <Text style={styles.minimalProgressText}>
-                        {apkDownloadProgress.percent}% ({apkDownloadProgress.writtenFormatted} / {apkDownloadProgress.totalFormatted})
-                      </Text>
-                    </View>
-                  )}
-
-                  {/* Minimal Download Error */}
-                  {apkDownloadError && (
-                    <View style={styles.minimalErrorRow}>
-                      <Ionicons name="alert-circle-outline" size={12} color="#ef4444" style={{ marginRight: 4 }} />
-                      <Text style={styles.minimalErrorText} numberOfLines={1}>{apkDownloadError}</Text>
-                    </View>
+                      <Feather name="chevron-right" size={18} color="#737373" />
+                    </TouchableOpacity>
                   )}
                 </View>
+
+                {/* Minimal App Updates Section (Native Mobile Only) */}
+                {!isWeb && (
+                  <View style={styles.minimalUpdateContainer}>
+                    <View style={styles.minimalUpdateHeader}>
+                      <View style={styles.minimalUpdateLeft}>
+                        <View style={styles.minimalUpdateIconCircle}>
+                          <Feather name="shield" size={15} color="#8e8e93" />
+                        </View>
+                        <View style={styles.minimalUpdateTextBox}>
+                          <View style={styles.minimalUpdateVersionRow}>
+                            <Text style={styles.minimalUpdateTitle}>Movieflix</Text>
+                            <Text style={styles.minimalUpdateVersionBadge}>v{CURRENT_APP_VERSION}</Text>
+                            {updateInfo?.hasUpdate && (
+                              <View style={styles.minimalUpdateNewBadge}>
+                                <Text style={styles.minimalUpdateNewBadgeText}>v{updateInfo.latestVersion}</Text>
+                              </View>
+                            )}
+                          </View>
+                          <Text style={styles.minimalUpdateSubtitle}>
+                            {updateInfo?.hasUpdate
+                              ? 'New version available'
+                              : updateInfo && !updateInfo.error
+                              ? 'App is up to date'
+                              : 'Check for latest improvements'}
+                          </Text>
+                        </View>
+                      </View>
+
+                      {updateInfo?.hasUpdate ? (
+                        <TouchableOpacity
+                          style={[styles.minimalUpdateNowBtn, isDownloadingApk && { opacity: 0.7 }]}
+                          onPress={handleDownloadAndInstallApk}
+                          activeOpacity={0.8}
+                          disabled={isDownloadingApk}
+                        >
+                          {isDownloadingApk ? (
+                            <ActivityIndicator size="small" color="#FFFFFF" style={{ marginRight: 5 }} />
+                          ) : (
+                            <Feather name="arrow-down-circle" size={14} color="#FFFFFF" style={{ marginRight: 5 }} />
+                          )}
+                          <Text style={styles.minimalUpdateNowBtnText}>
+                            {isDownloadingApk ? 'Updating...' : 'Update'}
+                          </Text>
+                        </TouchableOpacity>
+                      ) : (
+                        <TouchableOpacity
+                          style={[styles.minimalCheckBtn, isCheckingUpdate && { opacity: 0.6 }]}
+                          onPress={handleCheckForUpdate}
+                          activeOpacity={0.7}
+                          disabled={isCheckingUpdate}
+                        >
+                          {isCheckingUpdate ? (
+                            <ActivityIndicator size="small" color="#e50914" style={{ marginRight: 5 }} />
+                          ) : (
+                            <Feather name="refresh-cw" size={13} color="#a3a3a3" style={{ marginRight: 5 }} />
+                          )}
+                          <Text style={styles.minimalCheckBtnText}>
+                            {isCheckingUpdate ? 'Checking...' : 'Check'}
+                          </Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+
+                    {/* Minimal Download Progress Bar */}
+                    {isDownloadingApk && apkDownloadProgress && (
+                      <View style={styles.minimalProgressBarTrack}>
+                        <View style={[styles.minimalProgressBarFill, { width: `${apkDownloadProgress.percent || 0}%` }]} />
+                        <Text style={styles.minimalProgressText}>
+                          {apkDownloadProgress.percent}% ({apkDownloadProgress.writtenFormatted} / {apkDownloadProgress.totalFormatted})
+                        </Text>
+                      </View>
+                    )}
+
+                    {/* Minimal Download Error */}
+                    {apkDownloadError && (
+                      <View style={styles.minimalErrorRow}>
+                        <Feather name="alert-circle" size={12} color="#ef4444" style={{ marginRight: 4 }} />
+                        <Text style={styles.minimalErrorText} numberOfLines={1}>{apkDownloadError}</Text>
+                      </View>
+                    )}
+                  </View>
+                )}
               </>
             ) : (
               /* ─── DEDICATED SUBPAGE HEADER ─── */
@@ -2355,7 +2381,7 @@ function ReelApp() {
                   activeOpacity={0.7}
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 >
-                  <Ionicons name="chevron-back" size={20} color="#FFFFFF" />
+                  <Feather name="arrow-left" size={18} color="#FFFFFF" />
                   <Text style={styles.meSubPageBackText}>Back</Text>
                 </TouchableOpacity>
 
@@ -2405,7 +2431,7 @@ function ReelApp() {
                       >
                         <SafeImage uri={item.movie?.poster_url} style={styles.historyThumbImage} />
                         <View style={styles.historyPlayOverlay}>
-                          <Ionicons name="play" size={18} color="#FFFFFF" />
+                          <Feather name="play" size={16} color="#FFFFFF" />
                         </View>
                         <View style={styles.historyThumbProgressBg}>
                           <View style={[styles.historyThumbProgressFill, { width: `${item.progressPercent || 0}%` }]} />
@@ -2433,7 +2459,7 @@ function ReelApp() {
                           onPress={() => launchPlayer(item.movie, item.se, item.ep, item.isSeries, item.positionMillis / 1000)}
                           activeOpacity={0.8}
                         >
-                          <Ionicons name="play" size={12} color="#FFFFFF" style={{ marginRight: 4 }} />
+                          <Feather name="play" size={12} color="#FFFFFF" style={{ marginRight: 4 }} />
                           <Text style={styles.historyResumeText}>Resume</Text>
                         </TouchableOpacity>
 
@@ -2442,14 +2468,14 @@ function ReelApp() {
                           onPress={() => handleRemoveHistory(item.id)}
                           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                         >
-                          <Ionicons name="trash-outline" size={16} color="#737373" />
+                          <Feather name="trash-2" size={15} color="#737373" />
                         </TouchableOpacity>
                       </View>
                     </View>
                   ))
                 ) : (
                   <View style={styles.emptyMePlaceholder}>
-                    <Ionicons name="time-outline" size={54} color="#404040" />
+                    <Feather name="clock" size={48} color="#404040" />
                     <Text style={styles.emptyPlaceholderTitle}>No Watch History</Text>
                     <Text style={styles.emptyPlaceholderDesc}>
                       Watch any movie or episode and your playback progress will be saved here safely on your device.
@@ -2473,25 +2499,26 @@ function ReelApp() {
                 {myList.length > 0 ? (
                   <View style={styles.gridContainer}>
                     {myList.map((item, idx) => (
-                      <View key={`mylist-card-${item.slug || item.subject_id}-${idx}`} style={styles.myListCardWrapper}>
+                      <View key={`mylist-card-${item.slug || item.subject_id}-${idx}`} style={[styles.myListCardWrapper, { width: exploreCardWidth }]}>
                         <GlassMovieCard
                           movie={item}
                           onPress={() => openDetail(item)}
                           isSeries={item.isSeries}
+                          style={{ width: '100%', aspectRatio: 2 / 3 }}
                         />
                         <TouchableOpacity
                           style={styles.myListQuickRemoveBtn}
                           onPress={() => toggleMyList(item)}
                           hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                         >
-                          <Ionicons name="close-circle" size={22} color="#e50914" />
+                          <Feather name="x-circle" size={20} color="#e50914" />
                         </TouchableOpacity>
                       </View>
                     ))}
                   </View>
                 ) : (
                   <View style={styles.emptyMePlaceholder}>
-                    <Ionicons name="bookmark-outline" size={54} color="#404040" />
+                    <Feather name="bookmark" size={48} color="#404040" />
                     <Text style={styles.emptyPlaceholderTitle}>Your List is Empty</Text>
                     <Text style={styles.emptyPlaceholderDesc}>
                       Tap "Add to List" on any movie or series to keep your favorites saved securely on your device.
@@ -2504,8 +2531,8 @@ function ReelApp() {
               </View>
             )}
 
-            {/* SUB-SECTION 3: DOWNLOADS */}
-            {meSubTab === 'Downloads' && (
+            {/* SUB-SECTION 3: DOWNLOADS (DISABLED ON WEB) */}
+            {meSubTab === 'Downloads' && !isWeb && (
               <View style={styles.meTabSection}>
                 <View style={styles.sectionHeaderRow}>
                   <Text style={styles.sectionHeaderTitle}>Offline Downloads</Text>
@@ -2554,7 +2581,7 @@ function ReelApp() {
                           </View>
                         ) : item.status === 'completed' ? (
                           <View style={styles.downloadReadyRow}>
-                            <Ionicons name="checkmark-circle" size={13} color="#22c55e" style={{ marginRight: 4 }} />
+                            <Feather name="check-circle" size={13} color="#e50914" style={{ marginRight: 4 }} />
                             <Text style={styles.downloadReadyText}>Ready Offline · {formatBytes(item.sizeBytes)}</Text>
                           </View>
                         ) : (
@@ -2569,7 +2596,7 @@ function ReelApp() {
                             onPress={() => launchPlayer(item.movie, item.se, item.ep, item.isSeries, 0, item.localVideoUri, item.localSubtitleUri)}
                             activeOpacity={0.8}
                           >
-                            <Ionicons name="play" size={14} color="#FFFFFF" style={{ marginRight: 4 }} />
+                            <Feather name="play" size={13} color="#FFFFFF" style={{ marginRight: 4 }} />
                             <Text style={styles.playOfflineBtnText}>Play</Text>
                           </TouchableOpacity>
                         ) : item.status === 'downloading' ? (
@@ -2577,7 +2604,7 @@ function ReelApp() {
                             style={styles.cancelDownloadBtn}
                             onPress={() => handleCancelDownload(item.id)}
                           >
-                            <Ionicons name="close-circle-outline" size={18} color="#e50914" />
+                            <Feather name="x-circle" size={18} color="#e50914" />
                           </TouchableOpacity>
                         ) : null}
 
@@ -2586,14 +2613,14 @@ function ReelApp() {
                           onPress={() => handleDeleteDownload(item)}
                           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                         >
-                          <Ionicons name="trash-outline" size={16} color="#737373" />
+                          <Feather name="trash-2" size={15} color="#737373" />
                         </TouchableOpacity>
                       </View>
                     </View>
                   ))
                 ) : (
                   <View style={styles.emptyMePlaceholder}>
-                    <Ionicons name="cloud-download-outline" size={54} color="#404040" />
+                    <Feather name="download-cloud" size={48} color="#404040" />
                     <Text style={styles.emptyPlaceholderTitle}>No Downloads</Text>
                     <Text style={styles.emptyPlaceholderDesc}>
                       Download movies and episodes to watch offline anywhere, with custom quality, language, and subtitles.
@@ -2615,22 +2642,26 @@ function ReelApp() {
               {isOffline && (
                 <View style={styles.offlineNoticeCard}>
                   <View style={styles.offlineIconBox}>
-                    <Ionicons name="cloud-offline-outline" size={24} color="#e50914" />
+                    <Feather name="wifi-off" size={22} color="#e50914" />
                   </View>
                   <View style={styles.offlineTextBox}>
                     <Text style={styles.offlineTitle}>You are offline</Text>
                     <Text style={styles.offlineSubtitle}>
-                      Stream unavailable. Watch your downloaded movies & episodes offline anytime.
+                      {isWeb
+                        ? 'Stream unavailable. Please check your internet connection to continue browsing.'
+                        : 'Stream unavailable. Watch your downloaded movies & episodes offline anytime.'}
                     </Text>
                     <View style={styles.offlineActionRow}>
-                      <TouchableOpacity
-                        style={styles.offlineSeeDownloadsBtn}
-                        onPress={() => { setMainTab('Me'); setMeSubTab('Downloads'); }}
-                        activeOpacity={0.8}
-                      >
-                        <Ionicons name="cloud-download-outline" size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
-                        <Text style={styles.offlineSeeDownloadsText}>See Downloads ({downloads.length})</Text>
-                      </TouchableOpacity>
+                      {!isWeb && (
+                        <TouchableOpacity
+                          style={styles.offlineSeeDownloadsBtn}
+                          onPress={() => { setMainTab('Me'); setMeSubTab('Downloads'); }}
+                          activeOpacity={0.8}
+                        >
+                          <Feather name="download" size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
+                          <Text style={styles.offlineSeeDownloadsText}>See Downloads ({downloads.length})</Text>
+                        </TouchableOpacity>
+                      )}
                       <TouchableOpacity
                         style={styles.offlineRetryBtn}
                         onPress={async () => {
@@ -2651,7 +2682,7 @@ function ReelApp() {
                         }}
                         activeOpacity={0.8}
                       >
-                        <Ionicons name="refresh-outline" size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
+                        <Feather name="refresh-cw" size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
                         <Text style={styles.offlineRetryBtnText}>Retry</Text>
                       </TouchableOpacity>
                     </View>
@@ -2677,7 +2708,7 @@ function ReelApp() {
               ) : (
                 <View style={styles.noResultCard}>
                   <View style={styles.noResultIconCircle}>
-                    <Ionicons name="search-outline" size={38} color="#737373" />
+                    <Feather name="search" size={36} color="#737373" />
                   </View>
                   <Text style={styles.noResultTitle}>No Results Found</Text>
                   <Text style={styles.noResultDesc}>
@@ -2696,7 +2727,7 @@ function ReelApp() {
                       onPress={() => { handleSearch(''); setIsCategoryModalOpen(true); }}
                       activeOpacity={0.8}
                     >
-                      <Ionicons name="compass-outline" size={15} color="#FFFFFF" style={{ marginRight: 6 }} />
+                      <Feather name="grid" size={15} color="#FFFFFF" style={{ marginRight: 6 }} />
                       <Text style={styles.noResultExploreBtnText}>Explore Categories</Text>
                     </TouchableOpacity>
                   </View>
@@ -2707,20 +2738,24 @@ function ReelApp() {
             /* DEDICATED FULL OFFLINE SCREEN */
             <View style={styles.offlineFullContainer}>
               <View style={styles.offlineIconBoxLarge}>
-                <Ionicons name="cloud-offline" size={48} color="#e50914" />
+                <Feather name="wifi-off" size={44} color="#e50914" />
               </View>
               <Text style={styles.offlineFullTitle}>You're Offline</Text>
               <Text style={styles.offlineFullSubtitle}>
-                No internet connection detected. Check your Wi-Fi or mobile network to browse and stream online titles.
+                {isWeb
+                  ? 'No internet connection detected. Please connect to the internet to stream content.'
+                  : 'No internet connection detected. Check your Wi-Fi or mobile network to browse and stream online titles.'}
               </Text>
-              <TouchableOpacity
-                style={styles.offlineFullDownloadsBtn}
-                onPress={() => { setMainTab('Me'); setMeSubTab('Downloads'); }}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="cloud-download-outline" size={18} color="#FFFFFF" style={{ marginRight: 8 }} />
-                <Text style={styles.offlineFullDownloadsText}>Watch Downloads ({downloads.length})</Text>
-              </TouchableOpacity>
+              {!isWeb && (
+                <TouchableOpacity
+                  style={styles.offlineFullDownloadsBtn}
+                  onPress={() => { setMainTab('Me'); setMeSubTab('Downloads'); }}
+                  activeOpacity={0.8}
+                >
+                  <Feather name="download" size={18} color="#FFFFFF" style={{ marginRight: 8 }} />
+                  <Text style={styles.offlineFullDownloadsText}>Watch Downloads ({downloads.length})</Text>
+                </TouchableOpacity>
+              )}
               <TouchableOpacity
                 style={styles.offlineFullRetryBtn}
                 onPress={async () => {
@@ -2741,7 +2776,7 @@ function ReelApp() {
                 }}
                 activeOpacity={0.8}
               >
-                <Ionicons name="refresh-outline" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+                <Feather name="refresh-cw" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
                 <Text style={styles.offlineFullRetryText}>Retry Connection</Text>
               </TouchableOpacity>
             </View>
@@ -2755,22 +2790,26 @@ function ReelApp() {
               {isOffline && (
                 <View style={styles.offlineNoticeCard}>
                   <View style={styles.offlineIconBox}>
-                    <Ionicons name="cloud-offline-outline" size={24} color="#e50914" />
+                    <Feather name="wifi-off" size={22} color="#e50914" />
                   </View>
                   <View style={styles.offlineTextBox}>
                     <Text style={styles.offlineTitle}>You are offline</Text>
                     <Text style={styles.offlineSubtitle}>
-                      Stream unavailable. Watch your downloaded movies & episodes offline anytime.
+                      {isWeb
+                        ? 'Stream unavailable. Please check your internet connection to stream movies.'
+                        : 'Stream unavailable. Watch your downloaded movies & episodes offline anytime.'}
                     </Text>
                     <View style={styles.offlineActionRow}>
-                      <TouchableOpacity
-                        style={styles.offlineSeeDownloadsBtn}
-                        onPress={() => { setMainTab('Me'); setMeSubTab('Downloads'); }}
-                        activeOpacity={0.8}
-                      >
-                        <Ionicons name="cloud-download-outline" size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
-                        <Text style={styles.offlineSeeDownloadsText}>See Downloads ({downloads.length})</Text>
-                      </TouchableOpacity>
+                      {!isWeb && (
+                        <TouchableOpacity
+                          style={styles.offlineSeeDownloadsBtn}
+                          onPress={() => { setMainTab('Me'); setMeSubTab('Downloads'); }}
+                          activeOpacity={0.8}
+                        >
+                          <Feather name="download" size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
+                          <Text style={styles.offlineSeeDownloadsText}>See Downloads ({downloads.length})</Text>
+                        </TouchableOpacity>
+                      )}
                       <TouchableOpacity
                         style={styles.offlineRetryBtn}
                         onPress={async () => {
@@ -2791,7 +2830,7 @@ function ReelApp() {
                         }}
                         activeOpacity={0.8}
                       >
-                        <Ionicons name="refresh-outline" size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
+                        <Feather name="refresh-cw" size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
                         <Text style={styles.offlineRetryBtnText}>Retry Connection</Text>
                       </TouchableOpacity>
                     </View>
@@ -2872,7 +2911,7 @@ function ReelApp() {
                         onPress={() => launchPlayer(heroItem, 1, 1, Boolean(heroItem.isSeries))}
                         activeOpacity={0.85}
                       >
-                        <Ionicons name="play" size={20} color="#FFFFFF" style={{ marginRight: 6 }} />
+                        <Feather name="play" size={17} color="#FFFFFF" style={{ marginRight: 6 }} />
                         <Text style={styles.heroPlayButtonText}>Play</Text>
                       </TouchableOpacity>
 
@@ -2881,11 +2920,11 @@ function ReelApp() {
                         onPress={() => toggleMyList(heroItem)}
                         activeOpacity={0.8}
                       >
-                        <Ionicons
-                          name={isInMyList(heroItem) ? "checkmark" : "add"}
-                          size={20}
+                        <Feather
+                          name={isInMyList(heroItem) ? "check" : "plus"}
+                          size={17}
                           color="#f5f5f1"
-                          style={{ marginRight: 4 }}
+                          style={{ marginRight: 5 }}
                         />
                         <Text style={styles.heroListButtonText}>
                           {isInMyList(heroItem) ? "In My List" : "My List"}
@@ -2897,7 +2936,7 @@ function ReelApp() {
                         onPress={() => openDetail(heroItem)}
                         activeOpacity={0.8}
                       >
-                        <Ionicons name="information-circle-outline" size={20} color="#f5f5f1" />
+                        <Feather name="info" size={18} color="#f5f5f1" />
                       </TouchableOpacity>
                     </View>
 
@@ -3078,7 +3117,7 @@ function ReelApp() {
                           onPress={handleLoadMoreExplore}
                           activeOpacity={0.8}
                         >
-                          <Ionicons name="refresh-outline" size={17} color="#f5f5f1" style={{ marginRight: 8 }} />
+                          <Feather name="refresh-cw" size={15} color="#f5f5f1" style={{ marginRight: 8 }} />
                           <Text style={styles.loadMoreButtonText}>Load More</Text>
                         </TouchableOpacity>
                       </View>
@@ -3087,7 +3126,7 @@ function ReelApp() {
                 </>
               )}
 
-              {/* CATEGORY & GENRE BROWSING FEED (3-IN-A-ROW GRID VIEW) */}
+              {/* CATEGORY & GENRE BROWSING FEED (RESPONSIVE GRID VIEW) */}
               {homeCategory !== 'All' && (
                 <View style={styles.gridSection}>
                   <View style={styles.categoryHeaderRow}>
@@ -3104,7 +3143,7 @@ function ReelApp() {
                       onPress={() => setHomeCategory('All')}
                       activeOpacity={0.7}
                     >
-                      <Ionicons name="close-circle" size={15} color="#a3a3a3" style={{ marginRight: 4 }} />
+                      <Feather name="x-circle" size={14} color="#a3a3a3" style={{ marginRight: 4 }} />
                       <Text style={styles.categoryResetText}>All Titles</Text>
                     </TouchableOpacity>
                   </View>
@@ -3123,7 +3162,7 @@ function ReelApp() {
                   ) : (
                     <View style={styles.noResultCard}>
                       <View style={styles.noResultIconCircle}>
-                        <Ionicons name="film-outline" size={38} color="#737373" />
+                        <Feather name="film" size={36} color="#737373" />
                       </View>
                       <Text style={styles.noResultTitle}>No Titles in {homeCategory}</Text>
                       <Text style={styles.noResultDesc}>
@@ -3161,7 +3200,7 @@ function ReelApp() {
             onPress={() => setDetailMovie(null)}
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
           >
-            <Ionicons name="close" size={22} color="#FFFFFF" />
+            <Feather name="x" size={20} color="#FFFFFF" />
           </TouchableOpacity>
 
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}>
@@ -3223,30 +3262,32 @@ function ReelApp() {
                 }}
                 activeOpacity={0.85}
               >
-                <Ionicons name="play" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
+                <Feather name="play" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
                 <Text style={styles.detailPlayButtonText}>
                   {detailData?.isSeries ? "Play S1:E1" : "Play Now"}
                 </Text>
               </TouchableOpacity>
 
-              {/* DOWNLOAD BUTTON */}
-              <TouchableOpacity
-                style={styles.detailDownloadButton}
-                onPress={() => openDownloadModal(detailMovie, detailData)}
-                activeOpacity={0.85}
-              >
-                <Ionicons name="download-outline" size={18} color="#f5f5f1" style={{ marginRight: 6 }} />
-                <Text style={styles.detailDownloadButtonText}>Download</Text>
-              </TouchableOpacity>
+              {/* DOWNLOAD BUTTON (DISABLED ON WEB) */}
+              {!isWeb && (
+                <TouchableOpacity
+                  style={styles.detailDownloadButton}
+                  onPress={() => openDownloadModal(detailMovie, detailData)}
+                  activeOpacity={0.85}
+                >
+                  <Feather name="download" size={16} color="#f5f5f1" style={{ marginRight: 6 }} />
+                  <Text style={styles.detailDownloadButtonText}>Download</Text>
+                </TouchableOpacity>
+              )}
 
               <TouchableOpacity
                 style={styles.detailListButton}
                 onPress={() => toggleMyList(detailMovie)}
                 activeOpacity={0.8}
               >
-                <Ionicons
-                  name={isInMyList(detailMovie) ? "checkmark" : "add"}
-                  size={18}
+                <Feather
+                  name={isInMyList(detailMovie) ? "check" : "plus"}
+                  size={16}
                   color="#f5f5f1"
                   style={{ marginRight: 4 }}
                 />
@@ -3312,15 +3353,17 @@ function ReelApp() {
                         <View style={styles.episodeImageWrapper}>
                           <SafeImage uri={detailMovie?.poster_url} style={styles.episodeImage} />
                           <View style={styles.episodePlayCenterIcon}>
-                            <Ionicons name="play" size={18} color="#FFFFFF" />
+                            <Feather name="play" size={16} color="#FFFFFF" />
                           </View>
-                          <TouchableOpacity
-                            style={styles.epQuickDownloadBadge}
-                            onPress={() => openDownloadModal(detailMovie, detailData, selectedSeasonIdx, ep)}
-                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                          >
-                            <Ionicons name="arrow-down-circle" size={20} color="#FFFFFF" />
-                          </TouchableOpacity>
+                          {!isWeb && (
+                            <TouchableOpacity
+                              style={styles.epQuickDownloadBadge}
+                              onPress={() => openDownloadModal(detailMovie, detailData, selectedSeasonIdx, ep)}
+                              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                            >
+                              <Feather name="download" size={14} color="#FFFFFF" />
+                            </TouchableOpacity>
+                          )}
                         </View>
                         <Text style={styles.episodeCardTitle}>Episode {ep}</Text>
                         <Text style={styles.episodeCardSub}>Season {se}</Text>
@@ -3357,7 +3400,7 @@ function ReelApp() {
       {/* AUTO-UPDATE MODAL (pops automatically when new ver found) */}
       {/* ===================================================== */}
       <Modal
-        visible={isUpdateModalOpen}
+        visible={!isWeb && isUpdateModalOpen}
         animationType="slide"
         transparent={true}
         statusBarTranslucent
@@ -3374,16 +3417,16 @@ function ReelApp() {
                     onPress={() => setIsUpdateModalOpen(false)}
                     hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
                   >
-                    <Ionicons name="close" size={20} color="#8e8e93" />
+                    <Feather name="x" size={20} color="#8e8e93" />
                   </TouchableOpacity>
                 )}
 
                 {/* Icon + Title */}
                 <View style={styles.updateModalIconHalo}>
-                  <Ionicons
-                    name={updateInfo?.hasUpdate ? 'arrow-up-circle' : 'checkmark-circle'}
+                  <Feather
+                    name={updateInfo?.hasUpdate ? 'arrow-up-circle' : 'check-circle'}
                     size={36}
-                    color={updateInfo?.hasUpdate ? '#e50914' : '#46d369'}
+                    color={updateInfo?.hasUpdate ? '#e50914' : '#FFFFFF'}
                   />
                 </View>
 
@@ -3434,7 +3477,7 @@ function ReelApp() {
                 {/* APK download error */}
                 {apkDownloadError && !isDownloadingApk && (
                   <View style={[styles.apkErrorBox, { width: '100%' }]}>
-                    <Ionicons name="alert-circle-outline" size={14} color="#e50914" style={{ marginRight: 6 }} />
+                    <Feather name="alert-circle" size={14} color="#e50914" style={{ marginRight: 6 }} />
                     <Text style={styles.apkErrorText} numberOfLines={3}>{apkDownloadError}</Text>
                   </View>
                 )}
@@ -3447,7 +3490,7 @@ function ReelApp() {
                       onPress={handleDownloadAndInstallApk}
                       activeOpacity={0.85}
                     >
-                      <Ionicons name="download-outline" size={16} color="#FFFFFF" style={{ marginRight: 7 }} />
+                      <Feather name="download" size={16} color="#FFFFFF" style={{ marginRight: 7 }} />
                       <Text style={styles.updateModalInstallBtnText}>
                         Download & Install
                         {updateInfo?.apkAsset?.sizeFormatted ? ` (${updateInfo.apkAsset.sizeFormatted})` : ''}
@@ -3559,7 +3602,7 @@ function ReelApp() {
                 </View>
               ) : streamError ? (
                 <View style={styles.playerErrorContainer}>
-                  <Ionicons name="alert-circle-outline" size={48} color="#e50914" />
+                  <Feather name="alert-circle" size={48} color="#e50914" />
                   <Text style={styles.playerErrorText}>{streamError}</Text>
                   <TouchableOpacity
                     style={styles.playerRetryBtn}
@@ -3581,7 +3624,7 @@ function ReelApp() {
       {/* DOWNLOAD SELECTION MODAL                             */}
       {/* ==================================================== */}
       <Modal
-        visible={isDownloadModalOpen}
+        visible={!isWeb && isDownloadModalOpen}
         animationType="slide"
         transparent={true}
         onRequestClose={() => setIsDownloadModalOpen(false)}
@@ -3596,7 +3639,7 @@ function ReelApp() {
                 onPress={() => setIsDownloadModalOpen(false)}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
-                <Ionicons name="close" size={20} color="#a3a3a3" />
+                <Feather name="x" size={20} color="#a3a3a3" />
               </TouchableOpacity>
             </View>
 
@@ -3612,7 +3655,7 @@ function ReelApp() {
                       : "Full Movie"}
                   </Text>
                   <View style={styles.safeTagPill}>
-                    <Ionicons name="shield-checkmark" size={10} color="#22c55e" style={{ marginRight: 3 }} />
+                    <Feather name="shield" size={10} color="#e50914" style={{ marginRight: 4 }} />
                     <Text style={styles.safeTagText}>Saved to Local Device Storage</Text>
                   </View>
                 </View>
@@ -3628,11 +3671,11 @@ function ReelApp() {
                       onPress={handleSelectAllEpisodes}
                       activeOpacity={0.7}
                     >
-                      <Ionicons
+                      <Feather
                         name={
                           selectedDownloadEps.length === getEpisodesArray(downloadDetail.seasons[downloadSeasonIdx]).length
-                            ? "checkbox"
-                            : "checkbox-outline"
+                            ? "check-square"
+                            : "square"
                         }
                         size={14}
                         color="#e50914"
@@ -3676,7 +3719,7 @@ function ReelApp() {
                           activeOpacity={0.75}
                         >
                           {isSelected && (
-                            <Ionicons name="checkmark" size={12} color="#FFFFFF" style={{ marginRight: 3 }} />
+                            <Feather name="check" size={12} color="#FFFFFF" style={{ marginRight: 3 }} />
                           )}
                           <Text style={[styles.dlEpPillText, isSelected && styles.dlEpPillTextActive]}>
                             Ep {ep}
@@ -3729,11 +3772,11 @@ function ReelApp() {
                               </View>
                             </View>
                             {isSelected && (
-                              <Ionicons name="checkmark-circle" size={16} color="#e50914" />
+                              <Feather name="check-circle" size={15} color="#e50914" />
                             )}
                           </View>
                           <View style={styles.dlSizeRow}>
-                            <Ionicons name="hardware-chip-outline" size={11} color={isSelected ? "#e50914" : "#8e8e93"} style={{ marginRight: 3 }} />
+                            <Feather name="cpu" size={11} color={isSelected ? "#e50914" : "#8e8e93"} style={{ marginRight: 3 }} />
                             <Text style={[styles.dlQualityCardNote, isSelected && styles.dlQualityCardNoteActive]}>
                               {realSizeStr}
                             </Text>
@@ -3759,7 +3802,7 @@ function ReelApp() {
                         >
                           <View style={styles.dlQualityCardHeader}>
                             <Text style={[styles.dlQualityCardTitle, isSelected && styles.dlQualityCardTitleActive]}>{q.label}</Text>
-                            {isSelected && <Ionicons name="checkmark-circle" size={16} color="#e50914" />}
+                            {isSelected && <Feather name="check-circle" size={15} color="#e50914" />}
                           </View>
                           <Text style={[styles.dlQualityCardNote, isSelected && styles.dlQualityCardNoteActive]}>{q.note}</Text>
                         </TouchableOpacity>
@@ -3822,9 +3865,9 @@ function ReelApp() {
                   <ActivityIndicator size="small" color="#FFFFFF" />
                 ) : (
                   <>
-                    <Ionicons
-                      name={selectedDownloadEps.length > 1 ? "cloud-download" : "download"}
-                      size={18}
+                    <Feather
+                      name="download"
+                      size={16}
                       color="#FFFFFF"
                       style={{ marginRight: 8 }}
                     />
@@ -3862,7 +3905,7 @@ function ReelApp() {
                 onPress={() => setIsCategoryModalOpen(false)}
                 activeOpacity={0.8}
               >
-                <Ionicons name="close" size={20} color="#f5f5f1" />
+                <Feather name="x" size={20} color="#f5f5f1" />
               </TouchableOpacity>
             </View>
 
@@ -3877,9 +3920,9 @@ function ReelApp() {
                     activeOpacity={0.75}
                   >
                     <View style={[styles.categoryCardIconBox, isSelected && styles.categoryCardIconBoxActive]}>
-                      <Ionicons
-                        name={cat.icon || "film-outline"}
-                        size={20}
+                      <Feather
+                        name="film"
+                        size={18}
                         color={isSelected ? "#FFFFFF" : "#e50914"}
                       />
                     </View>
@@ -3898,7 +3941,7 @@ function ReelApp() {
       {/* ASK NOTIFICATION PERMISSION PROMPT MODAL             */}
       {/* ==================================================== */}
       <Modal
-        visible={showNotificationPrompt}
+        visible={!isWeb && showNotificationPrompt}
         transparent
         animationType="fade"
         onRequestClose={handleDismissNotificationPrompt}
@@ -3921,7 +3964,7 @@ function ReelApp() {
             <View style={styles.notifPromptFeatureList}>
               <View style={styles.notifPromptFeatureRow}>
                 <View style={styles.notifPromptFeatureIconWrap}>
-                  <Ionicons name="cloud-done-outline" size={18} color="#e50914" />
+                  <Feather name="download-cloud" size={18} color="#e50914" />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.notifPromptFeatureTitle}>Offline Downloads Ready</Text>
@@ -3933,7 +3976,7 @@ function ReelApp() {
 
               <View style={styles.notifPromptFeatureRow}>
                 <View style={styles.notifPromptFeatureIconWrap}>
-                  <Ionicons name="timer-outline" size={18} color="#e50914" />
+                  <Feather name="clock" size={18} color="#e50914" />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.notifPromptFeatureTitle}>2-Hour Watch Break Reminders</Text>
@@ -3949,7 +3992,7 @@ function ReelApp() {
               onPress={handleAllowNotifications}
               activeOpacity={0.85}
             >
-              <Ionicons name="notifications" size={17} color="#FFFFFF" style={{ marginRight: 8 }} />
+              <Feather name="bell" size={16} color="#FFFFFF" style={{ marginRight: 8 }} />
               <Text style={styles.notifPromptAllowBtnText}>Allow Notifications</Text>
             </TouchableOpacity>
 
@@ -3968,49 +4011,51 @@ function ReelApp() {
       {/* DOCKED GLASS BOTTOM NAVIGATION BAR                   */}
       {/* ==================================================== */}
       <View style={[styles.bottomNavBar, { paddingBottom: Math.max(insets.bottom, 10) }]}>
-        <TouchableOpacity
-          style={[styles.bottomNavTab, mainTab === 'Home' && styles.bottomNavTabActive]}
-          onPress={() => setMainTab('Home')}
-          activeOpacity={0.7}
-        >
-          <Ionicons
-            name={mainTab === 'Home' ? "home" : "home-outline"}
-            size={22}
-            color={mainTab === 'Home' ? "#e50914" : "#8e8e93"}
-          />
-          <Text style={[styles.bottomNavLabel, mainTab === 'Home' && styles.bottomNavLabelActive]}>
-            Home
-          </Text>
-          {mainTab === 'Home' && <View style={styles.bottomNavActiveDot} />}
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.bottomNavTab, mainTab === 'Me' && styles.bottomNavTabActive]}
-          onPress={() => {
-            setMainTab('Me');
-            setMeSubTab(null);
-          }}
-          activeOpacity={0.7}
-        >
-          <View style={{ position: 'relative' }}>
-            <Ionicons
-              name={mainTab === 'Me' ? "person" : "person-outline"}
-              size={22}
-              color={mainTab === 'Me' ? "#e50914" : "#8e8e93"}
+        <View style={styles.bottomNavInner}>
+          <TouchableOpacity
+            style={[styles.bottomNavTab, mainTab === 'Home' && styles.bottomNavTabActive]}
+            onPress={() => setMainTab('Home')}
+            activeOpacity={0.7}
+          >
+            <Feather
+              name="home"
+              size={20}
+              color={mainTab === 'Home' ? "#e50914" : "#8e8e93"}
             />
-            {downloads.some(d => d.status === 'downloading') ? (
-              <View style={styles.bottomNavDownloadBadge}>
-                <AnimatedDownloadSpinner size={9} color="#FFFFFF" />
-              </View>
-            ) : myList.length > 0 ? (
-              <View style={styles.bottomNavBadgeDot} />
-            ) : null}
-          </View>
-          <Text style={[styles.bottomNavLabel, mainTab === 'Me' && styles.bottomNavLabelActive]}>
-            Me
-          </Text>
-          {mainTab === 'Me' && <View style={styles.bottomNavActiveDot} />}
-        </TouchableOpacity>
+            <Text style={[styles.bottomNavLabel, mainTab === 'Home' && styles.bottomNavLabelActive]}>
+              Home
+            </Text>
+            {mainTab === 'Home' && <View style={styles.bottomNavActiveDot} />}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.bottomNavTab, mainTab === 'Me' && styles.bottomNavTabActive]}
+            onPress={() => {
+              setMainTab('Me');
+              setMeSubTab(null);
+            }}
+            activeOpacity={0.7}
+          >
+            <View style={{ position: 'relative' }}>
+              <Feather
+                name="user"
+                size={20}
+                color={mainTab === 'Me' ? "#e50914" : "#8e8e93"}
+              />
+              {!isWeb && downloads.some(d => d.status === 'downloading') ? (
+                <View style={styles.bottomNavDownloadBadge}>
+                  <AnimatedDownloadSpinner size={9} color="#FFFFFF" />
+                </View>
+              ) : myList.length > 0 ? (
+                <View style={styles.bottomNavBadgeDot} />
+              ) : null}
+            </View>
+            <Text style={[styles.bottomNavLabel, mainTab === 'Me' && styles.bottomNavLabelActive]}>
+              Me
+            </Text>
+            {mainTab === 'Me' && <View style={styles.bottomNavActiveDot} />}
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* ==================================================== */}
@@ -4018,7 +4063,7 @@ function ReelApp() {
       {/* ==================================================== */}
       {toastMsg && (
         <View style={[styles.toastFloatingContainer, { top: insets.top + 16 }]}>
-          <Ionicons name="information-circle" size={18} color="#e50914" style={{ marginRight: 8 }} />
+          <Feather name="info" size={16} color="#e50914" style={{ marginRight: 8 }} />
           <Text style={styles.toastFloatingText}>{toastMsg}</Text>
         </View>
       )}
@@ -4030,10 +4075,15 @@ function ReelApp() {
 // CLEAN GLASS MOVIE CARD (PURE POSTER, NO TAGS OR BADGES)
 // ----------------------------------------------------
 function GlassMovieCard({ movie, onPress, isSeries = false, isTop10 = false, style }) {
+  const { width: winW } = useWindowDimensions();
+  const isDesk = winW >= 1024;
+  const isTab = winW >= 700 && winW < 1024;
+  const responsiveWidth = isTop10 ? (isDesk ? 170 : isTab ? 140 : 125) : (isDesk ? 180 : isTab ? 150 : 130);
+
   if (!movie) return null;
   return (
     <TouchableOpacity
-      style={[styles.movieCard, isTop10 && styles.movieCardTop10, style]}
+      style={[styles.movieCard, { width: responsiveWidth }, isTop10 && styles.movieCardTop10, style]}
       onPress={onPress}
       activeOpacity={0.85}
     >
@@ -4145,12 +4195,12 @@ function MovieflixIntroLoadingScreen({
         <View style={styles.introStreamLoadingContainer}>
           {streamError ? (
             <View style={styles.introErrorBox}>
-              <Ionicons name="alert-circle-outline" size={52} color="#e50914" />
+              <Feather name="alert-circle" size={48} color="#e50914" />
               <Text style={styles.introErrorTitle}>Unable to Stream</Text>
               <Text style={styles.introErrorSubtitle}>{streamError}</Text>
               <View style={styles.introErrorButtonsRow}>
                 <TouchableOpacity style={styles.introRetryBtn} onPress={onRetry} activeOpacity={0.8}>
-                  <Ionicons name="refresh" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+                  <Feather name="refresh-cw" size={15} color="#FFFFFF" style={{ marginRight: 6 }} />
                   <Text style={styles.introRetryBtnText}>Retry Connection</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.introCancelBtn} onPress={onCancel} activeOpacity={0.8}>
@@ -4180,7 +4230,7 @@ function MovieflixIntroLoadingScreen({
           activeOpacity={0.7}
           hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
         >
-          <Ionicons name="chevron-back" size={22} color="#FFFFFF" />
+          <Feather name="arrow-left" size={20} color="#FFFFFF" />
         </TouchableOpacity>
       </View>
 
@@ -4193,7 +4243,7 @@ function MovieflixIntroLoadingScreen({
             activeOpacity={0.8}
           >
             <Text style={styles.skipIntroText}>Skip Intro</Text>
-            <Ionicons name="play-skip-forward" size={14} color="#f5f5f1" style={{ marginLeft: 6 }} />
+            <Feather name="skip-forward" size={14} color="#f5f5f1" style={{ marginLeft: 6 }} />
           </TouchableOpacity>
         </View>
       )}
@@ -4799,6 +4849,7 @@ function ReelCustomPlayer({
   // Toggle Screen Orientation manually
   const toggleOrientation = async () => {
     wakeControls();
+    if (Platform.OS === 'web') return;
     try {
       const current = await ScreenOrientation.getOrientationAsync();
       const isCurrentlyLandscape =
@@ -4923,8 +4974,8 @@ function ReelCustomPlayer({
       {/* HUD: BRIGHTNESS LEVEL (LEFT DRAG) */}
       {!isInPiP && showBrightnessHud && (
         <View style={styles.hudCardLeft} pointerEvents="none">
-          <Ionicons
-            name={brightness > 0.6 ? "sunny" : brightness > 0.25 ? "sunny-outline" : "moon-outline"}
+          <Feather
+            name={brightness > 0.25 ? "sun" : "moon"}
             size={22}
             color="#FFFFFF"
           />
@@ -4938,8 +4989,8 @@ function ReelCustomPlayer({
       {/* HUD: VOLUME LEVEL (RIGHT DRAG) */}
       {!isInPiP && showVolumeHud && (
         <View style={styles.hudCardRight} pointerEvents="none">
-          <Ionicons
-            name={volume <= 0.01 ? "volume-mute" : volume < 0.5 ? "volume-low" : "volume-high"}
+          <Feather
+            name={volume <= 0.01 ? "volume-x" : volume < 0.5 ? "volume-1" : "volume-2"}
             size={22}
             color="#FFFFFF"
           />
@@ -4953,7 +5004,7 @@ function ReelCustomPlayer({
       {/* HUD: 2× LONG PRESS SPEED PILL BANNER */}
       {!isInPiP && is2xActive && (
         <View style={styles.speed2xBanner} pointerEvents="none">
-          <Ionicons name="play-forward" size={15} color="#FFFFFF" style={{ marginRight: 6 }} />
+          <Feather name="fast-forward" size={15} color="#FFFFFF" style={{ marginRight: 6 }} />
           <Text style={styles.speed2xBannerText}>2× Speed</Text>
         </View>
       )}
@@ -4961,13 +5012,13 @@ function ReelCustomPlayer({
       {/* HUD: DOUBLE TAP 10s FEEDBACK RIPPLE */}
       {!isInPiP && doubleTapSide === 'left' && (
         <Animated.View style={[styles.doubleTapRippleLeft, { opacity: doubleTapFadeAnim }]} pointerEvents="none">
-          <Ionicons name="play-back" size={26} color="#FFFFFF" />
+          <Feather name="rewind" size={26} color="#FFFFFF" />
           <Text style={styles.doubleTapRippleText}>10s</Text>
         </Animated.View>
       )}
       {!isInPiP && doubleTapSide === 'right' && (
         <Animated.View style={[styles.doubleTapRippleRight, { opacity: doubleTapFadeAnim }]} pointerEvents="none">
-          <Ionicons name="play-forward" size={26} color="#FFFFFF" />
+          <Feather name="fast-forward" size={26} color="#FFFFFF" />
           <Text style={styles.doubleTapRippleText}>10s</Text>
         </Animated.View>
       )}
@@ -4998,7 +5049,7 @@ function ReelCustomPlayer({
               onPress={onClose}
               hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
             >
-              <Ionicons name="chevron-back" size={22} color="#FFFFFF" />
+              <Feather name="arrow-left" size={20} color="#FFFFFF" />
             </TouchableOpacity>
 
             {/* Title Capsule (Single Text line so it NEVER wraps or overflows) */}
@@ -5026,7 +5077,7 @@ function ReelCustomPlayer({
                 }}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
-                <Ionicons name="albums-outline" size={14} color="#FFFFFF" style={{ marginRight: 4 }} />
+                <Feather name="tv" size={13} color="#FFFFFF" style={{ marginRight: 4 }} />
                 <Text style={styles.playerGlassPillText}>PiP</Text>
               </TouchableOpacity>
 
@@ -5044,7 +5095,7 @@ function ReelCustomPlayer({
                 onPress={onClose}
                 hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
               >
-                <Ionicons name="close" size={20} color="#FFFFFF" />
+                <Feather name="x" size={20} color="#FFFFFF" />
               </TouchableOpacity>
             </View>
           </View>
@@ -5070,9 +5121,9 @@ function ReelCustomPlayer({
               }}
               activeOpacity={0.8}
             >
-              <Ionicons
+              <Feather
                 name={isPlaying ? "pause" : "play"}
-                size={38}
+                size={36}
                 color="#FFFFFF"
                 style={!isPlaying ? { marginLeft: 4 } : {}}
               />
@@ -5137,7 +5188,7 @@ function ReelCustomPlayer({
                   }}
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 >
-                  <Ionicons name={isPlaying ? "pause" : "play"} size={18} color="#FFFFFF" style={{ marginRight: 10 }} />
+                  <Feather name={isPlaying ? "pause" : "play"} size={16} color="#FFFFFF" style={{ marginRight: 10 }} />
                 </TouchableOpacity>
                 <Text style={styles.playerTimecodeText}>
                   {formatTime(currentTime)} <Text style={{ color: '#737373' }}>/ {formatTime(duration)}</Text>
@@ -5179,7 +5230,7 @@ function ReelCustomPlayer({
                     style={styles.playerGlassActionBtn}
                     onPress={() => { wakeControls(); onPlayNextEpisode(); }}
                   >
-                    <Ionicons name="play-skip-forward" size={13} color="#FFFFFF" style={{ marginRight: 4 }} />
+                    <Feather name="skip-forward" size={13} color="#FFFFFF" style={{ marginRight: 4 }} />
                     <Text style={styles.playerGlassActionText}>Next</Text>
                   </TouchableOpacity>
                 )}
@@ -5218,7 +5269,7 @@ function ReelCustomPlayer({
                     <Text style={[styles.modalOptionText, isSelected && styles.modalOptionTextActive]}>
                       {s.resolution ? s.resolution.toUpperCase() : 'Stream Quality'}
                     </Text>
-                    {isSelected && <Ionicons name="checkmark-circle" size={18} color="#e50914" />}
+                    {isSelected && <Feather name="check" size={16} color="#e50914" />}
                   </TouchableOpacity>
                 );
               })
@@ -5240,7 +5291,7 @@ function ReelCustomPlayer({
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
               <Text style={styles.glassModalTitle}>Audio & Subtitles</Text>
               <TouchableOpacity onPress={() => setIsAudioSubsModalOpen(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Ionicons name="close-circle-outline" size={24} color="#a3a3a3" />
+                <Feather name="x-circle" size={20} color="#a3a3a3" />
               </TouchableOpacity>
             </View>
 
@@ -5259,12 +5310,12 @@ function ReelCustomPlayer({
                       onPress={() => handleSelectAudioVariant(v)}
                     >
                       <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-                        <Ionicons name="volume-medium-outline" size={16} color={isSelected ? "#e50914" : "#a3a3a3"} style={{ marginRight: 8 }} />
+                        <Feather name="volume-2" size={16} color={isSelected ? "#e50914" : "#a3a3a3"} style={{ marginRight: 8 }} />
                         <Text style={[styles.modalOptionText, isSelected && styles.modalOptionTextActive]} numberOfLines={1}>
                           {v.label} {v.name && v.name !== v.label ? `(${v.name.slice(0, 24)})` : ''}
                         </Text>
                       </View>
-                      {isSelected && <Ionicons name="checkmark-circle" size={18} color="#e50914" />}
+                      {isSelected && <Feather name="check" size={16} color="#e50914" />}
                     </TouchableOpacity>
                   );
                 })
@@ -5276,7 +5327,7 @@ function ReelCustomPlayer({
                   <Text style={[styles.modalOptionText, styles.modalOptionTextActive]}>
                     Original Audio (Default)
                   </Text>
-                  <Ionicons name="checkmark-circle" size={18} color="#e50914" />
+                  <Feather name="check" size={16} color="#e50914" />
                 </TouchableOpacity>
               )}
 
@@ -5291,12 +5342,12 @@ function ReelCustomPlayer({
                     onPress={() => handleSelectAudioTrack(t)}
                   >
                     <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-                      <Ionicons name="musical-notes-outline" size={16} color={isSelected ? "#e50914" : "#a3a3a3"} style={{ marginRight: 8 }} />
+                      <Feather name="music" size={15} color={isSelected ? "#e50914" : "#a3a3a3"} style={{ marginRight: 8 }} />
                       <Text style={[styles.modalOptionText, isSelected && styles.modalOptionTextActive]}>
                         {label} (Embedded)
                       </Text>
                     </View>
-                    {isSelected && <Ionicons name="checkmark-circle" size={18} color="#e50914" />}
+                    {isSelected && <Feather name="check" size={16} color="#e50914" />}
                   </TouchableOpacity>
                 );
               })}
@@ -5314,7 +5365,7 @@ function ReelCustomPlayer({
                 <Text style={[styles.modalOptionText, selectedSubtitle === 'Off' && styles.modalOptionTextActive]}>
                   Off
                 </Text>
-                {selectedSubtitle === 'Off' && <Ionicons name="checkmark-circle" size={18} color="#e50914" />}
+                {selectedSubtitle === 'Off' && <Feather name="check" size={16} color="#e50914" />}
               </TouchableOpacity>
 
               {/* ALL 20 Global Subtitle Languages */}
@@ -5329,17 +5380,17 @@ function ReelCustomPlayer({
                     onPress={() => handleSelectSubtitle(lang)}
                   >
                     <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-                      <MaterialIcons name="closed-caption" size={16} color={isSelected ? "#e50914" : "#a3a3a3"} style={{ marginRight: 8 }} />
+                      <Feather name="message-square" size={15} color={isSelected ? "#e50914" : "#a3a3a3"} style={{ marginRight: 8 }} />
                       <Text style={[styles.modalOptionText, isSelected && styles.modalOptionTextActive]}>
                         {label}
                       </Text>
                       {hasDirectSrt && (
-                        <View style={{ marginLeft: 8, backgroundColor: 'rgba(70, 211, 105, 0.18)', paddingHorizontal: 6, paddingVertical: 1, borderRadius: 4 }}>
-                          <Text style={{ color: '#46d369', fontSize: 10, fontWeight: '700' }}>HQ</Text>
+                        <View style={{ marginLeft: 8, backgroundColor: 'rgba(229, 9, 20, 0.15)', paddingHorizontal: 6, paddingVertical: 1, borderRadius: 4 }}>
+                          <Text style={{ color: '#e50914', fontSize: 10, fontWeight: '700' }}>HQ</Text>
                         </View>
                       )}
                     </View>
-                    {isSelected && <Ionicons name="checkmark-circle" size={18} color="#e50914" />}
+                    {isSelected && <Feather name="check" size={16} color="#e50914" />}
                   </TouchableOpacity>
                 );
               })}
@@ -5357,7 +5408,7 @@ function ReelCustomPlayer({
                     <Text style={[styles.modalOptionText, isSelected && styles.modalOptionTextActive]}>
                       {label} (Embedded)
                     </Text>
-                    {isSelected && <Ionicons name="checkmark-circle" size={18} color="#e50914" />}
+                    {isSelected && <Feather name="check" size={16} color="#e50914" />}
                   </TouchableOpacity>
                 );
               })}
@@ -5399,6 +5450,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     width: '100%',
+    maxWidth: 1440,
+    alignSelf: 'center',
     paddingVertical: 2,
   },
   brandLogoBtn: {
@@ -5466,6 +5519,9 @@ const styles = StyleSheet.create({
   // FILTER TABS
   tabsRow: {
     marginTop: 10,
+    width: '100%',
+    maxWidth: 1440,
+    alignSelf: 'center',
   },
   tabsScrollContent: {
     flexDirection: 'row',
@@ -5570,7 +5626,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   heroMatchScore: {
-    color: '#46d369',
+    color: '#e50914',
     fontWeight: '700',
     fontSize: 13,
   },
@@ -5966,6 +6022,9 @@ const styles = StyleSheet.create({
   detailContainer: {
     flex: 1,
     backgroundColor: '#0a0a0a',
+    maxWidth: 960,
+    width: '100%',
+    alignSelf: 'center',
   },
   detailCloseButton: {
     position: 'absolute',
@@ -6067,7 +6126,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   detailMatchScore: {
-    color: '#46d369',
+    color: '#e50914',
     fontWeight: '700',
     fontSize: 13,
   },
@@ -6655,9 +6714,16 @@ const styles = StyleSheet.create({
     borderTopColor: 'rgba(255, 255, 255, 0.08)',
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-around',
+    justifyContent: 'center',
     paddingTop: 8,
     zIndex: 900,
+  },
+  bottomNavInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    width: '100%',
+    maxWidth: 540,
   },
   bottomNavTab: {
     flex: 1,
@@ -6730,7 +6796,7 @@ const styles = StyleSheet.create({
     width: 12,
     height: 12,
     borderRadius: 6,
-    backgroundColor: '#22c55e',
+    backgroundColor: '#e50914',
     borderWidth: 2,
     borderColor: '#141414',
   },
@@ -6920,14 +6986,14 @@ const styles = StyleSheet.create({
     marginLeft: 6,
   },
   minimalUpdateNewBadge: {
-    backgroundColor: '#22c55e',
+    backgroundColor: '#e50914',
     paddingHorizontal: 6,
     paddingVertical: 1,
     borderRadius: 6,
     marginLeft: 6,
   },
   minimalUpdateNewBadgeText: {
-    color: '#000000',
+    color: '#FFFFFF',
     fontSize: 9,
     fontWeight: '800',
   },
@@ -7272,7 +7338,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   downloadReadyText: {
-    color: '#22c55e',
+    color: '#e50914',
     fontSize: 11,
     fontWeight: '600',
   },
@@ -7290,7 +7356,7 @@ const styles = StyleSheet.create({
   playOfflineBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#22c55e',
+    backgroundColor: '#e50914',
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 999,
@@ -7405,14 +7471,14 @@ const styles = StyleSheet.create({
   safeTagPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(34, 197, 94, 0.12)',
+    backgroundColor: 'rgba(229, 9, 20, 0.12)',
     alignSelf: 'flex-start',
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
   },
   safeTagText: {
-    color: '#22c55e',
+    color: '#e50914',
     fontSize: 9,
     fontWeight: '700',
   },

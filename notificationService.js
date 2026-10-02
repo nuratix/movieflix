@@ -23,6 +23,7 @@ let breakNotificationId = null;
  * Check if notifications are supported on this runtime environment
  */
 export function isNotificationSupported() {
+  if (Platform.OS === 'web') return false;
   return Boolean(Notifications?.scheduleNotificationAsync);
 }
 
@@ -30,6 +31,7 @@ export function isNotificationSupported() {
  * Explicitly request notification permissions from the OS
  */
 export async function requestNotificationPermission() {
+  if (Platform.OS === 'web') return false;
   if (!Notifications?.requestPermissionsAsync) return false;
   try {
     const { status } = await Notifications.requestPermissionsAsync();
@@ -47,6 +49,7 @@ export async function requestNotificationPermission() {
  * Check current notification permission status without prompting
  */
 export async function checkNotificationPermissionStatus() {
+  if (Platform.OS === 'web') return 'denied';
   if (!Notifications?.getPermissionsAsync) return 'undetermined';
   try {
     const res = await Notifications.getPermissionsAsync();
@@ -60,6 +63,7 @@ export async function checkNotificationPermissionStatus() {
  * Initialize notification channels if permissions are already granted
  */
 export async function initNotifications() {
+  if (Platform.OS === 'web') return false;
   if (!Notifications?.getPermissionsAsync) return false;
   try {
     const { status } = await Notifications.getPermissionsAsync();

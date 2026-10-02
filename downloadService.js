@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
 import { saveDownload, updateDownloadProgress, removeDownload } from './storageService';
 import {
@@ -15,7 +16,7 @@ const activeDownloads = new Map();
  * Ensures the downloads directory exists on user's device
  */
 export async function getDownloadsDir() {
-  if (!FileSystem.documentDirectory) {
+  if (Platform.OS === 'web' || !FileSystem.documentDirectory) {
     return null;
   }
   const dir = `${FileSystem.documentDirectory}downloads/`;
@@ -59,6 +60,10 @@ export async function startDownload({
   onProgress = null,
   onStatusChange = null,
 }) {
+  if (Platform.OS === 'web') {
+    throw new Error('Offline downloads are not supported on web browser.');
+  }
+
   if (!videoUrl || !movie) {
     throw new Error('Invalid download request: missing video url or movie metadata.');
   }
