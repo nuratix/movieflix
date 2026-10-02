@@ -5,6 +5,42 @@
   "framework": null,
   "rewrites": [
     {
+      "source": "/api/catalog",
+      "destination": "/api/content?endpoint=home"
+    },
+    {
+      "source": "/api/home",
+      "destination": "/api/content?endpoint=home"
+    },
+    {
+      "source": "/api/movies",
+      "destination": "/api/content?endpoint=movies"
+    },
+    {
+      "source": "/api/tv-series",
+      "destination": "/api/content?endpoint=tv-series"
+    },
+    {
+      "source": "/api/animation",
+      "destination": "/api/content?endpoint=animation"
+    },
+    {
+      "source": "/api/search",
+      "destination": "/api/content?endpoint=search"
+    },
+    {
+      "source": "/api/detail/:slug",
+      "destination": "/api/content?endpoint=detail&slug=:slug"
+    },
+    {
+      "source": "/api/stream/:id/captions",
+      "destination": "/api/content?endpoint=captions&id=:id"
+    },
+    {
+      "source": "/api/stream/:id",
+      "destination": "/api/content?endpoint=stream&id=:id"
+    },
+    {
       "source": "/((?!api/).*)",
       "destination": "/index.html"
     }

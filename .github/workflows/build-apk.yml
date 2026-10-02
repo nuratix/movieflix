@@ -36,19 +36,10 @@ jobs:
       - name: Install npm dependencies
         run: npm install --legacy-peer-deps
 
-      - name: Generate .env Configuration
-        run: |
-          cat << 'EOF' > .env
-          EXPO_PUBLIC_API_BASE=https://moviebo.vercel.app
-          EXPO_PUBLIC_API_KEY=mf_sk_a9x72kQpLmN3wRv8
-          EXPO_PUBLIC_GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}
-          EOF
-
       - name: Prebuild Native Android Project
         run: npx expo prebuild --platform android --clean
         env:
-          EXPO_PUBLIC_API_BASE: https://moviebo.vercel.app
-          EXPO_PUBLIC_API_KEY: mf_sk_a9x72kQpLmN3wRv8
+          EXPO_PUBLIC_API_BASE: https://movieflix-pi-six.vercel.app
           EXPO_PUBLIC_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build Android Release APK
@@ -57,8 +48,7 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleRelease --no-daemon -Dorg.gradle.jvmargs="-Xmx4096m -XX:MaxMetaspaceSize=1024m" -x lint -x test
         env:
-          EXPO_PUBLIC_API_BASE: https://moviebo.vercel.app
-          EXPO_PUBLIC_API_KEY: mf_sk_a9x72kQpLmN3wRv8
+          EXPO_PUBLIC_API_BASE: https://movieflix-pi-six.vercel.app
           EXPO_PUBLIC_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Prepare APK Output

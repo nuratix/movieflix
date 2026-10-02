@@ -82,31 +82,24 @@ import AuthScreen from './AuthScreen';
 import CustomSplashScreen from './CustomSplashScreen';
 import PrivacyScreen, { PRIVACY_POLICY_URL } from './PrivacyScreen';
 
-// ─── API Base & Secret Key (from .env / Vercel env vars) ────────────────────
-let rawBase = process.env.EXPO_PUBLIC_API_BASE || 'https://moviebo.vercel.app';
-rawBase = rawBase.trim().replace(/\/+$/, '');
-if (!rawBase.endsWith('.vercel.app') && rawBase.includes('moviebo.vercel')) {
-  rawBase = 'https://moviebo.vercel.app';
-}
-const API_BASE = rawBase;
-const API_KEY = process.env.EXPO_PUBLIC_API_KEY || 'mf_sk_a9x72kQpLmN3wRv8';
+// ─── Backend API Base (Public Movieflix Server Proxy) ────────────────────────
+// On web: relative '' (same-origin, zero CORS issues, instant)
+// On native/APK: official backend server (https://movieflix-pi-six.vercel.app)
+const API_BASE =
+  Platform.OS === 'web'
+    ? ''
+    : (process.env.EXPO_PUBLIC_API_BASE || 'https://movieflix-pi-six.vercel.app').trim().replace(/\/+$/, '');
 
 // Auth API endpoint (connected to Neon Database on movieflix)
-// On web: relative '/api/auth' (same-origin, zero CORS, instant)
-// On native/APK: full 'https://movieflix-pi-six.vercel.app/api/auth'
-const AUTH_API_URL =
-  Platform.OS === 'web'
-    ? '/api/auth'
-    : 'https://movieflix-pi-six.vercel.app/api/auth';
+const AUTH_API_URL = `${API_BASE}/api/auth`;
 
 // Module-level auth token — updated by App component via useEffect
 let _authToken = null;
 
-/** Content API fetch helper (queries moviebo catalog & streams) */
+/** Content API fetch helper (queries Movieflix backend proxy) */
 const apiFetch = (url, options = {}) => {
   const headers = {
     ...(options.headers || {}),
-    ...(API_KEY ? { 'X-App-Key': API_KEY } : {}),
     ...(_authToken ? { 'Authorization': `Bearer ${_authToken}` } : {}),
   };
   return fetch(url, { ...options, headers });
@@ -242,7 +235,7 @@ const getCategoryIcon = (name = '') => {
   return 'film-outline';
 };
 
-// Initial Server Categories (Matches moviebo.vercel.app sections exactly)
+// Initial Server Categories (Matches movie catalog sections)
 const INITIAL_SERVER_CATEGORIES = [
   { id: 'All', label: 'All Titles', icon: 'sparkles' },
   { id: 'Movies', label: 'Movies', icon: 'film-outline', isApi: true, endpoint: '/movies' },
@@ -1407,7 +1400,7 @@ function ReelApp() {
     try {
       const searchTerms = ['action', 'space', 'detective', 'adventure', 'marvel', 'star', 'war', 'secret', 'dragon', 'mystery'];
       const randomTerm = searchTerms[Math.floor(Math.random() * searchTerms.length)];
-      const res = await apiFetch(`${API_BASE}/search?q=${encodeURIComponent(randomTerm)}`);
+      const res = await apiFetch(`${API_BASE}/api/content?endpoint=search&q=${encodeURIComponent(randomTerm)}`);
       const data = await res.json();
       const freshOnline = (data.items || []).filter(
         item => !shownSlugsRef.current.has(item.slug || item.subject_id)
@@ -1482,7 +1475,7 @@ function ReelApp() {
 
     if (catId === 'Movies' && !categoryItemsMap['Movies']) {
       try {
-        const res = await apiFetch(`${API_BASE}/movies?page=1`);
+        const res = await apiFetch(`${API_BASE}/api/content?endpoint=movies&page=1`);
         const data = await res.json();
         if (data && data.items) {
           setCategoryItemsMap(prev => ({ ...prev, Movies: data.items }));
@@ -1490,7 +1483,7 @@ function ReelApp() {
       } catch (e) {}
     } else if (catId === 'TV Series' && !categoryItemsMap['TV Series']) {
       try {
-        const res = await apiFetch(`${API_BASE}/tv-series?page=1`);
+        const res = await apiFetch(`${API_BASE}/api/content?endpoint=tv-series&page=1`);
         const data = await res.json();
         if (data && data.items) {
           setCategoryItemsMap(prev => ({ ...prev, 'TV Series': data.items }));
@@ -1498,7 +1491,7 @@ function ReelApp() {
       } catch (e) {}
     } else if (catId === 'Animation' && !categoryItemsMap['Animation']) {
       try {
-        const res = await apiFetch(`${API_BASE}/animation?page=1`);
+        const res = await apiFetch(`${API_BASE}/api/content?endpoint=animation&page=1`);
         const data = await res.json();
         if (data && data.items) {
           setCategoryItemsMap(prev => ({ ...prev, Animation: data.items }));
@@ -1699,7 +1692,7 @@ function ReelApp() {
 
       // 4. Fetch live server categories and sections from backend & verify online connectivity
       try {
-        const homeRes = await apiFetch(`${API_BASE}/home`);
+        const homeRes = await apiFetch(`${API_BASE}/api/content?endpoint=home`);
         if (homeRes.ok) {
           setIsOffline(false);
           const homeText = await homeRes.text();
@@ -1771,7 +1764,7 @@ function ReelApp() {
     }
     setIsSearching(true);
     try {
-      const res = await apiFetch(`${API_BASE}/search?q=${encodeURIComponent(text.trim())}`);
+      const res = await apiFetch(`${API_BASE}/api/content?endpoint=search&q=${encodeURIComponent(text.trim())}`);
       const data = await res.json();
       setSearchResults(data.items || []);
     } catch (err) {
@@ -1854,7 +1847,7 @@ function ReelApp() {
     setRelatedTitles(cleanList);
 
     try {
-      const res = await apiFetch(`${API_BASE}/detail/${movie.slug}`);
+      const res = await apiFetch(`${API_BASE}/api/content?endpoint=detail&slug=${encodeURIComponent(movie.slug)}`);
       const data = await res.json();
       const subject = data?.data?.subject || null;
       const resource = data?.data?.resource || null;
@@ -1990,7 +1983,7 @@ function ReelApp() {
       let effectiveSe = se;
       let effectiveEp = ep;
 
-      const primaryUrl = `${API_BASE}/api/stream/${movie.subject_id}?detail_path=${movie.slug}&se=${effectiveSe}&ep=${effectiveEp}`;
+      const primaryUrl = `${API_BASE}/api/content?endpoint=stream&id=${encodeURIComponent(movie.subject_id)}&detail_path=${encodeURIComponent(movie.slug)}&se=${effectiveSe}&ep=${effectiveEp}`;
       const res = await apiFetch(primaryUrl);
       streamData = await res.json();
 
@@ -1999,7 +1992,7 @@ function ReelApp() {
         if (effectiveSe > 0 || effectiveEp > 0) {
           // If called as series (se>0/ep>0) but has no stream, try movie mode (se=0, ep=0)
           try {
-            const fbUrl = `${API_BASE}/api/stream/${movie.subject_id}?detail_path=${movie.slug}&se=0&ep=0`;
+            const fbUrl = `${API_BASE}/api/content?endpoint=stream&id=${encodeURIComponent(movie.subject_id)}&detail_path=${encodeURIComponent(movie.slug)}&se=0&ep=0`;
             const fbRes = await apiFetch(fbUrl);
             const fbData = await fbRes.json();
             if (fbData?.sources && fbData.sources.length > 0) {
@@ -2014,7 +2007,7 @@ function ReelApp() {
         } else {
           // If called as movie (se=0, ep=0) but has no stream, try series mode (se=1, ep=1)
           try {
-            const fbUrl2 = `${API_BASE}/api/stream/${movie.subject_id}?detail_path=${movie.slug}&se=1&ep=1`;
+            const fbUrl2 = `${API_BASE}/api/content?endpoint=stream&id=${encodeURIComponent(movie.subject_id)}&detail_path=${encodeURIComponent(movie.slug)}&se=1&ep=1`;
             const fbRes2 = await apiFetch(fbUrl2);
             const fbData2 = await fbRes2.json();
             if (fbData2?.sources && fbData2.sources.length > 0) {
@@ -2051,7 +2044,7 @@ function ReelApp() {
         try {
           let allCaptions = [];
           const seenLans = new Set();
-          const capUrl = `${API_BASE}/api/stream/${movie.subject_id}/captions?detail_path=${movie.slug}&se=${effectiveSe}&ep=${effectiveEp}&title=${encodeURIComponent(movie.name || '')}`;
+          const capUrl = `${API_BASE}/api/content?endpoint=captions&id=${encodeURIComponent(movie.subject_id)}&detail_path=${encodeURIComponent(movie.slug)}&se=${effectiveSe}&ep=${effectiveEp}&title=${encodeURIComponent(movie.name || '')}`;
           const capRes = await apiFetch(capUrl);
           const capData = await capRes.json();
           if (capData && Array.isArray(capData.captions)) {
@@ -2071,7 +2064,7 @@ function ReelApp() {
 
           if (searchQuery) {
             try {
-              const sRes = await apiFetch(`${API_BASE}/search?q=${encodeURIComponent(searchQuery)}`);
+              const sRes = await apiFetch(`${API_BASE}/api/content?endpoint=search&q=${encodeURIComponent(searchQuery)}`);
               const sData = await sRes.json();
               const items = sData?.items || [];
 
@@ -2105,7 +2098,7 @@ function ReelApp() {
                 // Sibling subtitle collection if we don't have all languages yet
                 if (allCaptions.length <= 4 && itm.subject_id !== movie.subject_id) {
                   try {
-                    const sibCapUrl = `${API_BASE}/api/stream/${itm.subject_id}/captions?detail_path=${itm.slug}&se=${se}&ep=${ep}`;
+                    const sibCapUrl = `${API_BASE}/api/content?endpoint=captions&id=${encodeURIComponent(itm.subject_id)}&detail_path=${encodeURIComponent(itm.slug)}&se=${se}&ep=${ep}`;
                     const sibRes = await apiFetch(sibCapUrl);
                     const sibData = await sibRes.json();
                     if (sibData && Array.isArray(sibData.captions)) {
@@ -2154,7 +2147,7 @@ function ReelApp() {
     if (!variant || variant.slug === playerMovie?.slug) return;
     setLoadingStream(true);
     try {
-      const url = `${API_BASE}/api/stream/${variant.subject_id}?detail_path=${variant.slug}&se=${currentSe}&ep=${currentEp}`;
+      const url = `${API_BASE}/api/content?endpoint=stream&id=${encodeURIComponent(variant.subject_id)}&detail_path=${encodeURIComponent(variant.slug)}&se=${currentSe}&ep=${currentEp}`;
       const res = await apiFetch(url);
       const data = await res.json();
       if (data && data.sources && data.sources.length > 0) {
@@ -2408,7 +2401,7 @@ function ReelApp() {
         let movie = findMovieBySlug(slug);
         if (!movie) {
           try {
-            const res = await apiFetch(`${API_BASE}/detail/${slug}`);
+            const res = await apiFetch(`${API_BASE}/api/content?endpoint=detail&slug=${encodeURIComponent(slug)}`);
             const data = await res.json();
             if (data?.data?.subject) {
               movie = normalizeMovie({ ...data.data.subject, slug });
@@ -2445,7 +2438,7 @@ function ReelApp() {
         let movie = findMovieBySlug(slug);
         if (!movie) {
           try {
-            const res = await apiFetch(`${API_BASE}/detail/${slug}`);
+            const res = await apiFetch(`${API_BASE}/api/content?endpoint=detail&slug=${encodeURIComponent(slug)}`);
             const data = await res.json();
             if (data?.data?.subject) {
               movie = normalizeMovie({ ...data.data.subject, slug });
@@ -2573,12 +2566,12 @@ function ReelApp() {
       ) {
         const slug = pathname.replace(/^\/(movie|tv|series)\//, '').split('/')[0];
         try {
-          const res = await apiFetch(`${API_BASE}/detail/${slug}`);
+          const res = await apiFetch(`${API_BASE}/api/content?endpoint=detail&slug=${encodeURIComponent(slug)}`);
           const data = await res.json();
           if (data?.data?.subject) {
             openDetail(normalizeMovie({ ...data.data.subject, slug }), false);
           } else {
-            const sRes = await apiFetch(`${API_BASE}/search?q=${encodeURIComponent(slug.replace(/-/g, ' '))}`);
+            const sRes = await apiFetch(`${API_BASE}/api/content?endpoint=search&q=${encodeURIComponent(slug.replace(/-/g, ' '))}`);
             const sData = await sRes.json();
             if (sData?.items?.[0]) {
               openDetail(normalizeMovie(sData.items[0]), false);
@@ -2601,12 +2594,12 @@ function ReelApp() {
         const se = parseInt(params.get('season') || params.get('se') || '0', 10);
         const ep = parseInt(params.get('episode') || params.get('ep') || '0', 10);
         try {
-          const res = await apiFetch(`${API_BASE}/detail/${slug}`);
+          const res = await apiFetch(`${API_BASE}/api/content?endpoint=detail&slug=${encodeURIComponent(slug)}`);
           const data = await res.json();
           if (data?.data?.subject) {
             launchPlayer(normalizeMovie({ ...data.data.subject, slug }), se, ep, se > 0 || ep > 0, 0, null, null, false);
           } else {
-            const sRes = await apiFetch(`${API_BASE}/search?q=${encodeURIComponent(slug.replace(/-/g, ' '))}`);
+            const sRes = await apiFetch(`${API_BASE}/api/content?endpoint=search&q=${encodeURIComponent(slug.replace(/-/g, ' '))}`);
             const sData = await sRes.json();
             if (sData?.items?.[0]) {
               launchPlayer(normalizeMovie(sData.items[0]), se, ep, se > 0 || ep > 0, 0, null, null, false);
@@ -2698,7 +2691,7 @@ function ReelApp() {
     setLoadingDownloadOptions(true);
 
     try {
-      const streamUrl = `${API_BASE}/api/stream/${movie.subject_id}?detail_path=${movie.slug}&se=${se}&ep=${ep}`;
+      const streamUrl = `${API_BASE}/api/content?endpoint=stream&id=${encodeURIComponent(movie.subject_id)}&detail_path=${encodeURIComponent(movie.slug)}&se=${se}&ep=${ep}`;
       const sRes = await apiFetch(streamUrl);
       const sJson = await sRes.json();
       const sources = sJson?.sources || [];
@@ -2713,7 +2706,7 @@ function ReelApp() {
         setDownloadQuality('720p');
       }
 
-      const capUrl = `${API_BASE}/api/stream/${movie.subject_id}/captions?detail_path=${movie.slug}&se=${se}&ep=${ep}&title=${encodeURIComponent(movie.name || '')}`;
+      const capUrl = `${API_BASE}/api/content?endpoint=captions&id=${encodeURIComponent(movie.subject_id)}&detail_path=${encodeURIComponent(movie.slug)}&se=${se}&ep=${ep}&title=${encodeURIComponent(movie.name || '')}`;
       const cRes = await apiFetch(capUrl);
       const cJson = await cRes.json();
       setDownloadCaptions(cJson?.captions || []);
@@ -2731,7 +2724,7 @@ function ReelApp() {
     setLoadingDownloadOptions(true);
     const se = downloadDetail?.seasons?.[newSeIdx]?.se || 1;
     try {
-      const streamUrl = `${API_BASE}/api/stream/${downloadMovie.subject_id}?detail_path=${downloadMovie.slug}&se=${se}&ep=${newEp}`;
+      const streamUrl = `${API_BASE}/api/content?endpoint=stream&id=${encodeURIComponent(downloadMovie.subject_id)}&detail_path=${encodeURIComponent(downloadMovie.slug)}&se=${se}&ep=${newEp}`;
       const sRes = await apiFetch(streamUrl);
       const sJson = await sRes.json();
       const sources = sJson?.sources || [];
@@ -2745,7 +2738,7 @@ function ReelApp() {
         }
       }
 
-      const capUrl = `${API_BASE}/api/stream/${downloadMovie.subject_id}/captions?detail_path=${downloadMovie.slug}&se=${se}&ep=${newEp}&title=${encodeURIComponent(downloadMovie.name || '')}`;
+      const capUrl = `${API_BASE}/api/content?endpoint=captions&id=${encodeURIComponent(downloadMovie.subject_id)}&detail_path=${encodeURIComponent(downloadMovie.slug)}&se=${se}&ep=${newEp}&title=${encodeURIComponent(downloadMovie.name || '')}`;
       const cRes = await apiFetch(capUrl);
       const cJson = await cRes.json();
       setDownloadCaptions(cJson?.captions || []);
@@ -2810,7 +2803,7 @@ function ReelApp() {
               if (matchedCap?.url) subUrl = matchedCap.url;
             }
           } else {
-            const streamUrl = `${API_BASE}/api/stream/${downloadMovie.subject_id}?detail_path=${downloadMovie.slug}&se=${se}&ep=${ep}`;
+            const streamUrl = `${API_BASE}/api/content?endpoint=stream&id=${encodeURIComponent(downloadMovie.subject_id)}&detail_path=${encodeURIComponent(downloadMovie.slug)}&se=${se}&ep=${ep}`;
             const sRes = await apiFetch(streamUrl);
             const sJson = await sRes.json();
             const sources = sJson?.sources || [];
@@ -2818,7 +2811,7 @@ function ReelApp() {
 
             if (downloadSubtitle !== 'None') {
               try {
-                const capUrl = `${API_BASE}/api/stream/${downloadMovie.subject_id}/captions?detail_path=${downloadMovie.slug}&se=${se}&ep=${ep}&title=${encodeURIComponent(downloadMovie.name || '')}`;
+                const capUrl = `${API_BASE}/api/content?endpoint=captions&id=${encodeURIComponent(downloadMovie.subject_id)}&detail_path=${encodeURIComponent(downloadMovie.slug)}&se=${se}&ep=${ep}&title=${encodeURIComponent(downloadMovie.name || '')}`;
                 const cRes = await apiFetch(capUrl);
                 const cJson = await cRes.json();
                 const caps = cJson?.captions || [];
