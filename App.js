@@ -63,6 +63,9 @@ import {
   downloadAndInstallApkAsync,
 } from './updateService';
 import {
+  verifyAppSecurityAsync,
+} from './securityService';
+import {
   TRENDING_NOW,
   LATEST_RELEASES,
   NETFLIX_POPULAR,
@@ -1029,6 +1032,7 @@ function ReelApp() {
   const [authInitDone, setAuthInitDone] = useState(false);
   const [splashFinished, setSplashFinished] = useState(false);
   const [isPrivacyPageOpen, setIsPrivacyPageOpen] = useState(false);
+  const [securityStatus, setSecurityStatus] = useState({ verified: true, authentic: true, isTampered: false });
 
   // Sync access token to module-level var so apiFetch picks it up automatically
   useEffect(() => { _authToken = authAccessToken; }, [authAccessToken]);
@@ -1038,6 +1042,16 @@ function ReelApp() {
   // Load saved session and welcome status from AsyncStorage on startup
   useEffect(() => {
     (async () => {
+      // 0. Perform APK build server security & fingerprint integrity check
+      if (Platform.OS !== 'web') {
+        try {
+          const secRes = await verifyAppSecurityAsync(API_BASE);
+          if (secRes) {
+            setSecurityStatus(secRes);
+          }
+        } catch (_) {}
+      }
+
       // 1. Check if native APK user has seen welcome onboarding screen
       if (Platform.OS !== 'web') {
         try {
@@ -2977,6 +2991,25 @@ function ReelApp() {
     <View style={styles.appContainer}>
       <StatusBar style="light" backgroundColor="#0a0a0a" translucent />
 
+      {/* Security Warning: Tampered / Injected APK Alert Banner */}
+      {!isWeb && securityStatus?.isTampered && (
+        <View style={styles.securityTamperBanner}>
+          <Feather name="alert-triangle" size={18} color="#FFFFFF" style={{ marginRight: 10 }} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.securityTamperTitle}>Unofficial or Modified App Detected</Text>
+            <Text style={styles.securityTamperDesc}>
+              This build was not downloaded from our official website or has been modified. Please download the authentic version to protect your device.
+            </Text>
+          </View>
+          <TouchableOpacity
+            style={styles.securityTamperBtn}
+            onPress={() => Linking.openURL('https://movieflix-pi-six.vercel.app')}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.securityTamperBtnText}>Download</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* TOP GLASS NAVIGATION BAR (WHEN ON HOME TAB) */}
       {mainTab === 'Home' && (
@@ -3013,17 +3046,8 @@ function ReelApp() {
               )}
             </View>
 
-            {/* Header Right Actions: Telegram Community & Categories */}
+            {/* Header Right Actions: Explore Categories Navigation */}
             <View style={styles.headerRightActions}>
-              <TouchableOpacity
-                style={[styles.headerCategoriesBtn, { marginRight: 6, backgroundColor: 'rgba(34, 158, 217, 0.16)' }]}
-                onPress={() => Linking.openURL('https://t.me/movieflixlol').catch(() => {})}
-                activeOpacity={0.8}
-                accessibilityLabel="Join our Telegram"
-              >
-                <Feather name="send" size={15} color="#229ED9" />
-              </TouchableOpacity>
-
               <TouchableOpacity
                 style={styles.headerCategoriesBtn}
                 onPress={() => setIsCategoryModalOpen(true)}
@@ -3345,6 +3369,21 @@ function ReelApp() {
                         <Text style={styles.minimalErrorText} numberOfLines={1}>{apkDownloadError}</Text>
                       </View>
                     )}
+
+                    {/* Build Server Security & Fingerprint Authenticity Status */}
+                    <View style={styles.securityVerifyRow}>
+                      <Feather
+                        name={securityStatus?.isTampered ? "alert-triangle" : "shield"}
+                        size={12}
+                        color={securityStatus?.isTampered ? "#ef4444" : "#10b981"}
+                        style={{ marginRight: 6 }}
+                      />
+                      <Text style={[styles.securityVerifyText, securityStatus?.isTampered && { color: '#ef4444' }]}>
+                        {securityStatus?.isTampered
+                          ? 'Modified build detected · Not from official website'
+                          : 'Official Website Build · Anti-Tamper Verified'}
+                      </Text>
+                    </View>
                   </View>
                 )}
               </>
@@ -8446,6 +8485,52 @@ const styles = StyleSheet.create({
     color: '#ef4444',
     fontSize: 11,
     flex: 1,
+  },
+  securityVerifyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 10,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  securityVerifyText: {
+    color: '#10b981',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  securityTamperBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#7f1d1d',
+    borderBottomWidth: 1,
+    borderBottomColor: '#ef4444',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    zIndex: 9999,
+  },
+  securityTamperTitle: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  securityTamperDesc: {
+    color: '#fecaca',
+    fontSize: 11,
+    lineHeight: 15,
+    marginTop: 2,
+  },
+  securityTamperBtn: {
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    marginLeft: 10,
+  },
+  securityTamperBtnText: {
+    color: '#7f1d1d',
+    fontSize: 12,
+    fontWeight: '800',
   },
 
   // SUBPAGE HEADER STYLES
