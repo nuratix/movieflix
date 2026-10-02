@@ -64,9 +64,21 @@ export default function PrivacyScreen({ onClose }) {
         <View style={styles.contentWrapper}>
           {/* Hero Banner */}
           <View style={styles.heroSection}>
-            <View style={styles.shieldBadge}>
-              <Feather name="shield" size={18} color="#10b981" />
-              <Text style={styles.shieldBadgeText}>ZERO PERSONAL DATA COLLECTED</Text>
+            <View style={styles.badgeRow}>
+              <View style={styles.shieldBadge}>
+                <Feather name="shield" size={16} color="#10b981" />
+                <Text style={styles.shieldBadgeText}>ZERO PERSONAL DATA COLLECTED</Text>
+              </View>
+
+              <TouchableOpacity
+                style={styles.telegramPill}
+                onPress={() => Linking.openURL('https://t.me/movieflixlol').catch(() => {})}
+                activeOpacity={0.8}
+              >
+                <Feather name="send" size={13} color="#FFFFFF" style={{ marginRight: 6 }} />
+                <Text style={styles.telegramPillText}>Join our Telegram</Text>
+                <Feather name="external-link" size={12} color="rgba(255,255,255,0.7)" style={{ marginLeft: 4 }} />
+              </TouchableOpacity>
             </View>
 
             <Text style={styles.pageTitle}>Privacy Policy</Text>
@@ -351,6 +363,33 @@ export default function PrivacyScreen({ onClose }) {
             )}
           </View>
 
+          {/* Section 8: Official Telegram */}
+          <View style={styles.sectionCard}>
+            <View style={styles.sectionHeaderRow}>
+              <View style={[styles.sectionNumberBadge, { backgroundColor: '#229ED9' }]}>
+                <Text style={styles.sectionNumberText}>8</Text>
+              </View>
+              <Text style={styles.sectionTitle}>Join Our Telegram Channel</Text>
+            </View>
+            <Text style={styles.paragraph}>
+              Get real-time updates on latest movie and series uploads, server status, direct links, and connect with our movie-loving community on Telegram:
+            </Text>
+            <TouchableOpacity
+              style={styles.telegramLinkCard}
+              onPress={() => Linking.openURL('https://t.me/movieflixlol').catch((err) => console.warn(err))}
+              activeOpacity={0.8}
+            >
+              <View style={styles.telegramIconCircle}>
+                <Feather name="send" size={18} color="#FFFFFF" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.telegramTitle}>Join our Telegram Channel</Text>
+                <Text style={styles.telegramSub}>https://t.me/movieflixlol</Text>
+              </View>
+              <Feather name="external-link" size={16} color="#229ED9" />
+            </TouchableOpacity>
+          </View>
+
           {/* Bottom Action Button */}
           <View style={styles.bottomActionBox}>
             <TouchableOpacity
@@ -601,6 +640,59 @@ const styles = StyleSheet.create({
   },
   websiteLinkText: {
     color: '#e50914',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  badgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginBottom: 12,
+  },
+  telegramPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#229ED9',
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    boxShadow: '0 2px 10px rgba(34, 158, 217, 0.4)',
+  },
+  telegramPillText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
+  telegramLinkCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(34, 158, 217, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(34, 158, 217, 0.35)',
+    borderRadius: 12,
+    padding: 14,
+    marginTop: 8,
+  },
+  telegramIconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#229ED9',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 14,
+    flexShrink: 0,
+  },
+  telegramTitle: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  telegramSub: {
+    color: '#38bdf8',
     fontSize: 13,
     fontWeight: '600',
   },

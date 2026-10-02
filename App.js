@@ -2369,6 +2369,16 @@ function ReelApp() {
         setIsPrivacyPageOpen(false);
       }
 
+      // Route: /telegram
+      if (pathname.startsWith('/telegram')) {
+        try {
+          if (typeof window !== 'undefined') {
+            window.location.href = 'https://t.me/movieflixlol';
+          }
+        } catch (_) {}
+        return;
+      }
+
       // Route: /watch/:slug
       if (pathname.startsWith('/watch/')) {
         const slug = pathname.replace('/watch/', '').split('/')[0];
@@ -2512,6 +2522,14 @@ function ReelApp() {
       }
       if (pathname.startsWith('/privacy')) {
         setIsPrivacyPageOpen(true);
+        return;
+      }
+      if (pathname.startsWith('/telegram')) {
+        try {
+          if (typeof window !== 'undefined') {
+            window.location.href = 'https://t.me/movieflixlol';
+          }
+        } catch (_) {}
         return;
       }
       if (pathname.startsWith('/me')) {
@@ -2995,8 +3013,17 @@ function ReelApp() {
               )}
             </View>
 
-            {/* Header Right Actions: Explore Categories Navigation */}
+            {/* Header Right Actions: Telegram Community & Categories */}
             <View style={styles.headerRightActions}>
+              <TouchableOpacity
+                style={[styles.headerCategoriesBtn, { marginRight: 6, backgroundColor: 'rgba(34, 158, 217, 0.16)' }]}
+                onPress={() => Linking.openURL('https://t.me/movieflixlol').catch(() => {})}
+                activeOpacity={0.8}
+                accessibilityLabel="Join our Telegram"
+              >
+                <Feather name="send" size={15} color="#229ED9" />
+              </TouchableOpacity>
+
               <TouchableOpacity
                 style={styles.headerCategoriesBtn}
                 onPress={() => setIsCategoryModalOpen(true)}
@@ -3208,6 +3235,33 @@ function ReelApp() {
                       </Text>
                     </View>
                     <Feather name={isWeb ? "chevron-right" : "external-link"} size={18} color="#737373" />
+                  </TouchableOpacity>
+
+                  {/* Button: Join our Telegram */}
+                  <TouchableOpacity
+                    style={styles.meNavCard}
+                    onPress={() => {
+                      Linking.openURL('https://t.me/movieflixlol').catch((err) => {
+                        console.warn('Failed to open Telegram URL:', err);
+                      });
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <View style={[styles.meNavIconCircle, { backgroundColor: 'rgba(34, 158, 217, 0.14)', borderColor: 'rgba(34, 158, 217, 0.32)' }]}>
+                      <Feather name="send" size={18} color="#229ED9" />
+                    </View>
+                    <View style={styles.meNavTextCol}>
+                      <View style={styles.meNavTitleRow}>
+                        <Text style={styles.meNavTitle}>Join our Telegram</Text>
+                        <View style={[styles.meNavBadge, { backgroundColor: 'rgba(34, 158, 217, 0.22)' }]}>
+                          <Text style={[styles.meNavBadgeText, { color: '#229ED9' }]}>Community</Text>
+                        </View>
+                      </View>
+                      <Text style={styles.meNavSubtitle}>
+                        New releases, updates &amp; requests · t.me/movieflixlol
+                      </Text>
+                    </View>
+                    <Feather name="external-link" size={18} color="#737373" />
                   </TouchableOpacity>
                 </View>
 
