@@ -10,7 +10,7 @@ permissions:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build-apk:
@@ -24,11 +24,11 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: 'npm'
 
       - name: Setup Java 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           java-version: '17'
           distribution: 'temurin'
@@ -52,6 +52,7 @@ jobs:
           EXPO_PUBLIC_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Prepare APK Output
+        id: prepare_apk
         run: |
           mkdir -p output
           APK_PATH=$(find android/app/build/outputs/apk/release -name "*.apk" | head -n 1)
@@ -60,38 +61,39 @@ jobs:
             find android/app/build/outputs/ -type f || true
             exit 1
           fi
-          echo "Found APK at: $APK_PATH"
-          cp "$APK_PATH" output/movieflix-v1.1.2.apk
+          VERSION=$(node -p "require('./package.json').version")
+          echo "Found APK at: $APK_PATH for version $VERSION"
+          cp "$APK_PATH" "output/movieflix-v${VERSION}.apk"
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
           ls -lh output/
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: movieflix-v1.1.2-apk
-          path: output/movieflix-v1.1.2.apk
+          name: movieflix-v${{ steps.prepare_apk.outputs.version }}-apk
+          path: output/movieflix-v${{ steps.prepare_apk.outputs.version }}.apk
           retention-days: 30
 
       - name: Create GitHub Release
         if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.1.2
-          name: Movieflix v1.1.2
+          tag_name: v${{ steps.prepare_apk.outputs.version }}
+          name: Movieflix v${{ steps.prepare_apk.outputs.version }}
           draft: false
           prerelease: false
           body: |
-            ### 🎬 Movieflix v1.1.2 Release APK
+            ### 🎬 Movieflix v${{ steps.prepare_apk.outputs.version }} Official Release APK
 
             Built automatically via **GitHub Actions Cloud**!
 
-            #### 🔒 Security & Enhancements in v1.1.2:
-            * **Server-Side Security & Anti-Tamper**: Enforced v1.1.2 official build fingerprint verification and signature validation.
-            * **SSRF Hardening**: Edge & Node streaming proxy hardened against SSRF, internal loopback, and metadata address exploitation.
-            * **Database Information Disclosure Protection**: Sanitized database error reporting in authentication pipelines.
-            * **Minimal Privacy Screen**: Streamlined privacy policy screen with external system browser launching in native APK.
-            * **Auto-Update Engine**: Pointed to latest authenticated GitHub Release assets with direct APK download and background installation.
-            * **Hardware Media Controls**: Smooth vertical touch gestures for device brightness and ExoPlayer audio volume.
+            #### 🔒 Security & Enhancements in v${{ steps.prepare_apk.outputs.version }}:
+            * **Server-Side Security**: Upstream provider API credentials protected on backend proxy—zero secrets embedded in mobile APK.
+            * **Official Fingerprint Validation**: Verified build integrity and signature validation for v${{ steps.prepare_apk.outputs.version }}.
+            * **Optimized Web Experience**: Seamless deep linking, dedicated 404 handler, and single bottom download banner.
+            * **Social Sharing**: Multi-ratio Open Graph cards for WhatsApp, Telegram, Twitter, Instagram, and Facebook.
+            * **Hardware Media Controls**: Smooth gestures for brightness and volume, with instant streaming.
           files: |
-            output/movieflix-v1.1.2.apk
+            output/movieflix-v${{ steps.prepare_apk.outputs.version }}.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
