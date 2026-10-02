@@ -2845,13 +2845,22 @@ function ReelApp() {
 
   // ─── NATIVE (APK) ONBOARDING & AUTH GATE ─────────────────────────────────
   if (Platform.OS !== 'web') {
-    // 1. Returning authenticated user: quick splash screen while session loads
+    // 0. While auth session is restoring from AsyncStorage on startup, show sleek skeleton loader!
+    if (!authInitDone) {
+      return (
+        <View style={{ flex: 1, backgroundColor: '#0a0a0a', paddingTop: insets.top }}>
+          <StatusBar barStyle="light-content" backgroundColor="#0a0a0a" translucent />
+          <HomeSkeletonLoader />
+        </View>
+      );
+    }
+
+    // 1. Returning authenticated user: quick splash screen on startup
     if (authUser && !splashFinished) {
       return (
         <CustomSplashScreen
           onFinish={() => {
             setSplashFinished(true);
-            setAuthInitDone(true);
           }}
         />
       );
@@ -2872,10 +2881,23 @@ function ReelApp() {
         );
       }
 
-      // Default landing for unauthenticated users: WelcomeScreen with posters, logo & Get Started button!
+      // If user has not seen welcome onboarding yet, show WelcomeScreen:
+      if (!hasSeenWelcome) {
+        return (
+          <WelcomeScreen
+            onGetStarted={handleGetStarted}
+          />
+        );
+      }
+
+      // If user already saw welcome before, direct to AuthScreen:
       return (
-        <WelcomeScreen
-          onGetStarted={handleGetStarted}
+        <AuthScreen
+          initialMode="login"
+          authError={authError}
+          authLoading={authLoading}
+          onSubmit={handleAuthSubmit}
+          onClose={() => setIsAuthPageOpen(false)}
         />
       );
     }
