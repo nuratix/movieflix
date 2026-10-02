@@ -13,6 +13,7 @@ import {
   Image,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const BRAND_LOGO = require('./assets/movieflix_brand_logo.png');
@@ -62,6 +63,21 @@ export default function AuthScreen({
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#000000" translucent />
+
+      {/* Atmospheric Red Shine Glow */}
+      <View style={styles.topRedShine} pointerEvents="none">
+        <LinearGradient
+          colors={[
+            'rgba(229, 9, 20, 0.35)',
+            'rgba(229, 9, 20, 0.14)',
+            'rgba(229, 9, 20, 0.03)',
+            'rgba(0, 0, 0, 0)',
+          ]}
+          locations={[0, 0.35, 0.7, 1]}
+          style={StyleSheet.absoluteFillObject}
+        />
+        <View style={styles.redGlowOrb} />
+      </View>
 
       {/* Top Header Bar */}
       <View style={[styles.headerBar, { paddingTop: topInset + 8 }]}>
@@ -402,5 +418,28 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontWeight: '700',
     textDecorationLine: 'underline',
+  },
+  topRedShine: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 420,
+    pointerEvents: 'none',
+    overflow: 'hidden',
+  },
+  redGlowOrb: {
+    position: 'absolute',
+    top: -110,
+    alignSelf: 'center',
+    width: 360,
+    height: 240,
+    borderRadius: 180,
+    backgroundColor: 'rgba(229, 9, 20, 0.28)',
+    shadowColor: '#e50914',
+    shadowOffset: { width: 0, height: 35 },
+    shadowOpacity: 0.9,
+    shadowRadius: 85,
+    elevation: 25,
   },
 });
