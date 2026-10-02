@@ -133,6 +133,34 @@ export const navigateWeb = (url, replace = false, state = {}) => {
   } catch (e) {}
 };
 
+// Normalize any movie/series object across catalog, search, and detail API
+export function normalizeMovie(item, fallbackSlug = '') {
+  if (!item || typeof item !== 'object') return null;
+  const name = item.name || item.title || item.postTitle || '';
+  const slug = item.slug || item.detailPath || fallbackSlug || '';
+  const subject_id = item.subject_id || item.subjectId || item.id || '';
+  const poster_url = item.poster_url || item.cover?.url || item.banner_url || item.coverUrl || '';
+  const isSeries = Boolean(
+    item.isSeries ||
+    item.subjectType === 2 ||
+    (item.genre && /drama|tv|series/i.test(item.genre)) ||
+    (item.seasons && item.seasons.length > 0)
+  );
+
+  return {
+    ...item,
+    name,
+    title: name,
+    slug: String(slug),
+    subject_id: String(subject_id),
+    subjectId: String(subject_id),
+    poster_url,
+    cover: typeof item.cover === 'object' && item.cover !== null ? item.cover : { url: poster_url },
+    isSeries,
+    subjectType: isSeries ? 2 : 1,
+  };
+}
+
 // Preload and cache the intro video to internal storage for instant 0-lag playback
 const preloadIntroVideoAsync = async () => {
   try {
@@ -1455,8 +1483,9 @@ function ReelApp() {
   };
 
   // Open Detail Modal
-  const openDetail = async (movie, syncHistory = true) => {
-    if (!movie) return;
+  const openDetail = async (rawMovie, syncHistory = true) => {
+    if (!rawMovie) return;
+    const movie = normalizeMovie(rawMovie);
     setDetailMovie(movie);
     setLoadingDetail(true);
     setDetailData(null);
@@ -1520,7 +1549,7 @@ function ReelApp() {
       if (id && seen.has(id)) continue;
       if (s) seen.add(s);
       if (id) seen.add(id);
-      cleanList.push(item);
+      cleanList.push(normalizeMovie(item));
       if (cleanList.length >= 10) break;
     }
     setRelatedTitles(cleanList);
@@ -1539,12 +1568,16 @@ function ReelApp() {
         (seasons[0]?.maxEp > 1) ||
         Boolean(seasons[0]?.allEp && seasons[0].allEp.includes(','));
 
-      setDetailData({
+      const mergedData = {
         ...subject,
         resource,
         seasons,
         isSeries: Boolean(isRealSeries),
-      });
+      };
+      setDetailData(mergedData);
+
+      // Merge newly resolved fields back into detailMovie so title/poster/etc. are fully loaded
+      setDetailMovie((prev) => normalizeMovie({ ...(prev || {}), ...subject, ...mergedData, slug: movie.slug }));
 
       // Update URL with confirmed prefix if series vs movie was determined
       if (syncHistory && Platform.OS === 'web') {
@@ -1565,19 +1598,23 @@ function ReelApp() {
     setDetailData(null);
     setDetailImdb(null);
     if (syncHistory && Platform.OS === 'web') {
-      if (mainTab === 'Me') {
-        const sub = meSubTab ? `/me/${meSubTab.toLowerCase()}` : '/me';
-        navigateWeb(sub);
+      if (typeof window !== 'undefined' && window.history && window.history.length > 1) {
+        window.history.back();
       } else {
-        const cat = homeCategory === 'Movies' ? '/movies' : homeCategory === 'Series' ? '/series' : '/';
-        navigateWeb(cat);
+        if (mainTab === 'Me') {
+          const sub = meSubTab ? `/me/${meSubTab.toLowerCase()}` : '/me';
+          navigateWeb(sub);
+        } else {
+          const cat = homeCategory === 'Movies' ? '/movies' : homeCategory === 'Series' ? '/series' : '/';
+          navigateWeb(cat);
+        }
       }
     }
   };
 
   // Launch Player with automatic resilient stream recovery, resume support, and offline local file support
   const launchPlayer = async (
-    movie,
+    rawMovie,
     se = 0,
     ep = 0,
     seriesFlag = false,
@@ -1586,6 +1623,9 @@ function ReelApp() {
     offlineSubUrl = null,
     syncHistory = true
   ) => {
+    if (!rawMovie) return;
+    const movie = normalizeMovie(rawMovie);
+
     if (!offlineVideoUrl && isOffline) {
       showToast('You are offline. Connect to internet to stream, or watch your downloads in Me > Downloads!');
       return;
@@ -2004,21 +2044,19 @@ function ReelApp() {
             const res = await fetch(`${API_BASE}/detail/${slug}`);
             const data = await res.json();
             if (data?.data?.subject) {
-              movie = { ...data.data.subject, slug };
+              movie = normalizeMovie({ ...data.data.subject, slug });
             }
           } catch (e) {}
         }
         if (movie) {
-          launchPlayer(movie, se, ep, se > 0 || ep > 0 || Boolean(movie.isSeries), 0, null, null, false);
+          launchPlayer(normalizeMovie(movie), se, ep, se > 0 || ep > 0 || Boolean(movie.isSeries), 0, null, null, false);
         }
         return;
       }
 
       // If user navigated away from /watch/:
-      if (isPlayerOpen || isIntroLoading) {
-        setIsIntroLoading(false);
-        setIsPlayerOpen(false);
-      }
+      setIsIntroLoading(false);
+      setIsPlayerOpen(false);
 
       // Route: /movie/:slug or /tv/:slug or /series/:slug
       if (
@@ -2033,22 +2071,22 @@ function ReelApp() {
             const res = await fetch(`${API_BASE}/detail/${slug}`);
             const data = await res.json();
             if (data?.data?.subject) {
-              movie = { ...data.data.subject, slug };
+              movie = normalizeMovie({ ...data.data.subject, slug });
             }
           } catch (e) {}
         }
         if (movie) {
-          openDetail(movie, false);
+          openDetail(normalizeMovie(movie), false);
         }
         return;
       }
 
-      // If user navigated away from detail modal:
-      if (detailMovie) {
-        setDetailMovie(null);
-        setDetailData(null);
-        setDetailImdb(null);
-      }
+      // If user navigated away from detail modal or player to Home / Me:
+      setDetailMovie(null);
+      setDetailData(null);
+      setDetailImdb(null);
+      setIsIntroLoading(false);
+      setIsPlayerOpen(false);
 
       // Route: /me and subtabs
       if (pathname.startsWith('/me')) {
@@ -2100,6 +2138,21 @@ function ReelApp() {
     if (pathname === '/' || pathname === '') return;
 
     const initialRouteResolver = async () => {
+      // Direct deep link visit: prime browser history stack [/, pathname] so Back button cleanly goes to Home instead of blank
+      if (
+        pathname.startsWith('/movie/') ||
+        pathname.startsWith('/tv/') ||
+        pathname.startsWith('/series/') ||
+        pathname.startsWith('/watch/')
+      ) {
+        try {
+          if (window.history && window.history.replaceState && window.history.pushState) {
+            window.history.replaceState({ url: '/' }, '', '/');
+            window.history.pushState({ url: pathname }, '', pathname);
+          }
+        } catch (e) {}
+      }
+
       if (pathname.startsWith('/me')) {
         setMainTab('Me');
         if (pathname.includes('/history')) setMeSubTab('History');
@@ -2125,12 +2178,12 @@ function ReelApp() {
           const res = await fetch(`${API_BASE}/detail/${slug}`);
           const data = await res.json();
           if (data?.data?.subject) {
-            openDetail({ ...data.data.subject, slug }, false);
+            openDetail(normalizeMovie({ ...data.data.subject, slug }), false);
           } else {
             const sRes = await fetch(`${API_BASE}/search?q=${encodeURIComponent(slug.replace(/-/g, ' '))}`);
             const sData = await sRes.json();
             if (sData?.items?.[0]) {
-              openDetail(sData.items[0], false);
+              openDetail(normalizeMovie(sData.items[0]), false);
             }
           }
         } catch (e) {}
@@ -2145,12 +2198,12 @@ function ReelApp() {
           const res = await fetch(`${API_BASE}/detail/${slug}`);
           const data = await res.json();
           if (data?.data?.subject) {
-            launchPlayer({ ...data.data.subject, slug }, se, ep, se > 0 || ep > 0, 0, null, null, false);
+            launchPlayer(normalizeMovie({ ...data.data.subject, slug }), se, ep, se > 0 || ep > 0, 0, null, null, false);
           } else {
             const sRes = await fetch(`${API_BASE}/search?q=${encodeURIComponent(slug.replace(/-/g, ' '))}`);
             const sData = await sRes.json();
             if (sData?.items?.[0]) {
-              launchPlayer(sData.items[0], se, ep, se > 0 || ep > 0, 0, null, null, false);
+              launchPlayer(normalizeMovie(sData.items[0]), se, ep, se > 0 || ep > 0, 0, null, null, false);
             }
           }
         } catch (e) {}
