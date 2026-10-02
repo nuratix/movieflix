@@ -1013,6 +1013,8 @@ function ReelApp() {
   const [authAccessToken, setAuthAccessToken] = useState(null);
   const [authRefreshToken, setAuthRefreshToken] = useState(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
+  // Ref mirrors authUser so async callbacks (launchPlayer) always read latest value
+  const authUserRef = useRef(null);
   const [authMode, setAuthMode] = useState('login');    // 'login' | 'register'
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
@@ -1022,6 +1024,8 @@ function ReelApp() {
 
   // Sync access token to module-level var so apiFetch picks it up automatically
   useEffect(() => { _authToken = authAccessToken; }, [authAccessToken]);
+  // Keep ref in sync with state so async functions always see latest authUser
+  useEffect(() => { authUserRef.current = authUser; }, [authUser]);
 
   // Load saved session from AsyncStorage on startup
   useEffect(() => {
@@ -1820,18 +1824,12 @@ function ReelApp() {
     if (!rawMovie) return;
     const movie = normalizeMovie(rawMovie);
 
-    // Require authentication to stream video — triggers small auth popup
-    if (!authUser) {
+    // Auth gate: web → compact popup sheet; native → user already passed full-screen gate at startup
+    if (!authUserRef.current && Platform.OS === 'web') {
       pendingPlayRef.current = {
-        rawMovie,
-        se,
-        ep,
-        seriesFlag,
-        resumeTime,
-        offlineVideoUrl,
-        offlineSubUrl,
-        syncHistory,
+        rawMovie, se, ep, seriesFlag, resumeTime, offlineVideoUrl, offlineSubUrl, syncHistory,
       };
+      setAuthMode('login');
       setAuthError('');
       setShowAuthModal(true);
       return;
@@ -2769,9 +2767,156 @@ function ReelApp() {
 
   const heroItem = heroList[heroIndex] || heroList[0];
 
+  // ─── NATIVE (APK) AUTH GATE ───────────────────────────────────────────────
+  // On mobile/APK: block all content behind a full-screen auth screen at startup.
+  // On web: homepage is freely browsable; auth popup only triggers on Play.
+  if (Platform.OS !== 'web') {
+    if (!authInitDone) {
+      return (
+        <View style={{ flex: 1, backgroundColor: '#0a0a0a', alignItems: 'center', justifyContent: 'center' }}>
+          <StatusBar style="light" backgroundColor="#0a0a0a" translucent />
+          <View style={{ width: 60, height: 60, borderRadius: 16, backgroundColor: '#e50914',
+            alignItems: 'center', justifyContent: 'center', marginBottom: 20,
+            shadowColor: '#e50914', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.5, shadowRadius: 20, elevation: 10 }}>
+            <Feather name="play" size={28} color="#fff" />
+          </View>
+          <Text style={{ color: '#fff', fontSize: 24, fontWeight: '800', letterSpacing: 1, marginBottom: 6 }}>Movieflix</Text>
+          <Text style={{ color: '#555', fontSize: 14 }}>Loading…</Text>
+          <ActivityIndicator size="small" color="#e50914" style={{ marginTop: 18 }} />
+        </View>
+      );
+    }
+
+    if (!authUser) {
+      return (
+        <View style={{ flex: 1, backgroundColor: '#0a0a0a' }}>
+          <StatusBar style="light" backgroundColor="#0a0a0a" translucent />
+          <View style={{ position: 'absolute', top: -80, right: -80, width: 260, height: 260,
+            borderRadius: 130, backgroundColor: 'rgba(229,9,20,0.07)' }} />
+          <View style={{ position: 'absolute', bottom: -40, left: -40, width: 180, height: 180,
+            borderRadius: 90, backgroundColor: 'rgba(229,9,20,0.05)' }} />
+
+          <ScrollView
+            contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: 28, paddingTop: 80 }}
+            keyboardShouldPersistTaps="handled"
+          >
+            <View style={{ alignItems: 'center', marginBottom: 44 }}>
+              <View style={{ width: 68, height: 68, borderRadius: 20, backgroundColor: '#e50914',
+                alignItems: 'center', justifyContent: 'center', marginBottom: 18,
+                shadowColor: '#e50914', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.5, shadowRadius: 20, elevation: 10 }}>
+                <Feather name="play" size={30} color="#fff" />
+              </View>
+              <Text style={{ color: '#fff', fontSize: 30, fontWeight: '800', letterSpacing: 1, marginBottom: 6 }}>
+                Movieflix
+              </Text>
+              <Text style={{ color: '#555', fontSize: 14, textAlign: 'center' }}>
+                {authMode === 'login' ? 'Sign in to continue watching' : 'Create your free account'}
+              </Text>
+            </View>
+
+            <View style={{ backgroundColor: '#141414', borderRadius: 24, padding: 24,
+              borderWidth: 1, borderColor: 'rgba(255,255,255,0.07)',
+              shadowColor: '#000', shadowOffset: { width: 0, height: 20 },
+              shadowOpacity: 0.5, shadowRadius: 30, elevation: 15 }}>
+
+              {/* Segment switcher */}
+              <View style={{ flexDirection: 'row', backgroundColor: '#1f1f1f', borderRadius: 14,
+                padding: 3, marginBottom: 20 }}>
+                <TouchableOpacity
+                  style={{ flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 12,
+                    backgroundColor: authMode === 'login' ? '#e50914' : 'transparent' }}
+                  onPress={() => { setAuthMode('login'); setAuthError(''); }}
+                  activeOpacity={0.8}
+                >
+                  <Text style={{ color: authMode === 'login' ? '#fff' : '#777', fontSize: 14, fontWeight: '800' }}>
+                    Sign In
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={{ flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 12,
+                    backgroundColor: authMode === 'register' ? '#e50914' : 'transparent' }}
+                  onPress={() => { setAuthMode('register'); setAuthError(''); }}
+                  activeOpacity={0.8}
+                >
+                  <Text style={{ color: authMode === 'register' ? '#fff' : '#777', fontSize: 14, fontWeight: '800' }}>
+                    Register
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              <Text style={{ color: '#555', fontSize: 13, marginBottom: 20 }}>
+                {authMode === 'login' ? 'Enter your credentials to continue' : 'Free account — no email confirmation'}
+              </Text>
+
+              <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#1e1e1e',
+                borderRadius: 14, paddingHorizontal: 14, paddingVertical: 13, marginBottom: 12,
+                borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)' }}>
+                <Feather name="mail" size={16} color="#555" style={{ marginRight: 10 }} />
+                <TextInput
+                  style={{ flex: 1, color: '#fff', fontSize: 15, padding: 0 }}
+                  placeholder="Email address"
+                  placeholderTextColor="#444"
+                  value={authEmail}
+                  onChangeText={setAuthEmail}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+              </View>
+
+              <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#1e1e1e',
+                borderRadius: 14, paddingHorizontal: 14, paddingVertical: 13, marginBottom: 20,
+                borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)' }}>
+                <Feather name="lock" size={16} color="#555" style={{ marginRight: 10 }} />
+                <TextInput
+                  style={{ flex: 1, color: '#fff', fontSize: 15, padding: 0 }}
+                  placeholder={authMode === 'register' ? 'Password (min 8 chars)' : 'Password'}
+                  placeholderTextColor="#444"
+                  value={authPassword}
+                  onChangeText={setAuthPassword}
+                  secureTextEntry
+                  autoCapitalize="none"
+                />
+              </View>
+
+              {!!authError && (
+                <View style={{ flexDirection: 'row', alignItems: 'center',
+                  backgroundColor: 'rgba(229,9,20,0.12)', borderRadius: 10,
+                  padding: 12, marginBottom: 16 }}>
+                  <Feather name="alert-circle" size={14} color="#e50914" style={{ marginRight: 8 }} />
+                  <Text style={{ color: '#e50914', fontSize: 13, flex: 1 }}>{authError}</Text>
+                </View>
+              )}
+
+              <TouchableOpacity
+                style={{ backgroundColor: '#e50914', borderRadius: 14, paddingVertical: 16,
+                  alignItems: 'center', justifyContent: 'center',
+                  shadowColor: '#e50914', shadowOffset: { width: 0, height: 6 },
+                  shadowOpacity: 0.4, shadowRadius: 14, elevation: 8,
+                  opacity: authLoading ? 0.75 : 1 }}
+                onPress={handleAuthSubmit}
+                disabled={authLoading}
+                activeOpacity={0.85}
+              >
+                {authLoading
+                  ? <ActivityIndicator size="small" color="#fff" />
+                  : <Text style={{ color: '#fff', fontSize: 16, fontWeight: '800' }}>
+                      {authMode === 'login' ? 'Sign In' : 'Create Account'}
+                    </Text>
+                }
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        </View>
+      );
+    }
+  }
+  // ─── End Native Auth Gate ──────────────────────────────────────────────────
+
   return (
     <View style={styles.appContainer}>
       <StatusBar style="light" backgroundColor="#0a0a0a" translucent />
+
 
       {/* TOP GLASS NAVIGATION BAR (WHEN ON HOME TAB) */}
       {mainTab === 'Home' && (
