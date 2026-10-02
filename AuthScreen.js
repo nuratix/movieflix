@@ -11,6 +11,7 @@ import {
   ScrollView,
   StatusBar,
   Image,
+  Linking,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -24,6 +25,7 @@ export default function AuthScreen({
   authLoading = false,
   onSubmit,
   onClose,
+  onOpenPrivacy,
 }) {
   const insets = useSafeAreaInsets();
   const [mode, setMode] = useState(initialMode); // 'login' | 'register'
@@ -54,6 +56,14 @@ export default function AuthScreen({
 
     if (onSubmit) {
       onSubmit(trimmedEmail, trimmedPassword, mode);
+    }
+  };
+
+  const handlePrivacyPress = () => {
+    if (onOpenPrivacy) {
+      onOpenPrivacy();
+    } else if (Platform.OS !== 'web') {
+      Linking.openURL('https://movieflix-pi-six.vercel.app/privacy').catch(() => {});
     }
   };
 
@@ -244,6 +254,18 @@ export default function AuthScreen({
                 </Text>
               </Text>
             </TouchableOpacity>
+
+            {/* Privacy Policy Assurance */}
+            <TouchableOpacity
+              style={styles.privacyRow}
+              onPress={handlePrivacyPress}
+              activeOpacity={0.7}
+            >
+              <Feather name="shield" size={12} color="#10b981" style={{ marginRight: 5 }} />
+              <Text style={styles.privacyNote}>
+                Zero data collected · <Text style={styles.privacyHighlight}>Privacy Policy</Text>
+              </Text>
+            </TouchableOpacity>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -417,6 +439,22 @@ const styles = StyleSheet.create({
   switchHighlight: {
     color: '#ffffff',
     fontWeight: '700',
+    textDecorationLine: 'underline',
+  },
+  privacyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 10,
+    paddingVertical: 6,
+  },
+  privacyNote: {
+    fontSize: 12,
+    color: '#737373',
+  },
+  privacyHighlight: {
+    color: '#a3a3a3',
+    fontWeight: '600',
     textDecorationLine: 'underline',
   },
   topRedShine: {

@@ -15,6 +15,7 @@ import {
   Animated,
   Easing,
   PanResponder,
+  Linking,
 } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import { StatusBar } from 'expo-status-bar';
@@ -75,6 +76,7 @@ import { getImdbData } from './imdbService';
 import WelcomeScreen from './WelcomeScreen';
 import AuthScreen from './AuthScreen';
 import CustomSplashScreen from './CustomSplashScreen';
+import PrivacyScreen, { PRIVACY_POLICY_URL } from './PrivacyScreen';
 
 // ─── API Base & Secret Key (from .env / Vercel env vars) ────────────────────
 let rawBase = process.env.EXPO_PUBLIC_API_BASE || 'https://moviebo.vercel.app';
@@ -1026,7 +1028,7 @@ function ReelApp() {
   const [authLoading, setAuthLoading] = useState(false);
   const [authInitDone, setAuthInitDone] = useState(false);
   const [splashFinished, setSplashFinished] = useState(false);
-  const [showSplashPreview, setShowSplashPreview] = useState(false);
+  const [isPrivacyPageOpen, setIsPrivacyPageOpen] = useState(false);
 
   // Sync access token to module-level var so apiFetch picks it up automatically
   useEffect(() => { _authToken = authAccessToken; }, [authAccessToken]);
@@ -1117,6 +1119,26 @@ function ReelApp() {
 
   const closeAuthPage = () => {
     setIsAuthPageOpen(false);
+    if (Platform.OS === 'web') {
+      navigateWeb('/', true);
+    }
+  };
+
+  const handleOpenPrivacy = () => {
+    if (Platform.OS !== 'web') {
+      Linking.openURL(PRIVACY_POLICY_URL).catch((err) => {
+        console.warn('Failed to open external privacy policy URL:', err);
+      });
+    } else {
+      if (detailMovie) setDetailMovie(null);
+      if (isPlayerOpen) setIsPlayerOpen(false);
+      setIsPrivacyPageOpen(true);
+      navigateWeb('/privacy', false);
+    }
+  };
+
+  const closePrivacyPage = () => {
+    setIsPrivacyPageOpen(false);
     if (Platform.OS === 'web') {
       navigateWeb('/', true);
     }
@@ -2233,7 +2255,7 @@ function ReelApp() {
   // 1. Sync Web URL with Main Tabs when not viewing a modal/player
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof window === 'undefined') return;
-    if (detailMovie || isPlayerOpen || isIntroLoading) return;
+    if (detailMovie || isPlayerOpen || isIntroLoading || isAuthPageOpen || isPrivacyPageOpen) return;
 
     let targetUrl = '/';
     if (mainTab === 'Me') {
@@ -2253,11 +2275,13 @@ function ReelApp() {
       !currentUrl.startsWith('/movie/') &&
       !currentUrl.startsWith('/tv/') &&
       !currentUrl.startsWith('/series/') &&
-      !currentUrl.startsWith('/watch/')
+      !currentUrl.startsWith('/watch/') &&
+      !currentUrl.startsWith('/auth') &&
+      !currentUrl.startsWith('/privacy')
     ) {
       navigateWeb(targetUrl);
     }
-  }, [mainTab, homeCategory, meSubTab, detailMovie, isPlayerOpen, isIntroLoading]);
+  }, [mainTab, homeCategory, meSubTab, detailMovie, isPlayerOpen, isIntroLoading, isAuthPageOpen, isPrivacyPageOpen]);
 
   // 2. Handle Web Browser Back / Forward History (popstate)
   useEffect(() => {
@@ -2335,6 +2359,14 @@ function ReelApp() {
         return;
       } else {
         setIsAuthPageOpen(false);
+      }
+
+      // Route: /privacy
+      if (pathname.startsWith('/privacy')) {
+        setIsPrivacyPageOpen(true);
+        return;
+      } else {
+        setIsPrivacyPageOpen(false);
       }
 
       // Route: /watch/:slug
@@ -2476,6 +2508,10 @@ function ReelApp() {
 
       if (pathname.startsWith('/auth')) {
         setIsAuthPageOpen(true);
+        return;
+      }
+      if (pathname.startsWith('/privacy')) {
+        setIsPrivacyPageOpen(true);
         return;
       }
       if (pathname.startsWith('/me')) {
@@ -2834,15 +2870,6 @@ function ReelApp() {
 
   const heroItem = heroList[heroIndex] || heroList[0];
 
-  // ─── SPLASH SCREEN PREVIEW (FOR TESTING/CHECKING FROM ME PAGE) ───────────
-  if (showSplashPreview) {
-    return (
-      <CustomSplashScreen
-        onFinish={() => setShowSplashPreview(false)}
-      />
-    );
-  }
-
   // ─── NATIVE (APK) ONBOARDING & AUTH GATE ─────────────────────────────────
   if (Platform.OS !== 'web') {
     // 1. Every time user opens the APK cold: show custom splash screen FIRST!
@@ -2877,6 +2904,7 @@ function ReelApp() {
             authLoading={authLoading}
             onSubmit={handleAuthSubmit}
             onClose={() => setIsAuthPageOpen(false)}
+            onOpenPrivacy={handleOpenPrivacy}
           />
         );
       }
@@ -2898,9 +2926,19 @@ function ReelApp() {
           authLoading={authLoading}
           onSubmit={handleAuthSubmit}
           onClose={() => setIsAuthPageOpen(false)}
+          onOpenPrivacy={handleOpenPrivacy}
         />
       );
     }
+  }
+
+  // ─── /privacy PAGE VIEW (DIRECT ROUTE ON WEB) ─────────────────────────────
+  if (isPrivacyPageOpen) {
+    return (
+      <PrivacyScreen
+        onClose={closePrivacyPage}
+      />
+    );
   }
 
   // ─── WEB / REUSABLE /auth PAGE VIEW ──────────────────────────────────────
@@ -2912,6 +2950,7 @@ function ReelApp() {
         authLoading={authLoading}
         onSubmit={handleAuthSubmit}
         onClose={closeAuthPage}
+        onOpenPrivacy={handleOpenPrivacy}
       />
     );
   }
@@ -3148,27 +3187,27 @@ function ReelApp() {
                     </TouchableOpacity>
                   )}
 
-                  {/* Button: Check Splash Screen */}
+                  {/* Button: Privacy Policy */}
                   <TouchableOpacity
                     style={styles.meNavCard}
-                    onPress={() => setShowSplashPreview(true)}
+                    onPress={handleOpenPrivacy}
                     activeOpacity={0.7}
                   >
-                    <View style={[styles.meNavIconCircle, { backgroundColor: 'rgba(229, 9, 20, 0.12)', borderColor: 'rgba(229, 9, 20, 0.28)' }]}>
-                      <Feather name="play-circle" size={19} color="#e50914" />
+                    <View style={[styles.meNavIconCircle, { backgroundColor: 'rgba(16, 185, 129, 0.12)', borderColor: 'rgba(16, 185, 129, 0.28)' }]}>
+                      <Feather name="shield" size={19} color="#10b981" />
                     </View>
                     <View style={styles.meNavTextCol}>
                       <View style={styles.meNavTitleRow}>
-                        <Text style={styles.meNavTitle}>Check Splash Screen</Text>
-                        <View style={[styles.meNavBadge, { backgroundColor: 'rgba(229, 9, 20, 0.2)' }]}>
-                          <Text style={[styles.meNavBadgeText, { color: '#e50914' }]}>Preview</Text>
+                        <Text style={styles.meNavTitle}>Privacy Policy</Text>
+                        <View style={[styles.meNavBadge, { backgroundColor: 'rgba(16, 185, 129, 0.2)' }]}>
+                          <Text style={[styles.meNavBadgeText, { color: '#10b981' }]}>Zero Tracking</Text>
                         </View>
                       </View>
                       <Text style={styles.meNavSubtitle}>
-                        Test &amp; preview animated splash screen
+                        {isWeb ? 'We never collect personal data · Read our policy' : 'Opens in device browser · Zero personal data collected'}
                       </Text>
                     </View>
-                    <Feather name="chevron-right" size={18} color="#737373" />
+                    <Feather name={isWeb ? "chevron-right" : "external-link"} size={18} color="#737373" />
                   </TouchableOpacity>
                 </View>
 
