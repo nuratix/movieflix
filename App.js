@@ -1061,8 +1061,17 @@ function ReelApp() {
 
   const handleAuthSubmit = async () => {
     setAuthError('');
-    if (!authEmail.trim() || !authPassword.trim()) {
-      setAuthError('Please enter email and password.');
+    const emailTrimmed = authEmail.trim().toLowerCase();
+    if (!emailTrimmed || !authPassword.trim()) {
+      setAuthError('Please enter your email and password.');
+      return;
+    }
+    if (!emailTrimmed.includes('@')) {
+      setAuthError('Please enter a valid email address.');
+      return;
+    }
+    if (authMode === 'register' && authPassword.length < 8) {
+      setAuthError('Password must be at least 8 characters.');
       return;
     }
     setAuthLoading(true);
@@ -1071,13 +1080,34 @@ function ReelApp() {
       const res = await apiFetch(`${API_BASE}${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: authEmail.trim().toLowerCase(), password: authPassword }),
+        body: JSON.stringify({ email: emailTrimmed, password: authPassword }),
       });
-      const data = await res.json();
+
+      let data;
+      const contentType = res.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        data = await res.json();
+      } else {
+        const text = await res.text();
+        throw new Error(`Server error (${res.status}): ${text.slice(0, 120)}`);
+      }
+
       if (!res.ok) {
-        setAuthError(data.detail || 'Authentication failed.');
+        if (res.status === 403) {
+          setAuthError('Service temporarily unavailable. Please try again later.');
+        } else if (res.status === 409) {
+          setAuthError('This email is already registered. Please sign in instead.');
+        } else if (res.status === 401) {
+          setAuthError('Incorrect email or password. Please try again.');
+        } else if (res.status === 503) {
+          setAuthError('Server not ready yet. Please try again in a few seconds.');
+        } else {
+          setAuthError(data?.detail || `Error ${res.status}. Please try again.`);
+        }
         return;
       }
+
+      // Success
       setAuthUser(data.user);
       setAuthAccessToken(data.access_token);
       setAuthRefreshToken(data.refresh_token);
@@ -1090,7 +1120,11 @@ function ReelApp() {
       setAuthEmail('');
       setAuthPassword('');
     } catch (e) {
-      setAuthError('Network error. Please try again.');
+      if (e.message && e.message.startsWith('Server error')) {
+        setAuthError(e.message);
+      } else {
+        setAuthError('Network error. Check your connection and try again.');
+      }
     } finally {
       setAuthLoading(false);
     }
@@ -2697,6 +2731,153 @@ function ReelApp() {
 
   const heroItem = heroList[heroIndex] || heroList[0];
 
+
+  // ─── AUTH GATE: full-screen until logged in ──────────────────────────────
+  if (!authInitDone) {
+    // Still checking stored session — show branded splash
+    return (
+      <View style={{ flex: 1, backgroundColor: '#0a0a0a', alignItems: 'center', justifyContent: 'center' }}>
+        <StatusBar style="light" backgroundColor="#0a0a0a" translucent />
+        <View style={{ width: 52, height: 52, borderRadius: 14, backgroundColor: '#e50914', alignItems: 'center', justifyContent: 'center', marginBottom: 20 }}>
+          <Feather name="play" size={24} color="#fff" />
+        </View>
+        <Text style={{ color: '#fff', fontSize: 22, fontWeight: '800', letterSpacing: 1, marginBottom: 8 }}>Movieflix</Text>
+        <ActivityIndicator size="small" color="#e50914" style={{ marginTop: 16 }} />
+      </View>
+    );
+  }
+
+  if (!authUser) {
+    // Not logged in — show full-screen auth
+    return (
+      <View style={{ flex: 1, backgroundColor: '#0a0a0a' }}>
+        <StatusBar style="light" backgroundColor="#0a0a0a" translucent />
+        {/* Background gradient effect */}
+        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: '#0a0a0a' }}>
+          <View style={{ position: 'absolute', top: -100, right: -100, width: 300, height: 300,
+            borderRadius: 150, backgroundColor: 'rgba(229,9,20,0.08)' }} />
+          <View style={{ position: 'absolute', bottom: -50, left: -50, width: 200, height: 200,
+            borderRadius: 100, backgroundColor: 'rgba(229,9,20,0.05)' }} />
+        </View>
+
+        <ScrollView
+          contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: 28, paddingTop: 80 }}
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* Brand */}
+          <View style={{ alignItems: 'center', marginBottom: 48 }}>
+            <View style={{ width: 64, height: 64, borderRadius: 18, backgroundColor: '#e50914',
+              alignItems: 'center', justifyContent: 'center', marginBottom: 18,
+              shadowColor: '#e50914', shadowOffset: { width: 0, height: 8 },
+              shadowOpacity: 0.5, shadowRadius: 20, elevation: 10 }}>
+              <Feather name="play" size={28} color="#fff" />
+            </View>
+            <Text style={{ color: '#fff', fontSize: 28, fontWeight: '800', letterSpacing: 1, marginBottom: 6 }}>
+              Movieflix
+            </Text>
+            <Text style={{ color: '#555', fontSize: 14, textAlign: 'center' }}>
+              {authMode === 'login' ? 'Sign in to continue watching' : 'Create your free account'}
+            </Text>
+          </View>
+
+          {/* Card */}
+          <View style={{ backgroundColor: '#141414', borderRadius: 24, padding: 24,
+            borderWidth: 1, borderColor: 'rgba(255,255,255,0.07)',
+            shadowColor: '#000', shadowOffset: { width: 0, height: 20 },
+            shadowOpacity: 0.5, shadowRadius: 30, elevation: 15,
+            maxWidth: 420, width: '100%', alignSelf: 'center' }}>
+
+            <Text style={{ color: '#fff', fontSize: 22, fontWeight: '800', marginBottom: 4 }}>
+              {authMode === 'login' ? 'Welcome back' : 'Get started'}
+            </Text>
+            <Text style={{ color: '#555', fontSize: 13, marginBottom: 24, lineHeight: 18 }}>
+              {authMode === 'login'
+                ? 'Enter your credentials to access Movieflix'
+                : 'No email confirmation — instant access'}
+            </Text>
+
+            {/* Email */}
+            <View style={{ flexDirection: 'row', alignItems: 'center',
+              backgroundColor: '#1e1e1e', borderRadius: 14, paddingHorizontal: 14,
+              paddingVertical: 13, marginBottom: 12,
+              borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)' }}>
+              <Feather name="mail" size={16} color="#555" style={{ marginRight: 10 }} />
+              <TextInput
+                style={{ flex: 1, color: '#fff', fontSize: 15, padding: 0 }}
+                placeholder="Email address"
+                placeholderTextColor="#444"
+                value={authEmail}
+                onChangeText={setAuthEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+            </View>
+
+            {/* Password */}
+            <View style={{ flexDirection: 'row', alignItems: 'center',
+              backgroundColor: '#1e1e1e', borderRadius: 14, paddingHorizontal: 14,
+              paddingVertical: 13, marginBottom: 20,
+              borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)' }}>
+              <Feather name="lock" size={16} color="#555" style={{ marginRight: 10 }} />
+              <TextInput
+                style={{ flex: 1, color: '#fff', fontSize: 15, padding: 0 }}
+                placeholder="Password (min 8 chars)"
+                placeholderTextColor="#444"
+                value={authPassword}
+                onChangeText={setAuthPassword}
+                secureTextEntry
+                autoCapitalize="none"
+              />
+            </View>
+
+            {/* Error */}
+            {!!authError && (
+              <View style={{ backgroundColor: 'rgba(229,9,20,0.12)', borderRadius: 10,
+                padding: 12, marginBottom: 16, flexDirection: 'row', alignItems: 'center' }}>
+                <Feather name="alert-circle" size={14} color="#e50914" style={{ marginRight: 8 }} />
+                <Text style={{ color: '#e50914', fontSize: 13, flex: 1 }}>{authError}</Text>
+              </View>
+            )}
+
+            {/* Submit */}
+            <TouchableOpacity
+              style={{ backgroundColor: '#e50914', borderRadius: 14, paddingVertical: 16,
+                alignItems: 'center', justifyContent: 'center',
+                shadowColor: '#e50914', shadowOffset: { width: 0, height: 6 },
+                shadowOpacity: 0.4, shadowRadius: 14, elevation: 8,
+                opacity: authLoading ? 0.75 : 1 }}
+              onPress={handleAuthSubmit}
+              disabled={authLoading}
+              activeOpacity={0.85}
+            >
+              {authLoading
+                ? <ActivityIndicator size="small" color="#fff" />
+                : <Text style={{ color: '#fff', fontSize: 16, fontWeight: '800' }}>
+                    {authMode === 'login' ? 'Sign In' : 'Create Account'}
+                  </Text>
+              }
+            </TouchableOpacity>
+
+            {/* Toggle */}
+            <TouchableOpacity
+              style={{ alignItems: 'center', paddingVertical: 16 }}
+              onPress={() => { setAuthMode(authMode === 'login' ? 'register' : 'login'); setAuthError(''); }}
+            >
+              <Text style={{ color: '#555', fontSize: 13 }}>
+                {authMode === 'login' ? "Don't have an account? " : 'Already have an account? '}
+                <Text style={{ color: '#e50914', fontWeight: '700' }}>
+                  {authMode === 'login' ? 'Register' : 'Sign In'}
+                </Text>
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </View>
+    );
+  }
+  // ─── End Auth Gate ─────────────────────────────────────────────────────────
 
   return (
     <View style={styles.appContainer}>
