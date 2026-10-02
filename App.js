@@ -171,6 +171,14 @@ const buildVideoSource = (url) => {
   if (typeof url === 'string' && (url.startsWith('file://') || url.startsWith('/'))) {
     return { uri: url.startsWith('file://') ? url : `file://${url}` };
   }
+
+  // On Web: stream through our Vercel reverse proxy to bypass browser CORS & Forbidden Referer restrictions
+  if (Platform.OS === 'web' && typeof url === 'string' && (url.startsWith('http://') || url.startsWith('https://'))) {
+    return {
+      uri: `/api/proxy?url=${encodeURIComponent(url)}`,
+    };
+  }
+
   return {
     uri: url,
     headers: {
@@ -1762,6 +1770,21 @@ function ReelApp() {
         await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
       } catch (e) {
         console.log("Portrait restore error:", e);
+      }
+    } else {
+      if (typeof document !== 'undefined' && (document.fullscreenElement || document.webkitFullscreenElement)) {
+        try {
+          if (document.exitFullscreen) {
+            await document.exitFullscreen();
+          } else if (document.webkitExitFullscreen) {
+            await document.webkitExitFullscreen();
+          }
+          if (window.screen?.orientation?.unlock) {
+            window.screen.orientation.unlock();
+          }
+        } catch (e) {
+          console.log("Web exit fullscreen error:", e);
+        }
       }
     }
     exitFullscreenSystemBar();
@@ -4761,7 +4784,10 @@ function ReelCustomPlayer({
         if (typeof directCap.url === 'string' && directCap.url.startsWith('file://')) {
           srtText = await FileSystem.readAsStringAsync(directCap.url);
         } else {
-          const res = await fetch(directCap.url);
+          const fetchUrl = Platform.OS === 'web' && typeof directCap.url === 'string' && directCap.url.startsWith('http')
+            ? `/api/proxy?url=${encodeURIComponent(directCap.url)}`
+            : directCap.url;
+          const res = await fetch(fetchUrl);
           srtText = await res.text();
         }
         const parsed = parseSRT(srtText);
@@ -4781,7 +4807,10 @@ function ReelCustomPlayer({
       setActiveTranslateLang(code);
       setLoadingSubtitle(true);
       try {
-        const res = await fetch(baseCap.url);
+        const baseFetchUrl = Platform.OS === 'web' && typeof baseCap.url === 'string' && baseCap.url.startsWith('http')
+          ? `/api/proxy?url=${encodeURIComponent(baseCap.url)}`
+          : baseCap.url;
+        const res = await fetch(baseFetchUrl);
         const srtText = await res.text();
         const parsed = parseSRT(srtText);
         subtitleCuesRef.current = parsed;
@@ -4837,8 +4866,28 @@ function ReelCustomPlayer({
   // Cycle video fit mode: Fit (contain) -> Zoom (cover) -> Stretch (fill)
   const cycleContentFit = () => {
     wakeControls();
+
+    // On Web: request browser fullscreen and lock to landscape orientation
+    if (Platform.OS === 'web' && typeof document !== 'undefined') {
+      try {
+        const docEl = document.documentElement;
+        if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+          if (docEl.requestFullscreen) {
+            docEl.requestFullscreen().catch(() => {});
+          } else if (docEl.webkitRequestFullscreen) {
+            docEl.webkitRequestFullscreen().catch(() => {});
+          }
+        }
+        if (window.screen?.orientation?.lock) {
+          window.screen.orientation.lock('landscape').catch(() => {});
+        }
+      } catch (e) {
+        console.log("Web fullscreen/landscape request error:", e);
+      }
+    }
+
     if (contentFitMode === 'contain') {
-      setContentFitMode('cover'); // Zoom to fill (crops slight edges)
+      setContentFitMode('cover'); // Zoom to fill full browser landscape (no letterboxing)
     } else if (contentFitMode === 'cover') {
       setContentFitMode('fill'); // Stretch full landscape (no cropping)
     } else {
@@ -4846,10 +4895,38 @@ function ReelCustomPlayer({
     }
   };
 
-  // Toggle Screen Orientation manually
+  // Toggle Screen Orientation manually (Mobile) / Browser Fullscreen (Web)
   const toggleOrientation = async () => {
     wakeControls();
-    if (Platform.OS === 'web') return;
+    if (Platform.OS === 'web') {
+      if (typeof document !== 'undefined') {
+        try {
+          if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+            const elem = document.documentElement;
+            if (elem.requestFullscreen) {
+              await elem.requestFullscreen();
+            } else if (elem.webkitRequestFullscreen) {
+              await elem.webkitRequestFullscreen();
+            }
+            if (window.screen?.orientation?.lock) {
+              window.screen.orientation.lock('landscape').catch(() => {});
+            }
+          } else {
+            if (document.exitFullscreen) {
+              await document.exitFullscreen();
+            } else if (document.webkitExitFullscreen) {
+              await document.webkitExitFullscreen();
+            }
+            if (window.screen?.orientation?.unlock) {
+              window.screen.orientation.unlock();
+            }
+          }
+        } catch (e) {
+          console.log("Web fullscreen toggle error:", e);
+        }
+      }
+      return;
+    }
     try {
       const current = await ScreenOrientation.getOrientationAsync();
       const isCurrentlyLandscape =
@@ -4930,7 +5007,12 @@ function ReelCustomPlayer({
       */}
       <VideoView
         ref={videoViewRef}
-        style={StyleSheet.absoluteFill}
+        style={[
+          StyleSheet.absoluteFill,
+          Platform.OS === 'web'
+            ? { width: '100%', height: '100%', objectFit: contentFitMode }
+            : { width: '100%', height: '100%' },
+        ]}
         player={player}
         nativeControls={false}
         allowsFullscreen={false}
