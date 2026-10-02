@@ -2845,24 +2845,24 @@ function ReelApp() {
 
   // ─── NATIVE (APK) ONBOARDING & AUTH GATE ─────────────────────────────────
   if (Platform.OS !== 'web') {
-    // 0. While auth session is restoring from AsyncStorage on startup, show sleek skeleton loader!
-    if (!authInitDone) {
-      return (
-        <View style={{ flex: 1, backgroundColor: '#0a0a0a', paddingTop: insets.top }}>
-          <StatusBar barStyle="light-content" backgroundColor="#0a0a0a" translucent />
-          <HomeSkeletonLoader />
-        </View>
-      );
-    }
-
-    // 1. Returning authenticated user: quick splash screen on startup
-    if (authUser && !splashFinished) {
+    // 1. Every time user opens the APK cold: show custom splash screen FIRST!
+    if (!splashFinished) {
       return (
         <CustomSplashScreen
           onFinish={() => {
             setSplashFinished(true);
           }}
         />
+      );
+    }
+
+    // 2. While session is restoring from storage (if still loading):
+    if (!authInitDone) {
+      return (
+        <View style={{ flex: 1, backgroundColor: '#0a0a0a', paddingTop: insets.top }}>
+          <StatusBar barStyle="light-content" backgroundColor="#0a0a0a" translucent />
+          <HomeSkeletonLoader />
+        </View>
       );
     }
 
