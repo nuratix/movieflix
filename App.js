@@ -78,11 +78,15 @@ const API_BASE =
   process.env.EXPO_PUBLIC_API_BASE || 'https://moviebo.vercel.app';
 const API_KEY = process.env.EXPO_PUBLIC_API_KEY || '';
 
-/** Wrapper around fetch() that injects the secret app-key header on every request */
+// Module-level auth token — updated by App component via useEffect
+let _authToken = null;
+
+/** Wrapper around fetch() that injects X-App-Key + Bearer token on every request */
 const apiFetch = (url, options = {}) => {
   const headers = {
     ...(options.headers || {}),
     ...(API_KEY ? { 'X-App-Key': API_KEY } : {}),
+    ...(_authToken ? { 'Authorization': `Bearer ${_authToken}` } : {}),
   };
   return fetch(url, { ...options, headers });
 };
@@ -978,6 +982,135 @@ function ReelApp() {
   const [mainTab, setMainTab] = useState('Home');
   const [homeCategory, setHomeCategory] = useState('All'); // 'All' | 'Movies' | 'Series'
   const [meSubTab, setMeSubTab] = useState(null); // null (clean buttons hub) | 'History' | 'MyList' | 'Downloads'
+
+  // ─── Auth State ────────────────────────────────────────────────────────────
+  const [authUser, setAuthUser] = useState(null);       // { id, email } | null
+  const [authAccessToken, setAuthAccessToken] = useState(null);
+  const [authRefreshToken, setAuthRefreshToken] = useState(null);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authMode, setAuthMode] = useState('login');    // 'login' | 'register'
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [authError, setAuthError] = useState('');
+  const [authLoading, setAuthLoading] = useState(false);
+  const [authInitDone, setAuthInitDone] = useState(false);
+
+  // Sync access token to module-level var so apiFetch picks it up automatically
+  useEffect(() => { _authToken = authAccessToken; }, [authAccessToken]);
+
+  // Load saved session from AsyncStorage on startup
+  useEffect(() => {
+    (async () => {
+      try {
+        const saved = await AsyncStorage.getItem('@mf_session');
+        if (saved) {
+          const { user, accessToken, refreshToken } = JSON.parse(saved);
+          // Try to refresh immediately since access token may be expired
+          const refreshed = await _authRefresh(refreshToken, true);
+          if (refreshed) {
+            setAuthUser(refreshed.user);
+            setAuthAccessToken(refreshed.access_token);
+            setAuthRefreshToken(refreshed.refresh_token);
+            await AsyncStorage.setItem('@mf_session', JSON.stringify({
+              user: refreshed.user,
+              accessToken: refreshed.access_token,
+              refreshToken: refreshed.refresh_token,
+            }));
+          } else {
+            // Fallback: use stored token as-is
+            setAuthUser(user);
+            setAuthAccessToken(accessToken);
+            setAuthRefreshToken(refreshToken);
+          }
+        }
+      } catch (_) {}
+      setAuthInitDone(true);
+    })();
+  }, []);
+
+  // Auto-refresh access token every 50 minutes (before 1hr expiry)
+  useEffect(() => {
+    if (!authRefreshToken) return;
+    const interval = setInterval(async () => {
+      const refreshed = await _authRefresh(authRefreshToken, true);
+      if (refreshed) {
+        setAuthAccessToken(refreshed.access_token);
+        setAuthRefreshToken(refreshed.refresh_token);
+        await AsyncStorage.setItem('@mf_session', JSON.stringify({
+          user: authUser,
+          accessToken: refreshed.access_token,
+          refreshToken: refreshed.refresh_token,
+        }));
+      }
+    }, 50 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [authRefreshToken, authUser]);
+
+  const _authRefresh = async (refreshToken, silent = false) => {
+    if (!refreshToken) return null;
+    try {
+      const res = await apiFetch(`${API_BASE}/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh_token: refreshToken }),
+      });
+      if (!res.ok) return null;
+      return await res.json();
+    } catch { return null; }
+  };
+
+  const handleAuthSubmit = async () => {
+    setAuthError('');
+    if (!authEmail.trim() || !authPassword.trim()) {
+      setAuthError('Please enter email and password.');
+      return;
+    }
+    setAuthLoading(true);
+    try {
+      const endpoint = authMode === 'login' ? '/auth/login' : '/auth/register';
+      const res = await apiFetch(`${API_BASE}${endpoint}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: authEmail.trim().toLowerCase(), password: authPassword }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setAuthError(data.detail || 'Authentication failed.');
+        return;
+      }
+      setAuthUser(data.user);
+      setAuthAccessToken(data.access_token);
+      setAuthRefreshToken(data.refresh_token);
+      await AsyncStorage.setItem('@mf_session', JSON.stringify({
+        user: data.user,
+        accessToken: data.access_token,
+        refreshToken: data.refresh_token,
+      }));
+      setShowAuthModal(false);
+      setAuthEmail('');
+      setAuthPassword('');
+    } catch (e) {
+      setAuthError('Network error. Please try again.');
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await apiFetch(`${API_BASE}/auth/logout`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh_token: authRefreshToken || '' }),
+      });
+    } catch (_) {}
+    setAuthUser(null);
+    setAuthAccessToken(null);
+    setAuthRefreshToken(null);
+    _authToken = null;
+    await AsyncStorage.removeItem('@mf_session');
+  };
+  // ─── End Auth State ────────────────────────────────────────────────────────
 
   // App Update State
   const [updateInfo, setUpdateInfo] = useState(null); // null | { hasUpdate, latestVersion, ... }
@@ -2657,13 +2790,25 @@ function ReelApp() {
                 <View style={styles.meHeaderGlassCard}>
                   <View style={styles.meUserRow}>
                     <View style={styles.meAvatarWrapper}>
-                      <Feather name="user" size={24} color="#f5f5f1" />
-                      <View style={styles.meOnlineBadge} />
+                      <Feather name={authUser ? 'user-check' : 'user'} size={24} color={authUser ? '#e50914' : '#f5f5f1'} />
+                      {authUser && <View style={styles.meOnlineBadge} />}
                     </View>
                     <View style={styles.meUserInfo}>
-                      <Text style={styles.meUserName}>My Space</Text>
-                      <Text style={styles.meUserSubtext}>Local Device Storage</Text>
+                      <Text style={styles.meUserName}>
+                        {authUser ? authUser.email.split('@')[0] : 'My Space'}
+                      </Text>
+                      <Text style={styles.meUserSubtext}>
+                        {authUser ? authUser.email : 'Local Device Storage'}
+                      </Text>
                     </View>
+                    <TouchableOpacity
+                      style={[styles.meAuthBtn, authUser && styles.meAuthBtnLogout]}
+                      onPress={() => authUser ? handleLogout() : setShowAuthModal(true)}
+                      activeOpacity={0.8}
+                    >
+                      <Feather name={authUser ? 'log-out' : 'log-in'} size={13} color="#fff" style={{ marginRight: 4 }} />
+                      <Text style={styles.meAuthBtnText}>{authUser ? 'Sign Out' : 'Sign In'}</Text>
+                    </TouchableOpacity>
                   </View>
 
                   {/* Quick Stats Counter Row */}
@@ -6141,6 +6286,105 @@ function ReelCustomPlayer({
           </View>
         </TouchableOpacity>
       </Modal>
+
+      {/* ─── AUTH MODAL ─────────────────────────────────────────────────── */}
+      <Modal
+        visible={showAuthModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowAuthModal(false)}
+      >
+        <View style={styles.authBackdrop}>
+          <View style={styles.authCard}>
+            {/* Close button */}
+            <TouchableOpacity style={styles.authCloseBtn} onPress={() => setShowAuthModal(false)}>
+              <Feather name="x" size={20} color="#888" />
+            </TouchableOpacity>
+
+            {/* Logo */}
+            <View style={styles.authLogoRow}>
+              <View style={styles.authLogoDot} />
+              <Text style={styles.authLogoText}>Movieflix</Text>
+            </View>
+
+            {/* Title */}
+            <Text style={styles.authTitle}>
+              {authMode === 'login' ? 'Sign In' : 'Create Account'}
+            </Text>
+            <Text style={styles.authSubtitle}>
+              {authMode === 'login'
+                ? 'Welcome back — sign in to continue watching'
+                : 'Join Movieflix — free, no confirmation needed'}
+            </Text>
+
+            {/* Email */}
+            <View style={styles.authInputWrapper}>
+              <Feather name="mail" size={16} color="#666" style={{ marginRight: 10 }} />
+              <TextInput
+                style={styles.authInput}
+                placeholder="Email address"
+                placeholderTextColor="#555"
+                value={authEmail}
+                onChangeText={setAuthEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+            </View>
+
+            {/* Password */}
+            <View style={styles.authInputWrapper}>
+              <Feather name="lock" size={16} color="#666" style={{ marginRight: 10 }} />
+              <TextInput
+                style={styles.authInput}
+                placeholder="Password (min 8 chars)"
+                placeholderTextColor="#555"
+                value={authPassword}
+                onChangeText={setAuthPassword}
+                secureTextEntry
+                autoCapitalize="none"
+              />
+            </View>
+
+            {/* Error */}
+            {!!authError && (
+              <Text style={styles.authError}>{authError}</Text>
+            )}
+
+            {/* Submit */}
+            <TouchableOpacity
+              style={styles.authSubmitBtn}
+              onPress={handleAuthSubmit}
+              disabled={authLoading}
+              activeOpacity={0.85}
+            >
+              {authLoading
+                ? <ActivityIndicator size="small" color="#fff" />
+                : <Text style={styles.authSubmitText}>
+                    {authMode === 'login' ? 'Sign In' : 'Create Account'}
+                  </Text>
+              }
+            </TouchableOpacity>
+
+            {/* Toggle */}
+            <TouchableOpacity
+              style={styles.authToggleBtn}
+              onPress={() => { setAuthMode(authMode === 'login' ? 'register' : 'login'); setAuthError(''); }}
+            >
+              <Text style={styles.authToggleText}>
+                {authMode === 'login'
+                  ? "Don't have an account? "
+                  : 'Already have an account? '}
+                <Text style={styles.authToggleLink}>
+                  {authMode === 'login' ? 'Register' : 'Sign In'}
+                </Text>
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+      {/* ─── END AUTH MODAL ─────────────────────────────────────────────── */}
+
     </View>
   );
 }
@@ -9566,6 +9810,137 @@ const styles = StyleSheet.create({
     color: '#737373',
     fontSize: 14,
     fontWeight: '600',
+  },
+
+  // ─── Auth Modal Styles ──────────────────────────────────────────────────
+  authBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.82)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+  },
+  authCard: {
+    width: '100%',
+    maxWidth: 400,
+    backgroundColor: '#141414',
+    borderRadius: 24,
+    padding: 28,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 20 },
+    shadowOpacity: 0.6,
+    shadowRadius: 40,
+    elevation: 20,
+  },
+  authCloseBtn: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
+    padding: 8,
+    zIndex: 10,
+  },
+  authLogoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  authLogoDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#e50914',
+    marginRight: 8,
+  },
+  authLogoText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '800',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+  },
+  authTitle: {
+    color: '#fff',
+    fontSize: 24,
+    fontWeight: '800',
+    marginBottom: 6,
+  },
+  authSubtitle: {
+    color: '#666',
+    fontSize: 13,
+    marginBottom: 24,
+    lineHeight: 18,
+  },
+  authInputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1e1e1e',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.07)',
+  },
+  authInput: {
+    flex: 1,
+    color: '#fff',
+    fontSize: 15,
+    padding: 0,
+  },
+  authError: {
+    color: '#e50914',
+    fontSize: 13,
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  authSubmitBtn: {
+    backgroundColor: '#e50914',
+    borderRadius: 14,
+    paddingVertical: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+    shadowColor: '#e50914',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  authSubmitText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  authToggleBtn: {
+    alignItems: 'center',
+    paddingVertical: 4,
+  },
+  authToggleText: {
+    color: '#666',
+    fontSize: 13,
+  },
+  authToggleLink: {
+    color: '#e50914',
+    fontWeight: '700',
+  },
+  // ─── Me Tab Auth Button ─────────────────────────────────────────────────
+  meAuthBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#e50914',
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  meAuthBtnLogout: {
+    backgroundColor: '#2a2a2a',
+  },
+  meAuthBtnText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
   },
 });
 
