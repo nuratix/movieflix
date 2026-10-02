@@ -13,9 +13,7 @@ import {
   Image,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import TiltedPostersBackground from './TiltedPostersBackground';
 
 const BRAND_LOGO = require('./assets/movieflix_brand_logo.png');
 
@@ -58,64 +56,65 @@ export default function AuthScreen({
     }
   };
 
+  const topInset = Math.max(insets?.top || 0, Platform.OS === 'android' ? 24 : 16);
+  const bottomInset = Math.max(insets?.bottom || 0, 16);
+
   return (
     <View style={styles.container}>
-      <StatusBar style="light" backgroundColor="#0a0a0a" translucent />
+      <StatusBar barStyle="light-content" backgroundColor="#000000" translucent />
 
-      {/* 1. Background Layer: Decorative posters + dark vignette overlay strictly isolated behind card */}
-      <View style={styles.backgroundLayer} pointerEvents="none">
-        <TiltedPostersBackground />
-        <LinearGradient
-          colors={[
-            'rgba(10,10,10,0.80)',
-            'rgba(10,10,10,0.60)',
-            'rgba(10,10,10,0.95)',
-          ]}
-          locations={[0, 0.45, 0.90]}
-          style={StyleSheet.absoluteFillObject}
+      {/* Top Header Bar */}
+      <View style={[styles.headerBar, { paddingTop: topInset + 8 }]}>
+        {onClose ? (
+          <TouchableOpacity
+            style={styles.backBtn}
+            onPress={onClose}
+            activeOpacity={0.7}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          >
+            <Feather name="arrow-left" size={24} color="#ffffff" />
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.backBtnPlaceholder} />
+        )}
+
+        <Image
+          source={BRAND_LOGO}
+          style={styles.headerLogo}
+          resizeMode="contain"
         />
+
+        <View style={styles.backBtnPlaceholder} />
       </View>
 
-      {/* Close / Back to browse button */}
-      {onClose && (
-        <TouchableOpacity
-          style={[styles.closeBtn, { top: insets.top + 16 }]}
-          onPress={onClose}
-          activeOpacity={0.7}
-          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-        >
-          <Feather name="x" size={20} color="#fff" />
-        </TouchableOpacity>
-      )}
-
+      {/* Main Full-Screen Form */}
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.keyboardView}
-        renderToHardwareTextureAndroid={true}
       >
         <ScrollView
           contentContainerStyle={[
             styles.scrollContent,
-            { paddingTop: insets.top + 50, paddingBottom: insets.bottom + 30 },
+            { paddingBottom: bottomInset + 24 },
           ]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* Main Floating Glass Card */}
-          <View style={styles.card}>
-            {/* Brand Logo */}
-            <View style={styles.brandRow}>
-              <Image
-                source={BRAND_LOGO}
-                style={styles.brandLogoImage}
-                resizeMode="contain"
-              />
-            </View>
+          <View style={styles.formContainer}>
+            {/* Title & Subtitle */}
+            <Text style={styles.title}>
+              {mode === 'login' ? 'Sign In' : 'Create Account'}
+            </Text>
+            <Text style={styles.subtitle}>
+              {mode === 'login'
+                ? 'Sign in with your email to start streaming'
+                : 'Watch unlimited movies, TV shows, and series'}
+            </Text>
 
-            {/* Segment Switcher Tabs */}
-            <View style={styles.segmentRow}>
+            {/* Segment Switcher */}
+            <View style={styles.segmentContainer}>
               <TouchableOpacity
-                style={[styles.segmentTab, mode === 'login' && styles.segmentTabActive]}
+                style={[styles.segmentBtn, mode === 'login' && styles.segmentBtnActive]}
                 onPress={() => {
                   setMode('login');
                   setLocalError('');
@@ -128,7 +127,7 @@ export default function AuthScreen({
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.segmentTab, mode === 'register' && styles.segmentTabActive]}
+                style={[styles.segmentBtn, mode === 'register' && styles.segmentBtnActive]}
                 onPress={() => {
                   setMode('register');
                   setLocalError('');
@@ -136,62 +135,63 @@ export default function AuthScreen({
                 activeOpacity={0.8}
               >
                 <Text style={[styles.segmentText, mode === 'register' && styles.segmentTextActive]}>
-                  Create Account
+                  Register
                 </Text>
               </TouchableOpacity>
             </View>
 
-            <Text style={styles.cardSubtitle}>
-              {mode === 'login'
-                ? 'Sign in with your email to start streaming'
-                : 'Instant access — no email confirmation required'}
-            </Text>
-
             {/* Email Input */}
-            <View style={styles.inputWrapper}>
-              <Feather name="mail" size={16} color="#777" style={{ marginRight: 12 }} />
-              <TextInput
-                style={styles.input}
-                placeholder="Email address"
-                placeholderTextColor="#555"
-                value={email}
-                onChangeText={(val) => {
-                  setEmail(val);
-                  setLocalError('');
-                }}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Email</Text>
+              <View style={styles.inputBox}>
+                <Feather name="mail" size={18} color="#666" style={styles.inputIcon} />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Enter your email"
+                  placeholderTextColor="#555"
+                  value={email}
+                  onChangeText={(val) => {
+                    setEmail(val);
+                    setLocalError('');
+                  }}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+              </View>
             </View>
 
             {/* Password Input */}
-            <View style={styles.inputWrapper}>
-              <Feather name="lock" size={16} color="#777" style={{ marginRight: 12 }} />
-              <TextInput
-                style={styles.input}
-                placeholder={mode === 'register' ? 'Password (min 8 chars)' : 'Password'}
-                placeholderTextColor="#555"
-                value={password}
-                onChangeText={(val) => {
-                  setPassword(val);
-                  setLocalError('');
-                }}
-                secureTextEntry={!showPassword}
-                autoCapitalize="none"
-              />
-              <TouchableOpacity
-                onPress={() => setShowPassword(!showPassword)}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                <Feather name={showPassword ? 'eye' : 'eye-off'} size={16} color="#777" />
-              </TouchableOpacity>
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Password</Text>
+              <View style={styles.inputBox}>
+                <Feather name="lock" size={18} color="#666" style={styles.inputIcon} />
+                <TextInput
+                  style={styles.input}
+                  placeholder={mode === 'register' ? 'At least 8 characters' : 'Enter your password'}
+                  placeholderTextColor="#555"
+                  value={password}
+                  onChangeText={(val) => {
+                    setPassword(val);
+                    setLocalError('');
+                  }}
+                  secureTextEntry={!showPassword}
+                  autoCapitalize="none"
+                />
+                <TouchableOpacity
+                  onPress={() => setShowPassword(!showPassword)}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  style={styles.eyeBtn}
+                >
+                  <Feather name={showPassword ? 'eye' : 'eye-off'} size={18} color="#888" />
+                </TouchableOpacity>
+              </View>
             </View>
 
-            {/* Error Message */}
+            {/* Error Banner */}
             {!!displayError && (
               <View style={styles.errorBox}>
-                <Feather name="alert-circle" size={14} color="#e50914" style={{ marginRight: 8 }} />
+                <Feather name="alert-circle" size={16} color="#e50914" style={{ marginRight: 8, marginTop: 1 }} />
                 <Text style={styles.errorText}>{displayError}</Text>
               </View>
             )}
@@ -206,25 +206,25 @@ export default function AuthScreen({
               {authLoading ? (
                 <ActivityIndicator size="small" color="#fff" />
               ) : (
-                <Text style={styles.submitText}>
+                <Text style={styles.submitBtnText}>
                   {mode === 'login' ? 'Sign In' : 'Create Free Account'}
                 </Text>
               )}
             </TouchableOpacity>
 
-            {/* Bottom Toggle Note */}
+            {/* Mode Switch Helper */}
             <TouchableOpacity
-              style={styles.toggleRow}
+              style={styles.switchRow}
               onPress={() => {
                 setMode(mode === 'login' ? 'register' : 'login');
                 setLocalError('');
               }}
               activeOpacity={0.7}
             >
-              <Text style={styles.toggleNote}>
-                {mode === 'login' ? "Don't have an account? " : 'Already registered? '}
-                <Text style={styles.toggleHighlight}>
-                  {mode === 'login' ? 'Sign Up' : 'Sign In'}
+              <Text style={styles.switchNote}>
+                {mode === 'login' ? "New to MovieFlix? " : 'Already have an account? '}
+                <Text style={styles.switchHighlight}>
+                  {mode === 'login' ? 'Sign up now' : 'Sign in'}
                 </Text>
               </Text>
             </TouchableOpacity>
@@ -238,170 +238,169 @@ export default function AuthScreen({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0a0a0a',
-    position: 'relative',
-    overflow: 'hidden',
-    height: Platform.OS === 'web' ? '100vh' : '100%',
-    maxHeight: Platform.OS === 'web' ? '100vh' : '100%',
+    backgroundColor: '#000000',
     width: '100%',
+    height: Platform.OS === 'web' ? '100vh' : '100%',
   },
-  backgroundLayer: {
-    ...StyleSheet.absoluteFillObject,
-    zIndex: 0,
-    elevation: 0,
+  headerBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    backgroundColor: '#000000',
   },
-  closeBtn: {
-    position: 'absolute',
-    right: 20,
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  backBtn: {
+    width: 40,
+    height: 40,
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 100,
-    elevation: 30,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.15)',
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  backBtnPlaceholder: {
+    width: 40,
+    height: 40,
+  },
+  headerLogo: {
+    width: 170,
+    height: 38,
   },
   keyboardView: {
     flex: 1,
-    width: '100%',
-    height: '100%',
-    zIndex: 10,
-    elevation: 10,
-    backgroundColor: 'rgba(0,0,0,0.01)',
+    backgroundColor: '#000000',
   },
   scrollContent: {
     flexGrow: 1,
-    justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 20,
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+    paddingTop: 16,
   },
-  card: {
+  formContainer: {
     width: '100%',
     maxWidth: 420,
-    backgroundColor: 'rgba(18, 18, 22, 0.94)',
-    borderRadius: 26,
-    padding: 28,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.12)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 24 },
-    shadowOpacity: 0.7,
-    shadowRadius: 40,
-    elevation: 25,
-    zIndex: 20,
   },
-  brandRow: {
-    alignItems: 'center',
-    marginBottom: 20,
+  title: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#ffffff',
+    letterSpacing: -0.5,
+    marginBottom: 6,
   },
-  brandLogoImage: {
-    width: 210,
-    height: 44,
+  subtitle: {
+    fontSize: 14,
+    color: '#8e8e93',
+    lineHeight: 20,
+    marginBottom: 24,
   },
-  segmentRow: {
+  segmentContainer: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderRadius: 14,
+    backgroundColor: '#16161a',
+    borderRadius: 12,
     padding: 4,
-    marginBottom: 16,
+    marginBottom: 24,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.06)',
+    borderColor: '#242428',
   },
-  segmentTab: {
+  segmentBtn: {
     flex: 1,
     paddingVertical: 10,
     alignItems: 'center',
-    borderRadius: 11,
+    borderRadius: 9,
   },
-  segmentTabActive: {
+  segmentBtnActive: {
     backgroundColor: '#e50914',
-    shadowColor: '#e50914',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
-    elevation: 4,
   },
   segmentText: {
-    color: '#8e8e93',
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '700',
+    color: '#8e8e93',
   },
   segmentTextActive: {
     color: '#ffffff',
   },
-  cardSubtitle: {
-    color: '#8e8e93',
-    fontSize: 13,
-    textAlign: 'center',
-    lineHeight: 18,
-    marginBottom: 20,
+  inputGroup: {
+    marginBottom: 18,
   },
-  inputWrapper: {
+  inputLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#cccccc',
+    marginBottom: 8,
+  },
+  inputBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(30, 30, 34, 0.95)',
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 13,
-    marginBottom: 13,
+    backgroundColor: '#121215',
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
+    borderColor: '#25252a',
+    paddingHorizontal: 14,
+    height: 52,
+  },
+  inputIcon: {
+    marginRight: 10,
   },
   input: {
     flex: 1,
     color: '#ffffff',
     fontSize: 15,
+    height: '100%',
     padding: 0,
+  },
+  eyeBtn: {
+    padding: 6,
+    marginLeft: 6,
   },
   errorBox: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     backgroundColor: 'rgba(229, 9, 20, 0.12)',
-    borderRadius: 12,
+    borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    marginBottom: 14,
+    marginBottom: 18,
     borderWidth: 1,
-    borderColor: 'rgba(229, 9, 20, 0.25)',
+    borderColor: 'rgba(229, 9, 20, 0.3)',
   },
   errorText: {
-    color: '#e50914',
+    color: '#ff4d4f',
     fontSize: 13,
+    lineHeight: 18,
     flex: 1,
-    lineHeight: 17,
   },
   submitBtn: {
     backgroundColor: '#e50914',
-    borderRadius: 14,
-    paddingVertical: 15,
+    borderRadius: 12,
+    height: 52,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 4,
-    marginBottom: 18,
+    marginTop: 6,
+    marginBottom: 20,
     shadowColor: '#e50914',
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.45,
-    shadowRadius: 14,
-    elevation: 6,
+    shadowOpacity: 0.35,
+    shadowRadius: 12,
+    elevation: 4,
   },
-  submitText: {
+  submitBtnText: {
     color: '#ffffff',
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '800',
-    letterSpacing: 0.5,
+    letterSpacing: 0.3,
   },
-  toggleRow: {
+  switchRow: {
     alignItems: 'center',
+    paddingVertical: 8,
   },
-  toggleNote: {
-    color: '#777',
-    fontSize: 13,
+  switchNote: {
+    fontSize: 14,
+    color: '#8e8e93',
   },
-  toggleHighlight: {
-    color: '#e50914',
+  switchHighlight: {
+    color: '#ffffff',
     fontWeight: '700',
+    textDecorationLine: 'underline',
   },
 });

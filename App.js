@@ -1026,6 +1026,7 @@ function ReelApp() {
   const [authLoading, setAuthLoading] = useState(false);
   const [authInitDone, setAuthInitDone] = useState(false);
   const [splashFinished, setSplashFinished] = useState(false);
+  const [showSplashPreview, setShowSplashPreview] = useState(false);
 
   // Sync access token to module-level var so apiFetch picks it up automatically
   useEffect(() => { _authToken = authAccessToken; }, [authAccessToken]);
@@ -2833,6 +2834,15 @@ function ReelApp() {
 
   const heroItem = heroList[heroIndex] || heroList[0];
 
+  // ─── SPLASH SCREEN PREVIEW (FOR TESTING/CHECKING FROM ME PAGE) ───────────
+  if (showSplashPreview) {
+    return (
+      <CustomSplashScreen
+        onFinish={() => setShowSplashPreview(false)}
+      />
+    );
+  }
+
   // ─── NATIVE (APK) ONBOARDING & AUTH GATE ─────────────────────────────────
   if (Platform.OS !== 'web') {
     // 1. Returning authenticated user: quick splash screen while session loads
@@ -3115,6 +3125,29 @@ function ReelApp() {
                       <Feather name="chevron-right" size={18} color="#737373" />
                     </TouchableOpacity>
                   )}
+
+                  {/* Button: Check Splash Screen */}
+                  <TouchableOpacity
+                    style={styles.meNavCard}
+                    onPress={() => setShowSplashPreview(true)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={[styles.meNavIconCircle, { backgroundColor: 'rgba(229, 9, 20, 0.12)', borderColor: 'rgba(229, 9, 20, 0.28)' }]}>
+                      <Feather name="play-circle" size={19} color="#e50914" />
+                    </View>
+                    <View style={styles.meNavTextCol}>
+                      <View style={styles.meNavTitleRow}>
+                        <Text style={styles.meNavTitle}>Check Splash Screen</Text>
+                        <View style={[styles.meNavBadge, { backgroundColor: 'rgba(229, 9, 20, 0.2)' }]}>
+                          <Text style={[styles.meNavBadgeText, { color: '#e50914' }]}>Preview</Text>
+                        </View>
+                      </View>
+                      <Text style={styles.meNavSubtitle}>
+                        Test &amp; preview animated splash screen
+                      </Text>
+                    </View>
+                    <Feather name="chevron-right" size={18} color="#737373" />
+                  </TouchableOpacity>
                 </View>
 
                 {/* Minimal App Updates Section (Native Mobile Only) */}

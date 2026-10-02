@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { View, StyleSheet, Dimensions, Platform, StatusBar, Animated, Image, Easing } from 'react-native';
+import { View, StyleSheet, Dimensions, Platform, StatusBar, Animated, Image, Easing, TouchableOpacity, Text } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import TiltedPostersBackground from './TiltedPostersBackground';
 
@@ -115,6 +115,18 @@ export default function CustomSplashScreen({ onFinish }) {
           </View>
         )}
       </View>
+
+      {/* Optional Skip/Close button for preview & fast dismissal */}
+      {onFinish && (
+        <TouchableOpacity
+          style={styles.skipBtn}
+          onPress={onFinish}
+          activeOpacity={0.7}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+        >
+          <Text style={styles.skipBtnText}>Skip</Text>
+        </TouchableOpacity>
+      )}
     </Animated.View>
   );
 }
@@ -155,5 +167,24 @@ const styles = StyleSheet.create({
   },
   brandLogo: {
     zIndex: 2,
+  },
+  skipBtn: {
+    position: 'absolute',
+    top: 48,
+    right: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    zIndex: 999,
+    elevation: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  skipBtnText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.3,
   },
 });
