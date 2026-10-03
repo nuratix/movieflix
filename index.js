@@ -1,3 +1,5 @@
+// Enable Fast Refresh and HMR runtime in development for Web & Native
+import '@expo/metro-runtime';
 import { registerRootComponent } from 'expo';
 import { Platform } from 'react-native';
 
