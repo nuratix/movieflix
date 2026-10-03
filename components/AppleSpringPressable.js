@@ -1,9 +1,13 @@
 import React, { useRef } from 'react';
-import { Animated, Pressable, StyleSheet } from 'react-native';
+import { Animated, Pressable } from 'react-native';
 import { triggerHaptic } from '../hapticService';
 
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+
 /**
- * Apple-grade Spring Pressable with fluid physics scaling and crisp haptics
+ * Apple-grade Spring Pressable with fluid physics scaling and crisp haptics.
+ * Uses Animated.createAnimatedComponent(Pressable) directly to preserve exact
+ * parent flexbox layout, padding, dimensions, and border radius.
  */
 export function AppleSpringPressable({
   children,
@@ -19,7 +23,7 @@ export function AppleSpringPressable({
 }) {
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
-  const handlePressIn = () => {
+  const handlePressIn = (e) => {
     if (disabled) return;
     Animated.spring(scaleAnim, {
       toValue: scaleTo,
@@ -27,15 +31,17 @@ export function AppleSpringPressable({
       friction: 22,
       useNativeDriver: true,
     }).start();
+    if (rest.onPressIn) rest.onPressIn(e);
   };
 
-  const handlePressOut = () => {
+  const handlePressOut = (e) => {
     Animated.spring(scaleAnim, {
       toValue: 1,
       tension: 300,
       friction: 18,
       useNativeDriver: true,
     }).start();
+    if (rest.onPressOut) rest.onPressOut(e);
   };
 
   const handlePress = (e) => {
@@ -51,31 +57,23 @@ export function AppleSpringPressable({
   };
 
   return (
-    <Pressable
+    <AnimatedPressable
       onPress={handlePress}
       onLongPress={onLongPress ? handleLongPress : undefined}
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
       disabled={disabled}
       hitSlop={hitSlop}
-      style={({ pressed }) => [
-        { opacity: pressed && activeOpacity ? activeOpacity : 1 },
-        typeof style === 'function' ? style({ pressed }) : style,
+      style={(state) => [
+        { transform: [{ scale: scaleAnim }] },
+        state.pressed && activeOpacity ? { opacity: activeOpacity } : null,
+        typeof style === 'function' ? style(state) : style,
       ]}
       {...rest}
     >
-      <Animated.View style={[styles.innerContainer, { transform: [{ scale: scaleAnim }] }]}>
-        {children}
-      </Animated.View>
-    </Pressable>
+      {children}
+    </AnimatedPressable>
   );
 }
-
-const styles = StyleSheet.create({
-  innerContainer: {
-    alignItems: 'stretch',
-    justifyContent: 'center',
-  },
-});
 
 export default AppleSpringPressable;

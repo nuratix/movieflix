@@ -78,6 +78,7 @@ import { AppleSpringPressable } from './components/AppleSpringPressable';
 import { MovieFlixInAppWidget } from './components/MovieFlixInAppWidget';
 import { getRandomWidgetPosters } from './widget/widgetData';
 import { updateHomeScreenWidgetAsync, pinWidgetToHomeScreenAsync } from './widget/widgetService';
+import { LOCAL_POSTERS } from './assets/posters';
 import {
   TRENDING_NOW,
   LATEST_RELEASES,
@@ -523,9 +524,26 @@ async function translateText(text, targetLang) {
 }
 
 // Fast, ultra-resilient SafeImage powered by expo-image with automatic error reset, bundled require() assets, and multi-protocol fallback
+function getDeterministicPoster(key) {
+  if (!key) return LOCAL_POSTERS[0];
+  let str = '';
+  if (typeof key === 'string') {
+    str = key;
+  } else if (typeof key === 'number') {
+    str = String(key);
+  } else if (typeof key === 'object') {
+    str = key.uri || (typeof key.default === 'string' ? key.default : '') || JSON.stringify(key);
+  }
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash * 31 + str.charCodeAt(i)) & 0xffffffff;
+  }
+  const idx = Math.abs(hash) % LOCAL_POSTERS.length;
+  return LOCAL_POSTERS[idx];
+}
+
 const SafeImage = React.memo(function SafeImage({ uri, style, resizeMode = 'cover', contentPosition = 'center' }) {
   const [hasError, setHasError] = useState(false);
-  const isWeb = Platform.OS === 'web';
   const prevUriRef = useRef(uri);
 
   // Only reset error state if the actual URI prop changes to a new target
@@ -546,12 +564,13 @@ const SafeImage = React.memo(function SafeImage({ uri, style, resizeMode = 'cove
         contentPosition={contentPosition}
         cachePolicy="memory-disk"
         transition={150}
+        onError={() => setHasError(true)}
       />
     );
   }
 
   // 2. Direct local filesystem URI (/storage/... or file://...)
-  if (typeof uri === 'string' && (uri.startsWith('file://') || uri.startsWith('/'))) {
+  if (typeof uri === 'string' && (uri.startsWith('file://') || uri.startsWith('/storage/'))) {
     const fileUri = uri.startsWith('file://') ? uri : `file://${uri}`;
     return (
       <ExpoImage
@@ -566,19 +585,42 @@ const SafeImage = React.memo(function SafeImage({ uri, style, resizeMode = 'cove
     );
   }
 
-  // 3. Object with uri property or string remote URL
+  // 3. Object with uri property or string remote URL, or Web require format
   let cleanUri = null;
-  if (uri && typeof uri === 'string') {
+  if (typeof uri === 'string') {
     cleanUri = uri.trim();
-  } else if (uri && typeof uri === 'object' && typeof uri.uri === 'string') {
-    cleanUri = uri.uri.trim();
+  } else if (uri && typeof uri === 'object') {
+    if (typeof uri.uri === 'string') cleanUri = uri.uri.trim();
+    else if (typeof uri.default === 'string') cleanUri = uri.default.trim();
+    else if (typeof uri.src === 'string') cleanUri = uri.src.trim();
+    else if (uri.default && typeof uri.default.src === 'string') cleanUri = uri.default.src.trim();
+    else if (typeof uri.default === 'number') {
+      return (
+        <ExpoImage
+          source={uri.default}
+          style={style}
+          contentFit={resizeMode === 'contain' ? 'contain' : (resizeMode || 'cover')}
+          contentPosition={contentPosition}
+          cachePolicy="memory-disk"
+          transition={150}
+          onError={() => setHasError(true)}
+        />
+      );
+    }
   }
 
+  // Fallback to high-resolution local poster on error or missing uri — ZERO black boxes
   if (!cleanUri || hasError) {
+    const fallbackPoster = getDeterministicPoster(uri);
     return (
-      <View style={[style, styles.fallbackImageContainer]}>
-        <Feather name="film" size={22} color="#3a3a3c" />
-      </View>
+      <ExpoImage
+        source={fallbackPoster}
+        style={style}
+        contentFit={resizeMode === 'contain' ? 'contain' : (resizeMode || 'cover')}
+        contentPosition={contentPosition}
+        cachePolicy="memory-disk"
+        transition={150}
+      />
     );
   }
 
@@ -588,26 +630,9 @@ const SafeImage = React.memo(function SafeImage({ uri, style, resizeMode = 'cove
     effectiveUri = effectiveUri.replace('http://', 'https://');
   }
 
-  // On Web: never pass custom headers to ExpoImage.
-  // Passing headers forces expo-image to run client-side fetch() with useHeaders(),
-  // which resets image to null on every parent re-render and causes images to flash/disappear!
-  const imageSource = useMemo(() => {
-    if (isWeb) {
-      return { uri: effectiveUri };
-    }
-    return {
-      uri: effectiveUri,
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36',
-        'Referer': 'https://moviebox.ph/',
-        'Accept': 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
-      },
-    };
-  }, [effectiveUri, isWeb]);
-
   return (
     <ExpoImage
-      source={imageSource}
+      source={{ uri: effectiveUri }}
       style={style}
       contentFit={resizeMode === 'contain' ? 'contain' : (resizeMode || 'cover')}
       contentPosition={contentPosition}
@@ -3589,57 +3614,34 @@ function ReelApp() {
                     </TouchableOpacity>
                   )}
 
-                  {/* Button: Privacy Policy */}
-                  <AppleSpringPressable
-                    style={styles.meNavCard}
-                    onPress={handleOpenPrivacy}
-                    scaleTo={0.97}
-                    haptic="light"
-                  >
-                    <View style={[styles.meNavIconCircle, { backgroundColor: 'rgba(229, 9, 20, 0.12)', borderColor: 'rgba(229, 9, 20, 0.28)' }]}>
-                      <Feather name="shield" size={19} color="#e50914" />
-                    </View>
-                    <View style={styles.meNavTextCol}>
-                      <View style={styles.meNavTitleRow}>
-                        <Text style={styles.meNavTitle}>Privacy Policy</Text>
-                        <View style={[styles.meNavBadge, { backgroundColor: 'rgba(229, 9, 20, 0.16)' }]}>
-                          <Text style={[styles.meNavBadgeText, { color: '#e50914' }]}>Zero Tracking</Text>
-                        </View>
-                      </View>
-                      <Text style={styles.meNavSubtitle}>
-                        {isWeb ? 'We never collect personal data · Read our policy' : 'Opens in device browser · Zero personal data collected'}
-                      </Text>
-                    </View>
-                    <Feather name={isWeb ? "chevron-right" : "external-link"} size={18} color="#737373" />
-                  </AppleSpringPressable>
+                  {/* Compact Clean Links: Telegram & Privacy Policy */}
+                  <View style={styles.meCompactLinksRow}>
+                    <AppleSpringPressable
+                      style={styles.meCompactLinkBtn}
+                      onPress={() => {
+                        Linking.openURL('https://t.me/movieflixlol').catch((err) => {
+                          console.warn('Failed to open Telegram URL:', err);
+                        });
+                      }}
+                      scaleTo={0.96}
+                      haptic="light"
+                    >
+                      <Feather name="send" size={14} color="#e50914" />
+                      <Text style={styles.meCompactLinkText}>Telegram</Text>
+                      <Feather name="external-link" size={12} color="#737373" />
+                    </AppleSpringPressable>
 
-                  {/* Button: Join our Telegram */}
-                  <AppleSpringPressable
-                    style={styles.meNavCard}
-                    onPress={() => {
-                      Linking.openURL('https://t.me/movieflixlol').catch((err) => {
-                        console.warn('Failed to open Telegram URL:', err);
-                      });
-                    }}
-                    scaleTo={0.97}
-                    haptic="light"
-                  >
-                    <View style={[styles.meNavIconCircle, { backgroundColor: 'rgba(229, 9, 20, 0.12)', borderColor: 'rgba(229, 9, 20, 0.28)' }]}>
-                      <Feather name="send" size={18} color="#e50914" />
-                    </View>
-                    <View style={styles.meNavTextCol}>
-                      <View style={styles.meNavTitleRow}>
-                        <Text style={styles.meNavTitle}>Join our Telegram</Text>
-                        <View style={[styles.meNavBadge, { backgroundColor: 'rgba(229, 9, 20, 0.16)' }]}>
-                          <Text style={[styles.meNavBadgeText, { color: '#e50914' }]}>Community</Text>
-                        </View>
-                      </View>
-                      <Text style={styles.meNavSubtitle}>
-                        New releases, updates &amp; requests · t.me/movieflixlol
-                      </Text>
-                    </View>
-                    <Feather name="external-link" size={18} color="#737373" />
-                  </AppleSpringPressable>
+                    <AppleSpringPressable
+                      style={styles.meCompactLinkBtn}
+                      onPress={handleOpenPrivacy}
+                      scaleTo={0.96}
+                      haptic="light"
+                    >
+                      <Feather name="shield" size={14} color="#e50914" />
+                      <Text style={styles.meCompactLinkText}>Privacy Policy</Text>
+                      <Feather name={isWeb ? "chevron-right" : "external-link"} size={13} color="#737373" />
+                    </AppleSpringPressable>
+                  </View>
                 </View>
 
                 {/* ─── 2x4 Home Screen Widget Showcase Card ─── */}
@@ -6971,7 +6973,7 @@ function ReelCustomPlayer({
             {/* Next Episode Center Button (when series) */}
             {Boolean(isSeries || currentSeason > 0 || currentEpisode > 0 || movie?.isSeries || movie?.subjectType === 2) && onPlayNextEpisode && (
               <TouchableOpacity
-                style={[styles.playerSeekRoundBtn, { marginLeft: 12 }]}
+                style={styles.playerSeekRoundBtn}
                 onPress={() => {
                   triggerHaptic('medium');
                   wakeControls();
@@ -7563,11 +7565,12 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   heroPlayButton: {
+    height: 44,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: '#e50914',
     paddingHorizontal: 22,
-    paddingVertical: 10,
     borderRadius: 999,
     shadowColor: '#e50914',
     shadowOffset: { width: 0, height: 4 },
@@ -7581,13 +7584,14 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   heroListButton: {
+    height: 44,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.2)',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingHorizontal: 18,
     borderRadius: 999,
   },
   heroListButtonText: {
@@ -7596,9 +7600,9 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   heroInfoButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.2)',
@@ -7755,6 +7759,8 @@ const styles = StyleSheet.create({
     width: 125,
   },
   cardImageContainer: {
+    width: '100%',
+    height: '100%',
     flex: 1,
     borderRadius: 14,
     overflow: 'hidden',
@@ -7764,6 +7770,7 @@ const styles = StyleSheet.create({
   cardPosterImage: {
     width: '100%',
     height: '100%',
+    borderRadius: 14,
   },
   cardGlassBorder: {
     ...StyleSheet.absoluteFillObject,
@@ -8045,18 +8052,20 @@ const styles = StyleSheet.create({
   },
   detailActionsBar: {
     flexDirection: 'row',
+    alignItems: 'center',
     gap: 12,
     paddingHorizontal: 18,
     marginVertical: 14,
   },
   detailPlayButton: {
     flex: 1.4,
+    height: 46,
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#e50914',
-    paddingVertical: 12,
-    borderRadius: 10,
+    paddingHorizontal: 18,
+    borderRadius: 999,
     shadowColor: '#e50914',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.35,
@@ -8070,15 +8079,15 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
   },
   detailDownloadButton: {
+    height: 46,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(255, 255, 255, 0.08)',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.16)',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 10,
+    paddingHorizontal: 18,
+    borderRadius: 999,
   },
   detailDownloadButtonText: {
     color: '#f5f5f1',
@@ -8086,15 +8095,15 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   detailListButton: {
+    height: 46,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(255, 255, 255, 0.08)',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.16)',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 10,
+    paddingHorizontal: 18,
+    borderRadius: 999,
   },
   detailListButtonText: {
     color: '#f5f5f1',
@@ -9020,6 +9029,32 @@ const styles = StyleSheet.create({
     color: '#e50914',
     fontSize: 11,
     fontWeight: '700',
+  },
+  meCompactLinksRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 4,
+    marginBottom: 12,
+  },
+  meCompactLinkBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    height: 42,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.14)',
+    paddingHorizontal: 14,
+  },
+  meCompactLinkText: {
+    color: '#e5e5ea',
+    fontSize: 13,
+    fontWeight: '600',
+    letterSpacing: 0.1,
   },
 
   // 2x4 MOVIEFLIX WIDGET STYLES
