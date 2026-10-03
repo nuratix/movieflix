@@ -16,7 +16,6 @@ import {
   Easing,
   PanResponder,
   Linking,
-  Alert,
 } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import { StatusBar } from 'expo-status-bar';
@@ -68,18 +67,6 @@ import {
   OFFICIAL_DOWNLOAD_ORIGIN,
 } from './securityService';
 import {
-  triggerHaptic,
-  hapticLight,
-  hapticMedium,
-  hapticSelection,
-  hapticSuccess,
-} from './hapticService';
-import { AppleSpringPressable } from './components/AppleSpringPressable';
-import { MovieFlixInAppWidget } from './components/MovieFlixInAppWidget';
-import { getRandomWidgetPosters } from './widget/widgetData';
-import { updateHomeScreenWidgetAsync, pinWidgetToHomeScreenAsync } from './widget/widgetService';
-import { LOCAL_POSTERS } from './assets/posters';
-import {
   TRENDING_NOW,
   LATEST_RELEASES,
   NETFLIX_POPULAR,
@@ -89,6 +76,7 @@ import {
   WEBSERIES_LATEST,
   CARTOONS,
 } from './homeCatalog';
+import { LOCAL_POSTERS } from './assets/posters';
 import { getImdbData } from './imdbService';
 import WelcomeScreen from './WelcomeScreen';
 import AuthScreen from './AuthScreen';
@@ -523,27 +511,21 @@ async function translateText(text, targetLang) {
   return text;
 }
 
-// Fast, ultra-resilient SafeImage powered by expo-image with automatic error reset, bundled require() assets, and multi-protocol fallback
-function getDeterministicPoster(key) {
-  if (!key) return LOCAL_POSTERS[0];
+function getFallbackPoster(key) {
+  if (!LOCAL_POSTERS || LOCAL_POSTERS.length === 0) return null;
   let str = '';
-  if (typeof key === 'string') {
-    str = key;
-  } else if (typeof key === 'number') {
-    str = String(key);
-  } else if (typeof key === 'object') {
-    str = key.uri || (typeof key.default === 'string' ? key.default : '') || JSON.stringify(key);
-  }
+  if (typeof key === 'string') str = key;
+  else if (typeof key === 'number') str = String(key);
+  else if (key && typeof key === 'object') str = key.uri || key.default || (typeof key.default === 'string' ? key.default : '') || '';
   let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    hash = (hash * 31 + str.charCodeAt(i)) & 0xffffffff;
-  }
-  const idx = Math.abs(hash) % LOCAL_POSTERS.length;
-  return LOCAL_POSTERS[idx];
+  for (let i = 0; i < str.length; i++) hash = (hash * 31 + str.charCodeAt(i)) & 0xffffffff;
+  return LOCAL_POSTERS[Math.abs(hash) % LOCAL_POSTERS.length];
 }
 
+// Fast, ultra-resilient SafeImage powered by expo-image with automatic error reset, bundled require() assets, and multi-protocol fallback
 const SafeImage = React.memo(function SafeImage({ uri, style, resizeMode = 'cover', contentPosition = 'center' }) {
   const [hasError, setHasError] = useState(false);
+  const isWeb = Platform.OS === 'web';
   const prevUriRef = useRef(uri);
 
   // Only reset error state if the actual URI prop changes to a new target
@@ -564,13 +546,12 @@ const SafeImage = React.memo(function SafeImage({ uri, style, resizeMode = 'cove
         contentPosition={contentPosition}
         cachePolicy="memory-disk"
         transition={150}
-        onError={() => setHasError(true)}
       />
     );
   }
 
   // 2. Direct local filesystem URI (/storage/... or file://...)
-  if (typeof uri === 'string' && (uri.startsWith('file://') || uri.startsWith('/storage/'))) {
+  if (typeof uri === 'string' && (uri.startsWith('file://') || uri.startsWith('/'))) {
     const fileUri = uri.startsWith('file://') ? uri : `file://${uri}`;
     return (
       <ExpoImage
@@ -587,7 +568,7 @@ const SafeImage = React.memo(function SafeImage({ uri, style, resizeMode = 'cove
 
   // 3. Object with uri property or string remote URL, or Web require format
   let cleanUri = null;
-  if (typeof uri === 'string') {
+  if (uri && typeof uri === 'string') {
     cleanUri = uri.trim();
   } else if (uri && typeof uri === 'object') {
     if (typeof uri.uri === 'string') cleanUri = uri.uri.trim();
@@ -603,24 +584,29 @@ const SafeImage = React.memo(function SafeImage({ uri, style, resizeMode = 'cove
           contentPosition={contentPosition}
           cachePolicy="memory-disk"
           transition={150}
-          onError={() => setHasError(true)}
         />
       );
     }
   }
 
-  // Fallback to high-resolution local poster on error or missing uri — ZERO black boxes
   if (!cleanUri || hasError) {
-    const fallbackPoster = getDeterministicPoster(uri);
+    const fallbackPoster = getFallbackPoster(uri);
+    if (fallbackPoster) {
+      return (
+        <ExpoImage
+          source={fallbackPoster}
+          style={style}
+          contentFit={resizeMode === 'contain' ? 'contain' : (resizeMode || 'cover')}
+          contentPosition={contentPosition}
+          cachePolicy="memory-disk"
+          transition={150}
+        />
+      );
+    }
     return (
-      <ExpoImage
-        source={fallbackPoster}
-        style={style}
-        contentFit={resizeMode === 'contain' ? 'contain' : (resizeMode || 'cover')}
-        contentPosition={contentPosition}
-        cachePolicy="memory-disk"
-        transition={150}
-      />
+      <View style={[style, styles.fallbackImageContainer]}>
+        <Feather name="film" size={22} color="#3a3a3c" />
+      </View>
     );
   }
 
@@ -630,9 +616,26 @@ const SafeImage = React.memo(function SafeImage({ uri, style, resizeMode = 'cove
     effectiveUri = effectiveUri.replace('http://', 'https://');
   }
 
+  // On Web: never pass custom headers to ExpoImage.
+  // Passing headers forces expo-image to run client-side fetch() with useHeaders(),
+  // which resets image to null on every parent re-render and causes images to flash/disappear!
+  const imageSource = useMemo(() => {
+    if (isWeb) {
+      return { uri: effectiveUri };
+    }
+    return {
+      uri: effectiveUri,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36',
+        'Referer': 'https://moviebox.ph/',
+        'Accept': 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
+      },
+    };
+  }, [effectiveUri, isWeb]);
+
   return (
     <ExpoImage
-      source={{ uri: effectiveUri }}
+      source={imageSource}
       style={style}
       contentFit={resizeMode === 'contain' ? 'contain' : (resizeMode || 'cover')}
       contentPosition={contentPosition}
@@ -1112,37 +1115,6 @@ function ReelApp() {
   const [notFoundPath, setNotFoundPath] = useState('');
   const [showWebInstallBanner, setShowWebInstallBanner] = useState(true);
   const [securityStatus, setSecurityStatus] = useState({ verified: true, authentic: true, isTampered: false });
-
-  // ─── 2x4 MovieFlix Widget State & Shuffling ────────────────────────────────
-  const [widgetPosters, setWidgetPosters] = useState(() => getRandomWidgetPosters());
-
-  // Automatically randomize widget posters every time the user opens the app
-  useEffect(() => {
-    try {
-      const fresh = getRandomWidgetPosters();
-      setWidgetPosters(fresh);
-      updateHomeScreenWidgetAsync().catch(() => {});
-    } catch (_) {}
-  }, []);
-
-  const handleShuffleWidgetPosters = () => {
-    triggerHaptic('medium');
-    const fresh = getRandomWidgetPosters();
-    setWidgetPosters(fresh);
-    updateHomeScreenWidgetAsync().catch(() => {});
-  };
-
-  const handlePinWidgetToHomeScreen = async () => {
-    triggerHaptic('medium');
-    const pinned = await pinWidgetToHomeScreenAsync();
-    if (!pinned && Platform.OS === 'android') {
-      Alert.alert(
-        'Add Widget',
-        'To add the MovieFlix 2×4 Widget to your home screen:\n\n1. Long-press an empty space on your Android home screen.\n2. Tap "Widgets".\n3. Scroll down to "MovieFlix" and tap or drag "MovieFlix 2×4" onto your home screen!',
-        [{ text: 'Got it' }]
-      );
-    }
-  };
 
   // Sync access token to module-level var so apiFetch picks it up automatically
   useEffect(() => { _authToken = authAccessToken; }, [authAccessToken]);
@@ -3414,17 +3386,16 @@ function ReelApp() {
               {serverCategories.map((tab) => {
                 const isActive = homeCategory === tab.id;
                 return (
-                  <AppleSpringPressable
+                  <TouchableOpacity
                     key={`home-tab-${tab.id}`}
                     style={[styles.tabPill, isActive && styles.tabPillActive]}
                     onPress={() => handleSelectCategory(tab.id)}
-                    scaleTo={0.93}
-                    haptic="selection"
+                    activeOpacity={0.7}
                   >
                     <Text style={[styles.tabPillText, isActive && styles.tabPillTextActive]}>
                       {tab.label}
                     </Text>
-                  </AppleSpringPressable>
+                  </TouchableOpacity>
                 );
               })}
             </ScrollView>
@@ -3614,82 +3585,55 @@ function ReelApp() {
                     </TouchableOpacity>
                   )}
 
-                  {/* Compact Clean Links: Telegram & Privacy Policy */}
-                  <View style={styles.meCompactLinksRow}>
-                    <AppleSpringPressable
-                      style={styles.meCompactLinkBtn}
-                      onPress={() => {
-                        Linking.openURL('https://t.me/movieflixlol').catch((err) => {
-                          console.warn('Failed to open Telegram URL:', err);
-                        });
-                      }}
-                      scaleTo={0.96}
-                      haptic="light"
-                    >
-                      <Feather name="send" size={14} color="#e50914" />
-                      <Text style={styles.meCompactLinkText}>Telegram</Text>
-                      <Feather name="external-link" size={12} color="#737373" />
-                    </AppleSpringPressable>
-
-                    <AppleSpringPressable
-                      style={styles.meCompactLinkBtn}
-                      onPress={handleOpenPrivacy}
-                      scaleTo={0.96}
-                      haptic="light"
-                    >
-                      <Feather name="shield" size={14} color="#e50914" />
-                      <Text style={styles.meCompactLinkText}>Privacy Policy</Text>
-                      <Feather name={isWeb ? "chevron-right" : "external-link"} size={13} color="#737373" />
-                    </AppleSpringPressable>
-                  </View>
-                </View>
-
-                {/* ─── 2x4 Home Screen Widget Showcase Card ─── */}
-                <View style={styles.meWidgetCardContainer}>
-                  <View style={styles.meWidgetHeaderRow}>
-                    <View style={styles.meWidgetHeaderLeft}>
-                      <View style={[styles.meNavIconCircle, { backgroundColor: 'rgba(229, 9, 20, 0.12)', borderColor: 'rgba(229, 9, 20, 0.28)' }]}>
-                        <Feather name="grid" size={17} color="#e50914" />
-                      </View>
-                      <View>
-                        <Text style={styles.meWidgetCardTitle}>MovieFlix Widget 2×4</Text>
-                        <Text style={styles.meWidgetCardSubtitle}>Trending now · Changes on every app open</Text>
-                      </View>
+                  {/* Button: Privacy Policy */}
+                  <TouchableOpacity
+                    style={styles.meNavCard}
+                    onPress={handleOpenPrivacy}
+                    activeOpacity={0.7}
+                  >
+                    <View style={[styles.meNavIconCircle, { backgroundColor: 'rgba(229, 9, 20, 0.12)', borderColor: 'rgba(229, 9, 20, 0.28)' }]}>
+                      <Feather name="shield" size={19} color="#e50914" />
                     </View>
-                    <AppleSpringPressable
-                      style={styles.meWidgetShuffleBtn}
-                      onPress={handleShuffleWidgetPosters}
-                      scaleTo={0.93}
-                      haptic="medium"
-                    >
-                      <Feather name="refresh-cw" size={12} color="#f5f5f1" style={{ marginRight: 4 }} />
-                      <Text style={styles.meWidgetShuffleBtnText}>Shuffle</Text>
-                    </AppleSpringPressable>
-                  </View>
+                    <View style={styles.meNavTextCol}>
+                      <View style={styles.meNavTitleRow}>
+                        <Text style={styles.meNavTitle}>Privacy Policy</Text>
+                        <View style={[styles.meNavBadge, { backgroundColor: 'rgba(229, 9, 20, 0.16)' }]}>
+                          <Text style={[styles.meNavBadgeText, { color: '#e50914' }]}>Zero Tracking</Text>
+                        </View>
+                      </View>
+                      <Text style={styles.meNavSubtitle}>
+                        {isWeb ? 'We never collect personal data · Read our policy' : 'Opens in device browser · Zero personal data collected'}
+                      </Text>
+                    </View>
+                    <Feather name={isWeb ? "chevron-right" : "external-link"} size={18} color="#737373" />
+                  </TouchableOpacity>
 
-                  <View style={styles.meWidgetPreviewWrapper}>
-                    <MovieFlixInAppWidget
-                      posters={widgetPosters}
-                      onPressPoster={(item) => {
-                        const match = [...trendingNow, ...latestReleases].find(
-                          m => m.name?.toLowerCase().includes(item.title.toLowerCase())
-                        );
-                        if (match) openDetail(match);
-                      }}
-                    />
-                  </View>
-
-                  {!isWeb && (
-                    <AppleSpringPressable
-                      style={styles.meWidgetPinBtn}
-                      onPress={handlePinWidgetToHomeScreen}
-                      scaleTo={0.97}
-                      haptic="medium"
-                    >
-                      <Feather name="plus-circle" size={15} color="#FFFFFF" style={{ marginRight: 6 }} />
-                      <Text style={styles.meWidgetPinBtnText}>Add Widget to Home Screen</Text>
-                    </AppleSpringPressable>
-                  )}
+                  {/* Button: Join our Telegram */}
+                  <TouchableOpacity
+                    style={styles.meNavCard}
+                    onPress={() => {
+                      Linking.openURL('https://t.me/movieflixlol').catch((err) => {
+                        console.warn('Failed to open Telegram URL:', err);
+                      });
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <View style={[styles.meNavIconCircle, { backgroundColor: 'rgba(229, 9, 20, 0.12)', borderColor: 'rgba(229, 9, 20, 0.28)' }]}>
+                      <Feather name="send" size={18} color="#e50914" />
+                    </View>
+                    <View style={styles.meNavTextCol}>
+                      <View style={styles.meNavTitleRow}>
+                        <Text style={styles.meNavTitle}>Join our Telegram</Text>
+                        <View style={[styles.meNavBadge, { backgroundColor: 'rgba(229, 9, 20, 0.16)' }]}>
+                          <Text style={[styles.meNavBadgeText, { color: '#e50914' }]}>Community</Text>
+                        </View>
+                      </View>
+                      <Text style={styles.meNavSubtitle}>
+                        New releases, updates &amp; requests · t.me/movieflixlol
+                      </Text>
+                    </View>
+                    <Feather name="external-link" size={18} color="#737373" />
+                  </TouchableOpacity>
                 </View>
 
                 {/* Minimal App Updates Section (Native Mobile Only) */}
@@ -3778,7 +3722,7 @@ function ReelApp() {
                       <Feather
                         name={securityStatus?.isTampered ? "alert-triangle" : "shield"}
                         size={12}
-                        color={securityStatus?.isTampered ? "#ef4444" : "#e50914"}
+                        color={securityStatus?.isTampered ? "#ef4444" : "#10b981"}
                         style={{ marginRight: 6 }}
                       />
                       <Text style={[styles.securityVerifyText, securityStatus?.isTampered && { color: '#ef4444' }]}>
@@ -4309,11 +4253,9 @@ function ReelApp() {
                       {heroItem.name}
                     </Text>
 
-                    {/* Metadata Row (Clean, No Emojis, Only Red/Glass Pills) */}
+                    {/* Metadata Row (Clean, No Emojis, No Tags) */}
                     <View style={styles.heroMetaRow}>
-                      <View style={styles.heroMatchBadge}>
-                        <Text style={styles.heroMatchScore}>{heroItem.match || "99% match"}</Text>
-                      </View>
+                      <Text style={styles.heroMatchScore}>{heroItem.match || "99% match"}</Text>
                       <View style={styles.metaGlassPill}>
                         <Text style={styles.metaGlassPillText}>{heroItem.year || "2025"}</Text>
                       </View>
@@ -4327,21 +4269,19 @@ function ReelApp() {
 
                     {/* Hero Action Buttons */}
                     <View style={styles.heroActionsRow}>
-                      <AppleSpringPressable
+                      <TouchableOpacity
                         style={styles.heroPlayButton}
                         onPress={() => launchPlayer(heroItem, 1, 1, Boolean(heroItem.isSeries))}
-                        scaleTo={0.95}
-                        haptic="medium"
+                        activeOpacity={0.85}
                       >
                         <Feather name="play" size={17} color="#FFFFFF" style={{ marginRight: 6 }} />
                         <Text style={styles.heroPlayButtonText}>Play</Text>
-                      </AppleSpringPressable>
+                      </TouchableOpacity>
 
-                      <AppleSpringPressable
+                      <TouchableOpacity
                         style={styles.heroListButton}
                         onPress={() => toggleMyList(heroItem)}
-                        scaleTo={0.95}
-                        haptic="success"
+                        activeOpacity={0.8}
                       >
                         <Feather
                           name={isInMyList(heroItem) ? "check" : "plus"}
@@ -4352,16 +4292,15 @@ function ReelApp() {
                         <Text style={styles.heroListButtonText}>
                           {isInMyList(heroItem) ? "In My List" : "My List"}
                         </Text>
-                      </AppleSpringPressable>
+                      </TouchableOpacity>
 
-                      <AppleSpringPressable
+                      <TouchableOpacity
                         style={styles.heroInfoButton}
                         onPress={() => openDetail(heroItem)}
-                        scaleTo={0.92}
-                        haptic="light"
+                        activeOpacity={0.8}
                       >
                         <Feather name="info" size={18} color="#f5f5f1" />
-                      </AppleSpringPressable>
+                      </TouchableOpacity>
                     </View>
 
                     {/* Carousel Indicator Dots */}
@@ -4383,19 +4322,6 @@ function ReelApp() {
                   </Animated.View>
                 </View>
               )}
-
-              {/* MOVIEFLIX 2x4 WIDGET (CLEAN MINIMAL 100% SPEC) */}
-              <View style={styles.homeWidgetSection}>
-                <MovieFlixInAppWidget
-                  posters={widgetPosters}
-                  onPressPoster={(item) => {
-                    const match = [...trendingNow, ...latestReleases].find(
-                      m => m.name?.toLowerCase().includes(item.title?.toLowerCase() || '')
-                    );
-                    if (match) openDetail(match);
-                  }}
-                />
-              </View>
 
               {/* CATALOG CONTENT ROWS FOR 'ALL' */}
               {homeCategory === 'All' && (
@@ -4686,9 +4612,7 @@ function ReelApp() {
                     ) : null}
                   </View>
                 ) : (
-                  <View style={styles.detailMatchBadge}>
-                    <Text style={styles.detailMatchScore}>98% match</Text>
-                  </View>
+                  <Text style={styles.detailMatchScore}>98% match</Text>
                 )}
 
                 <View style={styles.metaGlassPill}>
@@ -4713,7 +4637,7 @@ function ReelApp() {
 
             {/* Actions Bar: Play, Download, Add to List */}
             <View style={styles.detailActionsBar}>
-              <AppleSpringPressable
+              <TouchableOpacity
                 style={styles.detailPlayButton}
                 onPress={() => {
                   const isSeries = Boolean(detailData?.isSeries);
@@ -4721,33 +4645,30 @@ function ReelApp() {
                   const ep = isSeries ? 1 : 0;
                   launchPlayer(detailMovie, se, ep, isSeries);
                 }}
-                scaleTo={0.95}
-                haptic="medium"
+                activeOpacity={0.85}
               >
                 <Feather name="play" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
                 <Text style={styles.detailPlayButtonText}>
                   {detailData?.isSeries ? "Play S1:E1" : "Play Now"}
                 </Text>
-              </AppleSpringPressable>
+              </TouchableOpacity>
 
               {/* DOWNLOAD BUTTON (DISABLED ON WEB) */}
               {!isWeb && (
-                <AppleSpringPressable
+                <TouchableOpacity
                   style={styles.detailDownloadButton}
                   onPress={() => openDownloadModal(detailMovie, detailData)}
-                  scaleTo={0.95}
-                  haptic="light"
+                  activeOpacity={0.85}
                 >
                   <Feather name="download" size={16} color="#f5f5f1" style={{ marginRight: 6 }} />
                   <Text style={styles.detailDownloadButtonText}>Download</Text>
-                </AppleSpringPressable>
+                </TouchableOpacity>
               )}
 
-              <AppleSpringPressable
+              <TouchableOpacity
                 style={styles.detailListButton}
                 onPress={() => toggleMyList(detailMovie)}
-                scaleTo={0.95}
-                haptic="success"
+                activeOpacity={0.8}
               >
                 <Feather
                   name={isInMyList(detailMovie) ? "check" : "plus"}
@@ -4758,7 +4679,7 @@ function ReelApp() {
                 <Text style={styles.detailListButtonText}>
                   {isInMyList(detailMovie) ? "In My List" : "Add to List"}
                 </Text>
-              </AppleSpringPressable>
+              </TouchableOpacity>
             </View>
 
             {/* Real Synopsis / Overview & IMDb Cast & Actresses */}
@@ -4855,17 +4776,16 @@ function ReelApp() {
                 {/* Season Pills */}
                 <View style={styles.seasonPillsRow}>
                   {detailData.seasons.map((s, idx) => (
-                    <AppleSpringPressable
+                    <TouchableOpacity
                       key={`season-pill-${s.se}-${idx}`}
                       style={[styles.seasonSelectPill, selectedSeasonIdx === idx && styles.seasonSelectPillActive]}
                       onPress={() => setSelectedSeasonIdx(idx)}
-                      scaleTo={0.93}
-                      haptic="selection"
+                      activeOpacity={0.8}
                     >
                       <Text style={[styles.seasonSelectPillText, selectedSeasonIdx === idx && styles.seasonSelectPillTextActive]}>
                         Season {s.se}
                       </Text>
-                    </AppleSpringPressable>
+                    </TouchableOpacity>
                   ))}
                 </View>
 
@@ -4875,12 +4795,11 @@ function ReelApp() {
                   {getEpisodesArray(detailData.seasons[selectedSeasonIdx]).map((ep, idx) => {
                     const se = detailData.seasons[selectedSeasonIdx]?.se || 1;
                     return (
-                      <AppleSpringPressable
+                      <TouchableOpacity
                         key={`ep-${se}-${ep}-${idx}`}
                         style={styles.episodeGlassCard}
                         onPress={() => launchPlayer(detailMovie, se, ep, true)}
-                        scaleTo={0.96}
-                        haptic="light"
+                        activeOpacity={0.8}
                       >
                         <View style={styles.episodeImageWrapper}>
                           <SafeImage uri={detailMovie?.poster_url} style={styles.episodeImage} />
@@ -4899,7 +4818,7 @@ function ReelApp() {
                         </View>
                         <Text style={styles.episodeCardTitle}>Episode {ep}</Text>
                         <Text style={styles.episodeCardSub}>Season {se}</Text>
-                      </AppleSpringPressable>
+                      </TouchableOpacity>
                     );
                   })}
                 </ScrollView>
@@ -5563,11 +5482,10 @@ function ReelApp() {
       {/* ==================================================== */}
       <View style={[styles.bottomNavBar, { paddingBottom: Math.max(insets.bottom, 10) }]}>
         <View style={styles.bottomNavInner}>
-          <AppleSpringPressable
+          <TouchableOpacity
             style={[styles.bottomNavTab, mainTab === 'Home' && styles.bottomNavTabActive]}
             onPress={() => setMainTab('Home')}
-            scaleTo={0.92}
-            haptic="selection"
+            activeOpacity={0.7}
           >
             <Feather
               name="home"
@@ -5578,16 +5496,15 @@ function ReelApp() {
               Home
             </Text>
             {mainTab === 'Home' && <View style={styles.bottomNavActiveDot} />}
-          </AppleSpringPressable>
+          </TouchableOpacity>
 
-          <AppleSpringPressable
+          <TouchableOpacity
             style={[styles.bottomNavTab, mainTab === 'Me' && styles.bottomNavTabActive]}
             onPress={() => {
               setMainTab('Me');
               setMeSubTab(null);
             }}
-            scaleTo={0.92}
-            haptic="selection"
+            activeOpacity={0.7}
           >
             <View style={{ position: 'relative' }}>
               <Feather
@@ -5607,7 +5524,7 @@ function ReelApp() {
               Me
             </Text>
             {mainTab === 'Me' && <View style={styles.bottomNavActiveDot} />}
-          </AppleSpringPressable>
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -5673,12 +5590,10 @@ const GlassMovieCard = React.memo(function GlassMovieCard({ movie, onPress, isSe
 
   if (!movie) return null;
   return (
-    <AppleSpringPressable
+    <TouchableOpacity
       style={[styles.movieCard, { width: responsiveWidth }, isTop10 && styles.movieCardTop10, style]}
       onPress={onPress}
-      scaleTo={0.95}
-      haptic="light"
-      activeOpacity={0.9}
+      activeOpacity={0.85}
     >
       <View style={styles.cardImageContainer}>
         <SafeImage
@@ -5689,7 +5604,7 @@ const GlassMovieCard = React.memo(function GlassMovieCard({ movie, onPress, isSe
         />
         <View style={styles.cardGlassBorder} />
       </View>
-    </AppleSpringPressable>
+    </TouchableOpacity>
   );
 });
 
@@ -6671,7 +6586,6 @@ function ReelCustomPlayer({
 
   // Seek by delta seconds (with ultra-safe released SharedObject protection)
   const seekRelative = (delta) => {
-    triggerHaptic('light');
     if (wakeControlsRef.current) wakeControlsRef.current();
     else wakeControls();
 
@@ -6937,7 +6851,6 @@ function ReelCustomPlayer({
             <TouchableOpacity
               style={styles.playerPlayBigRoundBtn}
               onPress={() => {
-                triggerHaptic('medium');
                 wakeControls();
                 const activePlayer = playerRef.current || player;
                 try {
@@ -6973,9 +6886,8 @@ function ReelCustomPlayer({
             {/* Next Episode Center Button (when series) */}
             {Boolean(isSeries || currentSeason > 0 || currentEpisode > 0 || movie?.isSeries || movie?.subjectType === 2) && onPlayNextEpisode && (
               <TouchableOpacity
-                style={styles.playerSeekRoundBtn}
+                style={[styles.playerSeekRoundBtn, { marginLeft: 12 }]}
                 onPress={() => {
-                  triggerHaptic('medium');
                   wakeControls();
                   onPlayNextEpisode();
                 }}
@@ -7080,24 +6992,14 @@ function ReelCustomPlayer({
                 {/* 2. Audio & Subtitles Sheet Button */}
                 <TouchableOpacity
                   style={styles.playerGlassActionBtn}
-                  onPress={() => {
-                    triggerHaptic('light');
-                    wakeControls();
-                    setIsAudioSubsModalOpen(true);
-                  }}
+                  onPress={() => { wakeControls(); setIsAudioSubsModalOpen(true); }}
                 >
                   <MaterialIcons name="subtitles" size={14} color="#FFFFFF" style={{ marginRight: 4 }} />
                   <Text style={styles.playerGlassActionText}>Audio/Subs</Text>
                 </TouchableOpacity>
 
                 {/* 3. Playback Speed */}
-                <TouchableOpacity
-                  style={styles.playerGlassActionBtn}
-                  onPress={() => {
-                    triggerHaptic('selection');
-                    cycleSpeed();
-                  }}
-                >
+                <TouchableOpacity style={styles.playerGlassActionBtn} onPress={cycleSpeed}>
                   <Text style={styles.playerGlassActionText}>{currentSpeed}</Text>
                 </TouchableOpacity>
 
@@ -7105,11 +7007,7 @@ function ReelCustomPlayer({
                 {Boolean(isSeries || currentSeason > 0 || currentEpisode > 0 || movie?.isSeries || movie?.subjectType === 2) && onPlayNextEpisode && (
                   <TouchableOpacity
                     style={styles.playerGlassActionBtn}
-                    onPress={() => {
-                      triggerHaptic('medium');
-                      wakeControls();
-                      onPlayNextEpisode();
-                    }}
+                    onPress={() => { wakeControls(); onPlayNextEpisode(); }}
                     activeOpacity={0.7}
                     hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                   >
@@ -7119,13 +7017,7 @@ function ReelCustomPlayer({
                 )}
 
                 {/* 5. Orientation / Rotate Button */}
-                <TouchableOpacity
-                  style={styles.playerGlassActionBtn}
-                  onPress={() => {
-                    triggerHaptic('light');
-                    toggleOrientation();
-                  }}
-                >
+                <TouchableOpacity style={styles.playerGlassActionBtn} onPress={toggleOrientation}>
                   <Feather name="maximize" size={14} color="#FFFFFF" />
                 </TouchableOpacity>
               </View>
@@ -7426,14 +7318,9 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   tabPillActive: {
-    backgroundColor: '#e50914',
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
     borderWidth: 1,
-    borderColor: '#e50914',
-    shadowColor: '#e50914',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.35,
-    shadowRadius: 6,
-    elevation: 4,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
   },
   tabPillText: {
     color: '#a3a3a3',
@@ -7520,14 +7407,6 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 8,
   },
-  heroMatchBadge: {
-    backgroundColor: 'rgba(229, 9, 20, 0.16)',
-    borderColor: 'rgba(229, 9, 20, 0.36)',
-    borderWidth: 1,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 6,
-  },
   heroMatchScore: {
     color: '#e50914',
     fontWeight: '700',
@@ -7565,12 +7444,11 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   heroPlayButton: {
-    height: 44,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
     backgroundColor: '#e50914',
     paddingHorizontal: 22,
+    paddingVertical: 10,
     borderRadius: 999,
     shadowColor: '#e50914',
     shadowOffset: { width: 0, height: 4 },
@@ -7584,14 +7462,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   heroListButton: {
-    height: 44,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.2)',
-    paddingHorizontal: 18,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
     borderRadius: 999,
   },
   heroListButtonText: {
@@ -7600,9 +7477,9 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   heroInfoButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.2)',
@@ -7770,7 +7647,6 @@ const styles = StyleSheet.create({
   cardPosterImage: {
     width: '100%',
     height: '100%',
-    borderRadius: 14,
   },
   cardGlassBorder: {
     ...StyleSheet.absoluteFillObject,
@@ -7803,13 +7679,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#e50914',
   },
   badgeNew: {
-    backgroundColor: '#e50914',
+    backgroundColor: '#00b4d8',
   },
   badgeAnime: {
-    backgroundColor: '#e50914',
+    backgroundColor: '#8b5cf6',
   },
   badge2026: {
-    backgroundColor: '#e50914',
+    backgroundColor: '#eab308',
   },
   badgeHd: {
     backgroundColor: 'rgba(0, 0, 0, 0.72)',
@@ -8033,14 +7909,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
-  detailMatchBadge: {
-    backgroundColor: 'rgba(229, 9, 20, 0.16)',
-    borderColor: 'rgba(229, 9, 20, 0.36)',
-    borderWidth: 1,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 6,
-  },
   detailMatchScore: {
     color: '#e50914',
     fontWeight: '700',
@@ -8052,20 +7920,18 @@ const styles = StyleSheet.create({
   },
   detailActionsBar: {
     flexDirection: 'row',
-    alignItems: 'center',
     gap: 12,
     paddingHorizontal: 18,
     marginVertical: 14,
   },
   detailPlayButton: {
     flex: 1.4,
-    height: 46,
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#e50914',
-    paddingHorizontal: 18,
-    borderRadius: 999,
+    paddingVertical: 12,
+    borderRadius: 10,
     shadowColor: '#e50914',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.35,
@@ -8079,15 +7945,15 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
   },
   detailDownloadButton: {
-    height: 46,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(255, 255, 255, 0.08)',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.16)',
-    paddingHorizontal: 18,
-    borderRadius: 999,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 10,
   },
   detailDownloadButtonText: {
     color: '#f5f5f1',
@@ -8095,15 +7961,15 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   detailListButton: {
-    height: 46,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(255, 255, 255, 0.08)',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.16)',
-    paddingHorizontal: 18,
-    borderRadius: 999,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 10,
   },
   detailListButtonText: {
     color: '#f5f5f1',
@@ -9030,110 +8896,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
   },
-  meCompactLinksRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    marginTop: 4,
-    marginBottom: 12,
-  },
-  meCompactLinkBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    height: 42,
-    borderRadius: 999,
-    backgroundColor: 'rgba(255, 255, 255, 0.06)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.14)',
-    paddingHorizontal: 14,
-  },
-  meCompactLinkText: {
-    color: '#e5e5ea',
-    fontSize: 13,
-    fontWeight: '600',
-    letterSpacing: 0.1,
-  },
-
-  // 2x4 MOVIEFLIX WIDGET STYLES
-  homeWidgetSection: {
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  meWidgetCardContainer: {
-    backgroundColor: 'rgba(255, 255, 255, 0.04)',
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-    padding: 16,
-    marginBottom: 14,
-  },
-  meWidgetHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-  },
-  meWidgetHeaderLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  meWidgetCardTitle: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  meWidgetCardSubtitle: {
-    color: '#8e8e93',
-    fontSize: 12,
-    fontWeight: '400',
-    marginTop: 2,
-  },
-  meWidgetShuffleBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.16)',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 999,
-  },
-  meWidgetShuffleBtnText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#f5f5f1',
-  },
-  meWidgetPreviewWrapper: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '100%',
-  },
-  meWidgetPinBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#e50914',
-    borderRadius: 12,
-    paddingVertical: 10,
-    marginTop: 12,
-    shadowColor: '#e50914',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.35,
-    shadowRadius: 6,
-    elevation: 3,
-  },
-  meWidgetPinBtnText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '700',
-  },
 
   // MINIMAL APP UPDATES SECTION
   minimalUpdateContainer: {
@@ -9272,7 +9034,7 @@ const styles = StyleSheet.create({
     borderTopColor: 'rgba(255, 255, 255, 0.05)',
   },
   securityVerifyText: {
-    color: '#e50914',
+    color: '#10b981',
     fontSize: 11,
     fontWeight: '600',
   },
