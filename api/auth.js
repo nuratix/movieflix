@@ -119,6 +119,23 @@ async function ensureTables(sql) {
         created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
       );
     `;
+    await sql`
+      CREATE TABLE IF NOT EXISTS mf_downloads (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES mf_users(id) ON DELETE SET NULL,
+        user_email VARCHAR(255) NOT NULL,
+        version VARCHAR(50) DEFAULT '1.1.5',
+        ip_address VARCHAR(100),
+        user_agent TEXT,
+        downloaded_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      );
+    `;
+    await sql`
+      CREATE INDEX IF NOT EXISTS idx_mf_downloads_email ON mf_downloads(user_email);
+    `;
+    await sql`
+      CREATE INDEX IF NOT EXISTS idx_mf_downloads_time ON mf_downloads(downloaded_at);
+    `;
     tablesInitialized = true;
   } catch (err) {
     console.error('ensureTables error:', err);

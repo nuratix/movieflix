@@ -13,7 +13,6 @@ import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export const PRIVACY_POLICY_URL = 'https://movieflix-pi-six.vercel.app/privacy';
-export const TELEGRAM_URL = 'https://t.me/movieflixlol';
 
 export default function PrivacyScreen({ onClose }) {
   const insets = useSafeAreaInsets();
@@ -25,12 +24,6 @@ export default function PrivacyScreen({ onClose }) {
   const handleExternalLink = () => {
     Linking.openURL(PRIVACY_POLICY_URL).catch((err) => {
       console.warn('Could not open privacy URL:', err);
-    });
-  };
-
-  const handleTelegramLink = () => {
-    Linking.openURL(TELEGRAM_URL).catch((err) => {
-      console.warn('Could not open Telegram URL:', err);
     });
   };
 
@@ -189,25 +182,7 @@ export default function PrivacyScreen({ onClose }) {
 
           {/* Section 7 */}
           <View style={styles.sectionBlock}>
-            <Text style={styles.sectionHeading}>7. Official Community &amp; Telegram</Text>
-            <Text style={styles.paragraph}>
-              Join our official channel for real-time release updates, server status, and community requests:
-            </Text>
-            <TouchableOpacity
-              style={styles.cleanActionCard}
-              onPress={handleTelegramLink}
-              activeOpacity={0.75}
-            >
-              <Text style={styles.cleanActionTitle}>Join our Telegram: @movieflixlol</Text>
-              <Text style={styles.cleanActionSub}>{TELEGRAM_URL}</Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.divider} />
-
-          {/* Section 8 */}
-          <View style={styles.sectionBlock}>
-            <Text style={styles.sectionHeading}>8. Public Verification</Text>
+            <Text style={styles.sectionHeading}>7. Public Verification</Text>
             <Text style={styles.paragraph}>
               This Privacy Policy is publicly hosted and verifiable online at our official website:
             </Text>

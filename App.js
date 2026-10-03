@@ -3394,6 +3394,9 @@ function ReelApp() {
       <DownloadScreen
         onClose={closeDownloadPage}
         onOpenPrivacy={handleOpenPrivacy}
+        authUser={authUser}
+        authAccessToken={authAccessToken}
+        onOpenAuth={(mode) => openAuthPage(mode || 'login')}
       />
     );
   }
@@ -3720,33 +3723,6 @@ function ReelApp() {
                       </Text>
                     </View>
                     <Feather name={isWeb ? "chevron-right" : "external-link"} size={18} color="#737373" />
-                  </TouchableOpacity>
-
-                  {/* Button: Join our Telegram */}
-                  <TouchableOpacity
-                    style={styles.meNavCard}
-                    onPress={() => {
-                      Linking.openURL('https://t.me/movieflixlol').catch((err) => {
-                        console.warn('Failed to open Telegram URL:', err);
-                      });
-                    }}
-                    activeOpacity={0.7}
-                  >
-                    <View style={[styles.meNavIconCircle, { backgroundColor: 'rgba(229, 9, 20, 0.12)', borderColor: 'rgba(229, 9, 20, 0.28)' }]}>
-                      <Feather name="send" size={18} color="#e50914" />
-                    </View>
-                    <View style={styles.meNavTextCol}>
-                      <View style={styles.meNavTitleRow}>
-                        <Text style={styles.meNavTitle}>Join our Telegram</Text>
-                        <View style={[styles.meNavBadge, { backgroundColor: 'rgba(229, 9, 20, 0.16)' }]}>
-                          <Text style={[styles.meNavBadgeText, { color: '#e50914' }]}>Community</Text>
-                        </View>
-                      </View>
-                      <Text style={styles.meNavSubtitle}>
-                        New releases, updates &amp; requests · t.me/movieflixlol
-                      </Text>
-                    </View>
-                    <Feather name="external-link" size={18} color="#737373" />
                   </TouchableOpacity>
                 </View>
 
