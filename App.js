@@ -28,6 +28,7 @@ import * as Brightness from 'expo-brightness';
 import NetInfo from '@react-native-community/netinfo';
 import { Ionicons, MaterialIcons, Feather } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system/legacy';
+import * as Haptics from 'expo-haptics';
 import { Asset } from 'expo-asset';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
@@ -90,6 +91,24 @@ import * as SplashScreen from 'expo-splash-screen';
 if (Platform.OS !== 'web') {
   SplashScreen.preventAutoHideAsync().catch(() => {});
 }
+
+// ─── Apple-Grade Haptics Feedback Helper ─────────────────────────────────────
+const triggerHaptic = (type = 'selection') => {
+  if (Platform.OS === 'web') return;
+  try {
+    if (type === 'light') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    } else if (type === 'medium') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    } else if (type === 'heavy') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => {});
+    } else if (type === 'success') {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    } else {
+      Haptics.selectionAsync().catch(() => {});
+    }
+  } catch (e) {}
+};
 
 // ─── Backend API Base (Public Movieflix Server Proxy) ────────────────────────
 // On web: relative '' (same-origin, zero CORS issues, instant)
@@ -1094,6 +1113,91 @@ function ReelApp() {
   const [homeCategory, setHomeCategory] = useState('All'); // 'All' | 'Movies' | 'Series'
   const [meSubTab, setMeSubTab] = useState(null); // null (clean buttons hub) | 'History' | 'MyList' | 'Downloads'
 
+  // Floating Apple-Style Navigation Bar Animation & Fluid Drag State
+  const floatingBarWidth = Math.min(windowWidth - 48, 280);
+  const floatingTabWidth = (floatingBarWidth - 8) / 2;
+  const navAnim = useRef(new Animated.Value(mainTab === 'Home' ? 0 : 1)).current;
+  const mainTabRef = useRef(mainTab);
+
+  useEffect(() => {
+    mainTabRef.current = mainTab;
+    Animated.spring(navAnim, {
+      toValue: mainTab === 'Home' ? 0 : 1,
+      tension: 280,
+      friction: 24,
+      useNativeDriver: true,
+    }).start();
+  }, [mainTab]);
+
+  const navPanResponder = useMemo(() => {
+    return PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        return Math.abs(gestureState.dx) > 8 && Math.abs(gestureState.dx) > Math.abs(gestureState.dy);
+      },
+      onPanResponderGrant: () => {
+        navAnim.stopAnimation();
+      },
+      onPanResponderMove: (_, gestureState) => {
+        const base = mainTabRef.current === 'Home' ? 0 : 1;
+        const progress = base + (gestureState.dx / floatingTabWidth);
+        let clamped = progress;
+        if (progress < 0) {
+          clamped = progress * 0.2;
+        } else if (progress > 1) {
+          clamped = 1 + (progress - 1) * 0.2;
+        }
+        navAnim.setValue(clamped);
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        const base = mainTabRef.current === 'Home' ? 0 : 1;
+        const dx = gestureState.dx;
+        const vx = gestureState.vx;
+        let nextTab = mainTabRef.current;
+
+        if (base === 0) {
+          if (dx > floatingTabWidth * 0.35 || vx > 0.35) {
+            nextTab = 'Me';
+          }
+        } else {
+          if (dx < -floatingTabWidth * 0.35 || vx < -0.35) {
+            nextTab = 'Home';
+          }
+        }
+
+        const toVal = nextTab === 'Home' ? 0 : 1;
+        Animated.spring(navAnim, {
+          toValue: toVal,
+          tension: 280,
+          friction: 24,
+          useNativeDriver: true,
+        }).start();
+
+        if (nextTab !== mainTabRef.current) {
+          triggerHaptic('selection');
+          setMainTab(nextTab);
+          if (nextTab === 'Me') {
+            setMeSubTab(null);
+          }
+        }
+      },
+      onPanResponderTerminate: () => {
+        const toVal = mainTabRef.current === 'Home' ? 0 : 1;
+        Animated.spring(navAnim, {
+          toValue: toVal,
+          tension: 280,
+          friction: 24,
+          useNativeDriver: true,
+        }).start();
+      },
+    });
+  }, [floatingTabWidth]);
+
+  const indicatorTranslateX = navAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, floatingTabWidth],
+  });
+
   // ─── Auth State ────────────────────────────────────────────────────────────
   const [authUser, setAuthUser] = useState(null);       // { id, email } | null
   const [authAccessToken, setAuthAccessToken] = useState(null);
@@ -1597,6 +1701,7 @@ function ReelApp() {
 
   // Handler for category selection with lazy API fetching
   const handleSelectCategory = async (catId) => {
+    triggerHaptic('light');
     setHomeCategory(catId);
     setIsCategoryModalOpen(false);
 
@@ -3406,7 +3511,7 @@ function ReelApp() {
       {/* MAIN SCROLLABLE CONTENT AREA */}
       <ScrollView
         style={styles.mainScrollView}
-        contentContainerStyle={{ paddingBottom: insets.bottom + 90 }}
+        contentContainerStyle={{ paddingBottom: Math.max(insets.bottom + 96, 110) }}
         showsVerticalScrollIndicator={false}
       >
         {/* ==================================================== */}
@@ -5478,52 +5583,90 @@ function ReelApp() {
       </Modal>
 
       {/* ==================================================== */}
-      {/* DOCKED GLASS BOTTOM NAVIGATION BAR                   */}
+      {/* FLOATING APPLE-STYLE PILL BOTTOM NAVIGATION BAR       */}
       {/* ==================================================== */}
-      <View style={[styles.bottomNavBar, { paddingBottom: Math.max(insets.bottom, 10) }]}>
-        <View style={styles.bottomNavInner}>
+      <View
+        style={[
+          styles.floatingNavWrapper,
+          { bottom: Math.max(insets.bottom + 12, 18) },
+        ]}
+        pointerEvents="box-none"
+      >
+        <View
+          style={[styles.floatingNavContainer, { width: floatingBarWidth }]}
+          {...navPanResponder.panHandlers}
+        >
+          {/* Smooth Sliding Red Indicator Pill */}
+          <Animated.View
+            style={[
+              styles.floatingNavIndicator,
+              {
+                width: floatingTabWidth,
+                transform: [{ translateX: indicatorTranslateX }],
+              },
+            ]}
+          />
+
+          {/* Home Tab */}
           <TouchableOpacity
-            style={[styles.bottomNavTab, mainTab === 'Home' && styles.bottomNavTabActive]}
-            onPress={() => setMainTab('Home')}
-            activeOpacity={0.7}
+            style={styles.floatingNavTab}
+            onPress={() => {
+              if (mainTab !== 'Home') {
+                triggerHaptic('selection');
+                setMainTab('Home');
+              }
+            }}
+            activeOpacity={0.8}
           >
             <Feather
               name="home"
-              size={20}
-              color={mainTab === 'Home' ? "#e50914" : "#8e8e93"}
+              size={18}
+              color={mainTab === 'Home' ? '#FFFFFF' : 'rgba(255, 255, 255, 0.55)'}
             />
-            <Text style={[styles.bottomNavLabel, mainTab === 'Home' && styles.bottomNavLabelActive]}>
+            <Text
+              style={[
+                styles.floatingNavText,
+                mainTab === 'Home' && styles.floatingNavTextActive,
+              ]}
+            >
               Home
             </Text>
-            {mainTab === 'Home' && <View style={styles.bottomNavActiveDot} />}
           </TouchableOpacity>
 
+          {/* Me Tab */}
           <TouchableOpacity
-            style={[styles.bottomNavTab, mainTab === 'Me' && styles.bottomNavTabActive]}
+            style={styles.floatingNavTab}
             onPress={() => {
-              setMainTab('Me');
-              setMeSubTab(null);
+              if (mainTab !== 'Me') {
+                triggerHaptic('selection');
+                setMainTab('Me');
+                setMeSubTab(null);
+              }
             }}
-            activeOpacity={0.7}
+            activeOpacity={0.8}
           >
             <View style={{ position: 'relative' }}>
               <Feather
                 name="user"
-                size={20}
-                color={mainTab === 'Me' ? "#e50914" : "#8e8e93"}
+                size={18}
+                color={mainTab === 'Me' ? '#FFFFFF' : 'rgba(255, 255, 255, 0.55)'}
               />
               {!isWeb && downloads.some(d => d.status === 'downloading') ? (
-                <View style={styles.bottomNavDownloadBadge}>
+                <View style={styles.floatingNavDownloadBadge}>
                   <AnimatedDownloadSpinner size={9} color="#FFFFFF" />
                 </View>
               ) : myList.length > 0 ? (
-                <View style={styles.bottomNavBadgeDot} />
+                <View style={styles.floatingNavBadgeDot} />
               ) : null}
             </View>
-            <Text style={[styles.bottomNavLabel, mainTab === 'Me' && styles.bottomNavLabelActive]}>
+            <Text
+              style={[
+                styles.floatingNavText,
+                mainTab === 'Me' && styles.floatingNavTextActive,
+              ]}
+            >
               Me
             </Text>
-            {mainTab === 'Me' && <View style={styles.bottomNavActiveDot} />}
           </TouchableOpacity>
         </View>
       </View>
@@ -7312,23 +7455,32 @@ const styles = StyleSheet.create({
     paddingRight: 16,
   },
   tabPill: {
-    paddingHorizontal: 14,
-    paddingVertical: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 7,
     borderRadius: 999,
-    backgroundColor: 'transparent',
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(229, 9, 20, 0.22)',
   },
   tabPillActive: {
-    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    backgroundColor: '#e50914',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
+    borderColor: '#e50914',
+    shadowColor: '#e50914',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.55,
+    shadowRadius: 8,
+    elevation: 4,
   },
   tabPillText: {
-    color: '#a3a3a3',
+    color: '#b3b3b3',
     fontSize: 13,
     fontWeight: '600',
+    letterSpacing: 0.2,
   },
   tabPillTextActive: {
-    color: '#f5f5f1',
+    color: '#FFFFFF',
+    fontWeight: '700',
   },
 
   // MAIN SCROLLVIEW
@@ -8665,62 +8817,81 @@ const styles = StyleSheet.create({
     color: '#e50914',
   },
 
-  // DOCKED BOTTOM NAVIGATION BAR
-  bottomNavBar: {
+  // FLOATING APPLE-STYLE PILL BOTTOM NAVIGATION BAR
+  floatingNavWrapper: {
     position: 'absolute',
-    bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: 'rgba(14, 14, 16, 0.94)',
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.08)',
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingTop: 8,
-    zIndex: 900,
+    zIndex: 999,
   },
-  bottomNavInner: {
+  floatingNavContainer: {
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(18, 18, 22, 0.90)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.14)',
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-around',
-    width: '100%',
-    maxWidth: 540,
+    padding: 4,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.65,
+    shadowRadius: 22,
+    elevation: 16,
+    overflow: 'hidden',
   },
-  bottomNavTab: {
+  floatingNavIndicator: {
+    position: 'absolute',
+    top: 4,
+    bottom: 4,
+    left: 4,
+    borderRadius: 24,
+    backgroundColor: '#e50914',
+    shadowColor: '#e50914',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.5,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  floatingNavTab: {
     flex: 1,
+    height: '100%',
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 4,
+    gap: 8,
+    zIndex: 2,
   },
-  bottomNavTabActive: {},
-  bottomNavLabel: {
-    color: '#8e8e93',
-    fontSize: 11,
+  floatingNavText: {
+    fontSize: 13,
     fontWeight: '600',
-    marginTop: 2,
+    color: 'rgba(255, 255, 255, 0.55)',
+    letterSpacing: 0.2,
   },
-  bottomNavLabelActive: {
+  floatingNavTextActive: {
     color: '#FFFFFF',
     fontWeight: '700',
   },
-  bottomNavActiveDot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: '#e50914',
-    marginTop: 3,
-  },
-  bottomNavBadgeDot: {
+  floatingNavBadgeDot: {
     position: 'absolute',
     top: -2,
-    right: -3,
-    width: 8,
-    height: 8,
+    right: -4,
+    width: 7,
+    height: 7,
     borderRadius: 4,
-    backgroundColor: '#e50914',
+    backgroundColor: '#FFFFFF',
     borderWidth: 1.5,
-    borderColor: '#0a0a0a',
+    borderColor: '#e50914',
+  },
+  floatingNavDownloadBadge: {
+    position: 'absolute',
+    top: -3,
+    right: -4,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    borderRadius: 8,
+    padding: 1,
   },
 
   // ME SCREEN STYLES
