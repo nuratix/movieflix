@@ -98,8 +98,17 @@
           },
           "imageWidth": 160
         }
-      ]
+      ],
+      "expo-updates"
     ],
+    "updates": {
+      "url": "https://u.expo.dev/1794b566-0be5-4647-ab45-1696f5785c62",
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
     "extra": {
       "eas": {
         "projectId": "1794b566-0be5-4647-ab45-1696f5785c62"
