@@ -40,7 +40,6 @@ jobs:
         run: npx expo prebuild --platform android --clean
         env:
           EXPO_PUBLIC_API_BASE: https://movieflix-pi-six.vercel.app
-          EXPO_PUBLIC_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build Android Release APK
         run: |
@@ -49,7 +48,6 @@ jobs:
           ./gradlew assembleRelease --no-daemon -Dorg.gradle.jvmargs="-Xmx4096m -XX:MaxMetaspaceSize=1024m" -x lint -x test
         env:
           EXPO_PUBLIC_API_BASE: https://movieflix-pi-six.vercel.app
-          EXPO_PUBLIC_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Prepare APK Output
         id: prepare_apk
@@ -87,11 +85,11 @@ jobs:
 
             Built automatically via **GitHub Actions Cloud**!
 
-            #### 🔒 Security & Enhancements in v${{ steps.prepare_apk.outputs.version }}:
+            #### 🔒 Security & Fixes in v${{ steps.prepare_apk.outputs.version }}:
+            * **Fixed Video Player Gestures**: Resolved VideoPlayer.seekBy SharedObject crash during scrubbing.
+            * **Zero Client Secrets**: Purged all GitHub access tokens from client APK; update checks now route through secure backend API proxy.
+            * **Official Brand Favicon**: Integrated custom 1024x1024 brand icon for Google search indexing and web bookmarks.
             * **Server-Side Security**: Upstream provider API credentials protected on backend proxy—zero secrets embedded in mobile APK.
-            * **Official Fingerprint Validation**: Verified build integrity and signature validation for v${{ steps.prepare_apk.outputs.version }}.
-            * **Optimized Web Experience**: Seamless deep linking, dedicated 404 handler, and single bottom download banner.
-            * **Social Sharing**: Multi-ratio Open Graph cards for WhatsApp, Telegram, Twitter, Instagram, and Facebook.
             * **Hardware Media Controls**: Smooth gestures for brightness and volume, with instant streaming.
           files: |
             output/movieflix-v${{ steps.prepare_apk.outputs.version }}.apk
