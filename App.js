@@ -1611,6 +1611,8 @@ function ReelApp() {
   const [playerResumeTime, setPlayerResumeTime] = useState(0);
   const [loadingStream, setLoadingStream] = useState(false);
   const [streamError, setStreamError] = useState(null);
+  const seriesSeasonsRef = useRef([]);
+  const seriesSeasonsMovieIdRef = useRef(null);
 
   // Download Modal State
   const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false);
@@ -1954,6 +1956,10 @@ function ReelApp() {
         isSeries: Boolean(isRealSeries),
       };
       setDetailData(mergedData);
+      if (Array.isArray(seasons) && seasons.length > 0) {
+        seriesSeasonsRef.current = seasons;
+        seriesSeasonsMovieIdRef.current = movie.subject_id;
+      }
 
       // Merge newly resolved fields back into detailMovie so title/poster/etc. are fully loaded
       setDetailMovie((prev) => normalizeMovie({ ...(prev || {}), ...subject, ...mergedData, slug: movie.slug }));
@@ -1993,7 +1999,8 @@ function ReelApp() {
     resumeTime = 0,
     offlineVideoUrl = null,
     offlineSubUrl = null,
-    syncHistory = true
+    syncHistory = true,
+    skipIntro = false
   ) => {
     if (!rawMovie) return;
     const movie = normalizeMovie(rawMovie);
@@ -2012,13 +2019,30 @@ function ReelApp() {
       return;
     }
 
+    const isRealSeries = Boolean(seriesFlag || se > 0 || ep > 0 || movie?.isSeries || movie?.subjectType === 2);
+
     setPlayerMovie(movie);
     setPlayerImdb(null);
     getImdbData(movie?.name).then(setPlayerImdb).catch(() => {});
     setCurrentSe(se);
     setCurrentEp(ep);
-    setIsSeries(Boolean(seriesFlag));
-    if (Platform.OS === 'web') {
+    setIsSeries(isRealSeries);
+
+    // Pre-fetch seasons in background if missing for series
+    if (isRealSeries && movie?.slug && (!seriesSeasonsRef.current?.length || seriesSeasonsMovieIdRef.current !== movie.subject_id)) {
+      apiFetch(`${API_BASE}/api/content?endpoint=detail&slug=${encodeURIComponent(movie.slug || movie.subject_id)}`)
+        .then(r => r.json())
+        .then(d => {
+          const fetched = d?.data?.resource?.seasons || [];
+          if (fetched.length > 0) {
+            seriesSeasonsRef.current = fetched;
+            seriesSeasonsMovieIdRef.current = movie.subject_id;
+          }
+        })
+        .catch(() => {});
+    }
+
+    if (Platform.OS === 'web' || skipIntro) {
       setIsIntroLoading(false);
       setIsPlayerOpen(true);
     } else {
@@ -2333,17 +2357,74 @@ function ReelApp() {
   };
 
   // Play Next Episode
-  const playNextEpisode = () => {
-    if (!isSeries || !detailData?.seasons) return;
-    const currentSeasonObj = detailData.seasons[selectedSeasonIdx] || detailData.seasons[0];
-    const maxEp = currentSeasonObj?.maxEp || 1;
-    if (currentEp < maxEp) {
-      launchPlayer(playerMovie, currentSe, currentEp + 1, true);
-    } else if (selectedSeasonIdx + 1 < detailData.seasons.length) {
-      const nextSeasonObj = detailData.seasons[selectedSeasonIdx + 1];
-      setSelectedSeasonIdx(selectedSeasonIdx + 1);
-      launchPlayer(playerMovie, nextSeasonObj.se, 1, true);
+  const playNextEpisode = async () => {
+    const movie = playerMovie || detailMovie;
+    if (!movie) return;
+
+    const isRealSeries = Boolean(
+      isSeries || currentSe > 0 || currentEp > 0 || movie.isSeries || movie.subjectType === 2
+    );
+    if (!isRealSeries) return;
+
+    const activeSe = currentSe || 1;
+    const activeEp = currentEp || 1;
+
+    // 1. Get seasons list from ref, detailData, or fetch on demand
+    let seasons = seriesSeasonsRef.current;
+    if (!seasons || seasons.length === 0) {
+      if (detailData?.seasons && detailData.seasons.length > 0) {
+        seasons = detailData.seasons;
+      }
     }
+
+    if (!seasons || seasons.length === 0) {
+      try {
+        const res = await apiFetch(
+          `${API_BASE}/api/content?endpoint=detail&slug=${encodeURIComponent(movie.slug || movie.subject_id)}`
+        );
+        const data = await res.json();
+        const fetched = data?.data?.resource?.seasons || [];
+        if (fetched.length > 0) {
+          seasons = fetched;
+          seriesSeasonsRef.current = fetched;
+          seriesSeasonsMovieIdRef.current = movie.subject_id;
+        }
+      } catch (err) {
+        console.warn('Seasons lookup failed:', err);
+      }
+    }
+
+    let nextSe = activeSe;
+    let nextEp = activeEp + 1;
+
+    if (Array.isArray(seasons) && seasons.length > 0) {
+      // Find active season by season number `se`
+      const curSeasonIdx = seasons.findIndex((s) => s.se === activeSe);
+      const activeSeasonIdx = curSeasonIdx >= 0 ? curSeasonIdx : 0;
+      const curSeasonObj = seasons[activeSeasonIdx];
+      const episodes = getEpisodesArray(curSeasonObj);
+
+      const curEpIdx = episodes.indexOf(activeEp);
+      if (curEpIdx >= 0 && curEpIdx + 1 < episodes.length) {
+        // Next episode in the same season
+        nextEp = episodes[curEpIdx + 1];
+        nextSe = curSeasonObj.se || activeSe;
+      } else if (activeSeasonIdx + 1 < seasons.length) {
+        // Next season!
+        const nextSeasonObj = seasons[activeSeasonIdx + 1];
+        nextSe = nextSeasonObj.se || (activeSe + 1);
+        const nextEpisodes = getEpisodesArray(nextSeasonObj);
+        nextEp = nextEpisodes[0] || 1;
+        setSelectedSeasonIdx(activeSeasonIdx + 1);
+      } else {
+        // Reached the end of all available episodes
+        showToast("You've reached the latest episode!");
+        return;
+      }
+    }
+
+    showToast(`Playing Season ${nextSe} · Episode ${nextEp}...`);
+    launchPlayer(movie, nextSe, nextEp, true, 0, null, null, true, true);
   };
 
   // =====================================================
@@ -6157,12 +6238,20 @@ function ReelCustomPlayer({
       }
     });
 
+    const playEndSub = player.addListener?.('playToEnd', () => {
+      const isSeriesTitle = Boolean(isSeries || currentSeason > 0 || currentEpisode > 0 || movie?.isSeries);
+      if (isSeriesTitle && onPlayNextEpisode) {
+        onPlayNextEpisode();
+      }
+    });
+
     return () => {
       playSub?.remove?.();
       timeSub?.remove?.();
       audioSub?.remove?.();
       subTrackSub?.remove?.();
       statusSub?.remove?.();
+      playEndSub?.remove?.();
     };
   }, [player]);
 
@@ -6753,6 +6842,21 @@ function ReelCustomPlayer({
             >
               <MaterialIcons name="forward-10" size={32} color="#FFFFFF" />
             </TouchableOpacity>
+
+            {/* Next Episode Center Button (when series) */}
+            {Boolean(isSeries || currentSeason > 0 || currentEpisode > 0 || movie?.isSeries || movie?.subjectType === 2) && onPlayNextEpisode && (
+              <TouchableOpacity
+                style={[styles.playerSeekRoundBtn, { marginLeft: 12 }]}
+                onPress={() => {
+                  wakeControls();
+                  onPlayNextEpisode();
+                }}
+                activeOpacity={0.7}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              >
+                <Feather name="skip-forward" size={26} color="#FFFFFF" />
+              </TouchableOpacity>
+            )}
           </View>
 
           {/* BOTTOM CONTROLS BAR (PINNED TO BOTTOM OF SCREEN) */}
@@ -6860,10 +6964,12 @@ function ReelCustomPlayer({
                 </TouchableOpacity>
 
                 {/* 4. Next Episode (for Series) */}
-                {isSeries && onPlayNextEpisode && (
+                {Boolean(isSeries || currentSeason > 0 || currentEpisode > 0 || movie?.isSeries || movie?.subjectType === 2) && onPlayNextEpisode && (
                   <TouchableOpacity
                     style={styles.playerGlassActionBtn}
                     onPress={() => { wakeControls(); onPlayNextEpisode(); }}
+                    activeOpacity={0.7}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                   >
                     <Feather name="skip-forward" size={13} color="#FFFFFF" style={{ marginRight: 4 }} />
                     <Text style={styles.playerGlassActionText}>Next</Text>
