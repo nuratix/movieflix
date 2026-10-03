@@ -86,12 +86,11 @@ jobs:
             Built automatically via **GitHub Actions Cloud**!
 
             #### 🚀 What's New & Fixed in v${{ steps.prepare_apk.outputs.version }}:
-            * **Apple-Style Floating Navigation Bar**: Pill-shaped floating bottom bar with fluid sliding indicator and horizontal swipe gestures.
-            * **Vibrant Red Category Filters**: Movie and TV category header pills redesigned with signature MovieFlix red glow and haptic feedback.
-            * **Fixed Next Episode Navigation**: Resolved episode switching in video player; smooth automatic stream reloading with zero freeze.
-            * **Apple-Grade Spring Physics & Haptics**: Silky smooth tactile feedback and responsive gestures across all screens.
-            * **Zero Blank Images**: Hardened poster fallbacks ensuring zero blank or black cards across carousels and grids.
-            * **Server-Side Security**: Upstream provider API credentials protected on backend proxy—zero secrets embedded in mobile APK.
+            * **Home Screen Widget Portrait Posters**: Bundled official high-definition portrait posters (Wednesday, Squid Game, Money Heist) with signature red ambient glow and zero cutoff.
+            * **Horizontal Season Scroll**: Season selection pill bar is now smoothly scrollable horizontally to easily browse all seasons.
+            * **"Me" Tab Notification Dot Fix**: Red indicator badge automatically and permanently dismisses when navigating to the Me tab.
+            * **In-App Updater Package Parsing Fix**: Hardened package integrity checks (>5MB) and direct CDN routing to ensure smooth updates without Android parsing errors.
+            * **EAS Updates Always-Check Channel**: Instant OTA sync configured for future seamless hotfixes.
           files: |
             output/movieflix-v${{ steps.prepare_apk.outputs.version }}.apk
         env:

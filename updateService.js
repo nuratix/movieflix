@@ -4,7 +4,7 @@ import { Linking, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Current App Version (aligned with package.json & app.json)
-export const CURRENT_APP_VERSION = '1.1.5';
+export const CURRENT_APP_VERSION = '1.1.6';
 
 // Secure Backend Update & Download Endpoints (Hosted on Vercel)
 // The client APK communicates exclusively with the backend service.
@@ -64,7 +64,7 @@ export async function checkForUpdateAsync() {
       method: 'GET',
       headers: {
         Accept: 'application/json',
-        'User-Agent': 'Movieflix-App/1.1.4',
+        'User-Agent': `Movieflix-App/${CURRENT_APP_VERSION}`,
       },
     });
 
@@ -137,7 +137,12 @@ export async function checkForUpdateAsync() {
  */
 export async function downloadAndInstallApkAsync(apkAsset, onProgress) {
   try {
-    const downloadSourceUrl = apkAsset?.downloadUrl || APK_DOWNLOAD_ENDPOINT;
+    const rawUrl = apkAsset?.downloadUrl || apkAsset?.browserDownloadUrl || `${APK_DOWNLOAD_ENDPOINT}?source=app_update`;
+    // Ensure updater source query parameter is attached if routing through backend proxy
+    const downloadSourceUrl = rawUrl.includes('/api/download') && !rawUrl.includes('source=')
+      ? `${rawUrl}${rawUrl.includes('?') ? '&' : '?'}source=app_update`
+      : rawUrl;
+
     const fileName = apkAsset?.name || `movieflix-v${Date.now()}.apk`;
     const targetDir = `${FileSystem.documentDirectory}updates/`;
 
@@ -159,7 +164,13 @@ export async function downloadAndInstallApkAsync(apkAsset, onProgress) {
     const downloadResumable = FileSystem.createDownloadResumable(
       downloadSourceUrl,
       localFileUri,
-      {},
+      {
+        headers: {
+          'User-Agent': `Movieflix-App/${CURRENT_APP_VERSION}`,
+          'X-App-Updater': 'true',
+          Accept: 'application/vnd.android.package-archive, application/octet-stream, */*',
+        },
+      },
       (downloadProgress) => {
         const total = downloadProgress.totalBytesExpectedToWrite;
         const written = downloadProgress.totalBytesWritten;
@@ -181,7 +192,18 @@ export async function downloadAndInstallApkAsync(apkAsset, onProgress) {
       throw new Error('Download failed to return local file URI.');
     }
 
-    console.log('APK Download completed to:', result.uri);
+    // Validate downloaded file integrity before invoking Android package installer
+    const downloadedInfo = await FileSystem.getInfoAsync(result.uri);
+    if (!downloadedInfo.exists || downloadedInfo.size < 5 * 1024 * 1024) {
+      // Official APKs are ~95-110MB; anything under 5MB is a corrupted download or HTML redirect page
+      const badSize = downloadedInfo.size || 0;
+      await FileSystem.deleteAsync(result.uri, { idempotent: true });
+      throw new Error(
+        `Downloaded package is invalid or incomplete (${formatBytes(badSize)}). Please check connection and try again.`
+      );
+    }
+
+    console.log('Valid APK Download completed to:', result.uri, 'size:', formatBytes(downloadedInfo.size));
 
     // Launch Android package installer
     if (Platform.OS === 'android') {

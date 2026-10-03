@@ -24,29 +24,35 @@ export const MOVIEFLIX_SVG_XML = `<svg viewBox="120 10 1952 400" width="88" heig
   <g clip-path="url(#mfX)"><path fill="#B30000" d="M1989 221L2069 404L1987 404L1948 314.788Z"/></g>
 </svg>`;
 
-export const LOCAL_WIDGET_MOVIES = [
-  { id: '1', title: 'Oppenheimer', poster: LOCAL_POSTERS[0], fallback: POSTER_FALLBACKS[0] },
-  { id: '2', title: 'Wednesday', poster: LOCAL_POSTERS[1], fallback: POSTER_FALLBACKS[1] },
-  { id: '3', title: 'Squid Game', poster: LOCAL_POSTERS[2], fallback: POSTER_FALLBACKS[2] },
-  { id: '4', title: 'Stranger Things', poster: LOCAL_POSTERS[3], fallback: POSTER_FALLBACKS[3] },
-  { id: '5', title: 'The Dark Knight', poster: LOCAL_POSTERS[4], fallback: POSTER_FALLBACKS[4] },
-  { id: '6', title: 'Interstellar', poster: LOCAL_POSTERS[5], fallback: POSTER_FALLBACKS[5] },
-  { id: '7', title: 'Avatar', poster: LOCAL_POSTERS[6], fallback: POSTER_FALLBACKS[6] },
-  { id: '8', title: 'Dune', poster: LOCAL_POSTERS[7], fallback: POSTER_FALLBACKS[7] },
-  { id: '9', title: 'Inception', poster: LOCAL_POSTERS[8], fallback: POSTER_FALLBACKS[8] },
-  { id: '10', title: 'Money Heist', poster: LOCAL_POSTERS[9], fallback: POSTER_FALLBACKS[9] },
-  { id: '11', title: 'Breaking Bad', poster: LOCAL_POSTERS[10], fallback: POSTER_FALLBACKS[10] },
-  { id: '12', title: 'Avengers Endgame', poster: LOCAL_POSTERS[11], fallback: POSTER_FALLBACKS[11] },
+export const OFFICIAL_WIDGET_POSTERS = [
+  {
+    id: 'w-wednesday',
+    title: 'Wednesday',
+    poster: require('../assets/widget/poster1.png'),
+    fallback:
+      'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQI1Nwc2IYP3zqMeKwds30LeKGvDSkatrBT3gYj6kvTn220qUFOMMfLZZCyb3LXVepmjGnnPXHrBLWZGCEDZ96QbRtTnGCowrSrgYS1Cg&s=10',
+  },
+  {
+    id: 'w-squidgame',
+    title: 'Squid Game',
+    poster: require('../assets/widget/poster2.png'),
+    fallback: 'https://m.media-amazon.com/images/I/51k0xokQEmL._AC_UF894,1000_QL80_.jpg',
+  },
+  {
+    id: 'w-moneyheist',
+    title: 'Money Heist',
+    poster: require('../assets/widget/poster3.png'),
+    fallback:
+      'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQRLxUbhvQdIaSB4ba-IP1iWWcaVqePh5FtJyaqT2sSi6NT0Dtdcr3zfM0&s=10',
+  },
 ];
 
+export const LOCAL_WIDGET_MOVIES = OFFICIAL_WIDGET_POSTERS;
+
 /**
- * Returns 3 random unique posters from the local movie app posters
+ * Returns the official high-resolution portrait posters for the widget
  */
 export function getRandomWidgetPosters() {
-  const pool = [...LOCAL_WIDGET_MOVIES];
-  for (let i = pool.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [pool[i], pool[j]] = [pool[j], pool[i]];
-  }
-  return pool.slice(0, 3);
+  return [...OFFICIAL_WIDGET_POSTERS];
 }
+

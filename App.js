@@ -1123,6 +1123,7 @@ function ReelApp() {
   const [mainTab, setMainTab] = useState('Home');
   const [homeCategory, setHomeCategory] = useState('All'); // 'All' | 'Movies' | 'Series'
   const [meSubTab, setMeSubTab] = useState(null); // null (clean buttons hub) | 'History' | 'MyList' | 'Downloads'
+  const [meDotDismissed, setMeDotDismissed] = useState(false);
 
   // Floating Apple-Style Navigation Bar Animation & Fluid Drag State
   const floatingBarWidth = Math.min(windowWidth - 48, 280);
@@ -1132,6 +1133,9 @@ function ReelApp() {
 
   useEffect(() => {
     mainTabRef.current = mainTab;
+    if (mainTab === 'Me') {
+      setMeDotDismissed(true);
+    }
     Animated.spring(navAnim, {
       toValue: mainTab === 'Home' ? 0 : 1,
       tension: 280,
@@ -2690,7 +2694,7 @@ function ReelApp() {
       );
     } else if (isDownloadPageOpen) {
       updateWebMetaTags(
-        'Download MovieFlix Android APK (v1.1.5) - Free Movies & TV Shows',
+        'Download MovieFlix Android APK (v1.1.6) - Free Movies & TV Shows',
         'Download the official MovieFlix Android app. Stream & download movies and series in 4K/1080p offline with zero ads.',
         'https://movieflix-pi-six.vercel.app/assets/og-banner.png',
         'https://movieflix-pi-six.vercel.app/download'
@@ -2710,7 +2714,7 @@ function ReelApp() {
       updateWebMetaTags(title, desc, img, url);
     } else {
       updateWebMetaTags(
-        'MovieFlix - Watch & Download Free Movies, TV Series & Official APK (v1.1.5)',
+        'MovieFlix - Watch & Download Free Movies, TV Series & Official APK (v1.1.6)',
         'Stream and download thousands of HD movies, web series, Hindi dubbed blockbusters, and anime in 4K/1080p with zero ads. Download the official MovieFlix Android APK.',
         'https://movieflix-pi-six.vercel.app/assets/og-banner.png',
         'https://movieflix-pi-six.vercel.app/'
@@ -3751,7 +3755,7 @@ function ReelApp() {
                         <View style={styles.meNavTitleRow}>
                           <Text style={styles.meNavTitle}>Download Android App</Text>
                           <View style={styles.meNavBadge}>
-                            <Text style={styles.meNavBadgeText}>v1.1.4 APK</Text>
+                            <Text style={styles.meNavBadgeText}>v1.1.6 APK</Text>
                           </View>
                         </View>
                         <Text style={styles.meNavSubtitle}>
@@ -4924,7 +4928,12 @@ function ReelApp() {
             {detailData?.isSeries && detailData?.seasons && detailData.seasons.length > 0 && (
               <View style={styles.episodesContainer}>
                 {/* Season Pills */}
-                <View style={styles.seasonPillsRow}>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.seasonPillsRow}
+                  style={styles.seasonPillsScroll}
+                >
                   {detailData.seasons.map((s, idx) => (
                     <TouchableOpacity
                       key={`season-pill-${s.se}-${idx}`}
@@ -4937,7 +4946,7 @@ function ReelApp() {
                       </Text>
                     </TouchableOpacity>
                   ))}
-                </View>
+                </ScrollView>
 
                 {/* Horizontal Episodes Slider */}
                 <Text style={styles.episodesHeaderLabel}>Episodes</Text>
@@ -5311,7 +5320,12 @@ function ReelApp() {
                   </View>
 
                   {/* Season Buttons */}
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }}>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={{ paddingRight: 20 }}
+                    style={{ marginBottom: 10 }}
+                  >
                     {downloadDetail.seasons.map((s, idx) => (
                       <TouchableOpacity
                         key={`dl-se-btn-${s.se}-${idx}`}
@@ -5683,6 +5697,7 @@ function ReelApp() {
           <TouchableOpacity
             style={styles.floatingNavTab}
             onPress={() => {
+              setMeDotDismissed(true);
               if (mainTab !== 'Me') {
                 triggerHaptic('selection');
                 setMainTab('Me');
@@ -5701,7 +5716,7 @@ function ReelApp() {
                 <View style={styles.floatingNavDownloadBadge}>
                   <AnimatedDownloadSpinner size={9} color="#FFFFFF" />
                 </View>
-              ) : myList.length > 0 ? (
+              ) : !meDotDismissed && mainTab !== 'Me' && myList.length > 0 ? (
                 <View style={styles.floatingNavBadgeDot} />
               ) : null}
             </View>
@@ -5744,7 +5759,7 @@ function ReelApp() {
                   Install Movieflix APK for a better experience
                 </Text>
                 <Text style={styles.webInstallSubtitle} numberOfLines={1}>
-                  Tap to download latest v1.1.4 · Faster stream · 0 ads
+                  Tap to download latest v1.1.6 · Faster stream · 0 ads
                 </Text>
               </View>
               <View style={styles.webInstallBtn}>
@@ -8363,18 +8378,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     marginBottom: 24,
   },
-  seasonPillsRow: {
-    flexDirection: 'row',
-    gap: 8,
+  seasonPillsScroll: {
     marginBottom: 12,
   },
+  seasonPillsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingRight: 20,
+  },
   seasonSelectPill: {
-    paddingHorizontal: 14,
-    paddingVertical: 6,
+    paddingHorizontal: 15,
+    paddingVertical: 7,
     borderRadius: 999,
     backgroundColor: 'rgba(255, 255, 255, 0.06)',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.12)',
+    marginRight: 8,
   },
   seasonSelectPillActive: {
     backgroundColor: 'rgba(229, 9, 20, 0.25)',

@@ -42,7 +42,7 @@ async function ensureTables(sql) {
         id SERIAL PRIMARY KEY,
         user_id INTEGER REFERENCES mf_users(id) ON DELETE SET NULL,
         user_email VARCHAR(255) NOT NULL,
-        version VARCHAR(50) DEFAULT '1.1.5',
+        version VARCHAR(50) DEFAULT '1.1.6',
         ip_address VARCHAR(100),
         user_agent TEXT,
         downloaded_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -119,8 +119,8 @@ export default async function handler(req, res) {
     }
 
     // Try fetching latest release info from GitHub
-    let releaseVersion = '1.1.5';
-    let releaseTag = 'v1.1.5';
+    let releaseVersion = '1.1.6';
+    let releaseTag = 'v1.1.6';
     let sizeBytes = 102760448; // ~98 MB
     let publishedAt = new Date().toISOString();
 
@@ -171,23 +171,32 @@ export default async function handler(req, res) {
     });
   }
 
-  // 2. AUTHENTICATION CHECK: Only signed-in users can download
-  const authHeader = req.headers['authorization'] || '';
-  const tokenQuery = req.query?.token || req.body?.token || '';
-  const token = authHeader.replace(/^Bearer\s+/i, '').trim() || tokenQuery;
+  // 2. AUTHENTICATION CHECK: Only signed-in users can download from web browser
+  const isAppUpdater =
+    req.query?.source === 'app_update' ||
+    req.headers['x-app-updater'] === 'true' ||
+    (typeof req.headers['user-agent'] === 'string' &&
+      req.headers['user-agent'].includes('Movieflix-App'));
 
-  const user = verifyJwt(token);
-  if (!user || !user.email) {
-    // If not authenticated:
-    const wantsJson = (req.headers['accept'] || '').includes('application/json') || req.query?.format === 'json';
-    if (wantsJson || req.method === 'POST') {
-      return res.status(401).json({
-        error: 'Authentication required. Please sign in to download MovieFlix APK.',
-        code: 'SIGNIN_REQUIRED',
-      });
+  let user = null;
+  if (!isAppUpdater) {
+    const authHeader = req.headers['authorization'] || '';
+    const tokenQuery = req.query?.token || req.body?.token || '';
+    const token = authHeader.replace(/^Bearer\s+/i, '').trim() || tokenQuery;
+
+    user = verifyJwt(token);
+    if (!user || !user.email) {
+      // If not authenticated:
+      const wantsJson = (req.headers['accept'] || '').includes('application/json') || req.query?.format === 'json';
+      if (wantsJson || req.method === 'POST') {
+        return res.status(401).json({
+          error: 'Authentication required. Please sign in to download MovieFlix APK.',
+          code: 'SIGNIN_REQUIRED',
+        });
+      }
+      // Browser direct navigation redirect to /download with auth required query
+      return res.redirect(302, '/download?auth=required');
     }
-    // Browser direct navigation redirect to /download with auth required query
-    return res.redirect(302, '/download?auth=required');
   }
 
   // 3. RECORD DOWNLOAD IN NEON DATABASE
@@ -198,9 +207,10 @@ export default async function handler(req, res) {
         req.socket?.remoteAddress ||
         '';
       const ua = req.headers['user-agent'] || '';
+      const email = user?.email || (isAppUpdater ? 'in_app_updater@movieflix.internal' : 'anonymous');
       await sql`
         INSERT INTO mf_downloads (user_id, user_email, version, ip_address, user_agent)
-        VALUES (${user.id || null}, ${user.email}, '1.1.5', ${ip.slice(0, 100)}, ${ua.slice(0, 500)})
+        VALUES (${user?.id || null}, ${email}, '1.1.6', ${ip.slice(0, 100)}, ${ua.slice(0, 500)})
       `;
     } catch (dbErr) {
       console.error('[Download API] Record download error:', dbErr.message);

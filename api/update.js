@@ -5,7 +5,7 @@
 
 const GITHUB_OWNER = 'nuratix';
 const GITHUB_REPO = 'movieflix';
-const FALLBACK_VERSION = '1.1.4';
+const FALLBACK_VERSION = '1.1.6';
 
 /**
  * Compare two semver strings (e.g., "1.1.4" vs "1.1.3", or "v1.1.4" vs "1.1.4")
@@ -132,7 +132,9 @@ export default async function handler(req, res) {
         name: foundApk.name,
         size: foundApk.size,
         sizeFormatted: formatBytes(foundApk.size),
-        downloadUrl: 'https://movieflix-pi-six.vercel.app/api/download',
+        downloadUrl:
+          foundApk.browser_download_url ||
+          'https://movieflix-pi-six.vercel.app/api/download?source=app_update',
       };
     }
 
@@ -149,7 +151,9 @@ export default async function handler(req, res) {
       releaseNotes: latestRelease.body || 'Performance improvements and bug fixes.',
       publishedAt: latestRelease.published_at,
       releaseUrl: latestRelease.html_url,
-      downloadUrl: 'https://movieflix-pi-six.vercel.app/api/download',
+      downloadUrl:
+        foundApk?.browser_download_url ||
+        'https://movieflix-pi-six.vercel.app/api/download?source=app_update',
       apkAsset,
     });
   } catch (err) {

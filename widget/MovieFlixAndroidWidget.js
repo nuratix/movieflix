@@ -5,26 +5,31 @@ import {
   SvgWidget,
   ImageWidget,
 } from 'react-native-android-widget';
-import { MOVIEFLIX_SVG_XML } from './widgetData';
+import { MOVIEFLIX_SVG_XML, OFFICIAL_WIDGET_POSTERS } from './widgetData';
 
 /**
  * 2x4 MovieFlix Android Home Screen Widget
  * Replicates the clean minimal HTML widget layout with 100% fidelity.
  */
 export function MovieFlixAndroidWidget({ posters = [] }) {
-  const displayPosters = posters.length >= 3 ? posters.slice(0, 3) : posters;
+  const displayPosters = posters && posters.length >= 3 ? posters.slice(0, 3) : OFFICIAL_WIDGET_POSTERS;
 
   return (
     <FlexWidget
       style={{
         height: 'match_parent',
         width: 'match_parent',
-        backgroundColor: '#000000',
+        backgroundColor: '#080808',
+        backgroundGradient: {
+          from: '#3a0408',
+          to: '#050505',
+          orientation: 'TL_BR',
+        },
         borderRadius: 22,
-        paddingHorizontal: 14,
-        paddingVertical: 12,
+        paddingHorizontal: 12,
+        paddingTop: 12,
+        paddingBottom: 10,
         flexDirection: 'column',
-        justifyContent: 'space-between',
       }}
       clickAction="OPEN_APP"
     >
@@ -36,6 +41,7 @@ export function MovieFlixAndroidWidget({ posters = [] }) {
           flexDirection: 'row',
           alignItems: 'center',
           justifyContent: 'space-between',
+          marginBottom: 8,
         }}
       >
         <SvgWidget
@@ -50,21 +56,19 @@ export function MovieFlixAndroidWidget({ posters = [] }) {
           style={{
             fontSize: 11,
             fontWeight: '500',
-            color: '#FFFFFF',
+            color: '#B3B3B3',
             letterSpacing: 0.2,
           }}
         />
       </FlexWidget>
 
-      {/* Posters Row: 3 columns matching grid-template-columns: repeat(3, minmax(0, 1fr)) */}
+      {/* Posters Row: 3 columns taking full remaining vertical space */}
       <FlexWidget
         style={{
           flex: 1,
           width: 'match_parent',
+          height: 'match_parent',
           flexDirection: 'row',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          marginTop: 8,
         }}
       >
         {displayPosters.map((item, index) => (
@@ -74,16 +78,21 @@ export function MovieFlixAndroidWidget({ posters = [] }) {
               flex: 1,
               height: 'match_parent',
               borderRadius: 10,
-              backgroundColor: '#1a1a1a',
+              backgroundColor: '#161616',
               overflow: 'hidden',
-              marginHorizontal: index === 1 ? 4 : 0,
+              marginLeft: index === 0 ? 0 : 3,
+              marginRight: index === displayPosters.length - 1 ? 0 : 3,
             }}
             clickAction="OPEN_APP"
           >
             <ImageWidget
               image={item.poster || item.fallback}
-              imageWidth={104}
-              imageHeight={140}
+              style={{
+                width: 'match_parent',
+                height: 'match_parent',
+              }}
+              imageWidth={160}
+              imageHeight={240}
               radius={10}
               resizeMode="cover"
             />
