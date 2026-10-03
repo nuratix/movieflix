@@ -10,6 +10,29 @@ const GITHUB_OWNER = 'nuratix';
 const GITHUB_REPO = 'movieflix';
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN ? process.env.GITHUB_TOKEN.trim() : '';
 const JWT_SECRET = process.env.JWT_SECRET || 'movieflix_neon_secret_2026_super_secure';
+const TARGET_VERSION = '1.1.6';
+
+function isNewerVersion(remoteVer, currentVer = TARGET_VERSION) {
+  if (!remoteVer) return false;
+  const clean = (v) =>
+    (v || '')
+      .replace(/^v/i, '')
+      .split(/[-+]/)[0]
+      .split('.')
+      .map((n) => parseInt(n, 10) || 0);
+
+  const r = clean(remoteVer);
+  const c = clean(currentVer);
+
+  const len = Math.max(r.length, c.length);
+  for (let i = 0; i < len; i++) {
+    const rPart = r[i] || 0;
+    const cPart = c[i] || 0;
+    if (rPart > cPart) return true;
+    if (rPart < cPart) return false;
+  }
+  return false;
+}
 
 // ─── Neon DB Connection Helper ───────────────────────────────────────────────
 function getDb() {
@@ -108,6 +131,7 @@ export default async function handler(req, res) {
 
   // 1. PUBLIC METADATA ENDPOINT: /api/download?info=true
   if (req.method === 'GET' && req.query && req.query.info === 'true') {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0, s-maxage=0');
     let realDownloads = 0;
     if (sql) {
       try {
@@ -119,9 +143,9 @@ export default async function handler(req, res) {
     }
 
     // Try fetching latest release info from GitHub
-    let releaseVersion = '1.1.6';
-    let releaseTag = 'v1.1.6';
-    let sizeBytes = 102760448; // ~98 MB
+    let releaseVersion = TARGET_VERSION;
+    let releaseTag = `v${TARGET_VERSION}`;
+    let sizeBytes = 115878148; // ~110.5 MB
     let publishedAt = new Date().toISOString();
 
     const authHeader = GITHUB_TOKEN
@@ -135,7 +159,7 @@ export default async function handler(req, res) {
         `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases`,
         {
           headers: {
-            'User-Agent': 'Movieflix-Download-Proxy/1.1.5',
+            'User-Agent': `Movieflix-Download-Proxy/${TARGET_VERSION}`,
             'Accept': 'application/vnd.github.v3+json',
             ...(authHeader ? { Authorization: authHeader } : {}),
           },
@@ -143,15 +167,24 @@ export default async function handler(req, res) {
       );
       if (listRes.ok) {
         const releases = await listRes.json();
-        const latest = Array.isArray(releases) && (releases.find(r => !r.draft) || releases[0]);
-        if (latest) {
-          releaseTag = latest.tag_name || 'v1.1.5';
-          releaseVersion = releaseTag.replace(/^v/i, '');
-          publishedAt = latest.published_at || publishedAt;
-          const assets = Array.isArray(latest.assets) ? latest.assets : [];
-          const apk = assets.find(a => a.name && a.name.toLowerCase().endsWith('.apk'));
-          if (apk && apk.size) {
-            sizeBytes = apk.size;
+        if (Array.isArray(releases) && releases.length > 0) {
+          const validReleases = releases.filter(r => !r.draft);
+          const matching = validReleases.find(r => (r.tag_name || '').replace(/^v/i, '') === TARGET_VERSION);
+          const latest = matching || validReleases[0];
+          if (latest) {
+            const ghTag = latest.tag_name || `v${TARGET_VERSION}`;
+            const ghVer = ghTag.replace(/^v/i, '');
+            // Only update version if GitHub release is newer than or equal to TARGET_VERSION
+            if (!isNewerVersion(TARGET_VERSION, ghVer)) {
+              releaseTag = ghTag;
+              releaseVersion = ghVer;
+            }
+            publishedAt = latest.published_at || publishedAt;
+            const assets = Array.isArray(latest.assets) ? latest.assets : [];
+            const apk = assets.find(a => a.name && a.name.toLowerCase().endsWith('.apk'));
+            if (apk && apk.size) {
+              sizeBytes = apk.size;
+            }
           }
         }
       }
@@ -164,7 +197,7 @@ export default async function handler(req, res) {
       developer: 'movieflix',
       ageRating: '18+',
       sizeBytes,
-      sizeFormatted: sizeBytes ? (sizeBytes / (1024 * 1024)).toFixed(1) + ' MB' : '98 MB',
+      sizeFormatted: sizeBytes ? (sizeBytes / (1024 * 1024)).toFixed(1) + ' MB' : '110.5 MB',
       realDownloads,
       publishedAt,
       downloadUrl: '/api/download',
@@ -229,7 +262,7 @@ export default async function handler(req, res) {
       `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases`,
       {
         headers: {
-          'User-Agent': 'Movieflix-Download-Proxy/1.1.5',
+          'User-Agent': `Movieflix-Download-Proxy/${TARGET_VERSION}`,
           'Accept': 'application/vnd.github.v3+json',
           ...(ghAuthHeader ? { Authorization: ghAuthHeader } : {}),
         },
@@ -237,13 +270,15 @@ export default async function handler(req, res) {
     );
 
     if (!listRes.ok) {
-      return res.redirect(302, `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`);
+      return res.redirect(302, `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases/download/v${TARGET_VERSION}/movieflix-v${TARGET_VERSION}.apk`);
     }
 
     const releases = await listRes.json();
-    const latestRelease = Array.isArray(releases) && (releases.find(r => !r.draft) || releases[0]);
+    const validReleases = Array.isArray(releases) ? releases.filter(r => !r.draft) : [];
+    const matchingRelease = validReleases.find(r => (r.tag_name || '').replace(/^v/i, '') === TARGET_VERSION);
+    const latestRelease = matchingRelease || validReleases[0];
     if (!latestRelease) {
-      return res.status(404).json({ error: 'No releases found.' });
+      return res.redirect(302, `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases/download/v${TARGET_VERSION}/movieflix-v${TARGET_VERSION}.apk`);
     }
 
     const assets = Array.isArray(latestRelease.assets) ? latestRelease.assets : [];
@@ -252,14 +287,14 @@ export default async function handler(req, res) {
     );
 
     if (!apkAsset) {
-      return res.redirect(302, latestRelease.html_url || `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases`);
+      return res.redirect(302, `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases/download/v${TARGET_VERSION}/movieflix-v${TARGET_VERSION}.apk`);
     }
 
     // Direct APK download: obtain signed CDN URL from GitHub API
     const assetDownloadRes = await fetch(apkAsset.url, {
       method: 'GET',
       headers: {
-        'User-Agent': 'Movieflix-Download-Proxy/1.1.5',
+        'User-Agent': `Movieflix-Download-Proxy/${TARGET_VERSION}`,
         'Accept': 'application/octet-stream',
         ...(ghAuthHeader ? { Authorization: ghAuthHeader } : {}),
       },
@@ -276,9 +311,9 @@ export default async function handler(req, res) {
       return res.redirect(302, apkAsset.browser_download_url);
     }
 
-    return res.redirect(302, latestRelease.html_url);
+    return res.redirect(302, `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases/download/v${TARGET_VERSION}/movieflix-v${TARGET_VERSION}.apk`);
   } catch (err) {
     console.error('[Download API] Proxy redirect error:', err.message);
-    return res.redirect(302, `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`);
+    return res.redirect(302, `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases/download/v${TARGET_VERSION}/movieflix-v${TARGET_VERSION}.apk`);
   }
 }
