@@ -1217,6 +1217,7 @@ function ReelApp() {
   const [hasSeenWelcome, setHasSeenWelcome] = useState(Platform.OS === 'web');
   // Ref mirrors authUser so async callbacks (launchPlayer) always read latest value
   const authUserRef = useRef(null);
+  const authRedirectPathRef = useRef(null); // '/download' | '/privacy' | null
   const [authMode, setAuthMode] = useState('login');    // 'login' | 'register'
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
@@ -1316,13 +1317,26 @@ function ReelApp() {
     } catch { return null; }
   };
 
-  const openAuthPage = (mode = 'login') => {
+  const openAuthPage = (mode = 'login', returnTo = null) => {
     setAuthMode(mode);
     setAuthError('');
-    setIsAuthPageOpen(true);
-    if (detailMovie) {
-      setDetailMovie(null);
+    if (returnTo) {
+      authRedirectPathRef.current = returnTo;
+    } else if (isDownloadPageOpen) {
+      authRedirectPathRef.current = '/download';
+    } else if (isPrivacyPageOpen) {
+      authRedirectPathRef.current = '/privacy';
+    } else {
+      authRedirectPathRef.current = null;
     }
+
+    if (detailMovie) setDetailMovie(null);
+    if (isPlayerOpen) setIsPlayerOpen(false);
+    if (isDownloadPageOpen) setIsDownloadPageOpen(false);
+    if (isPrivacyPageOpen) setIsPrivacyPageOpen(false);
+    if (is404PageOpen) setIs404PageOpen(false);
+
+    setIsAuthPageOpen(true);
     if (Platform.OS === 'web') {
       navigateWeb('/auth', false);
     }
@@ -1330,7 +1344,20 @@ function ReelApp() {
 
   const closeAuthPage = () => {
     setIsAuthPageOpen(false);
-    if (Platform.OS === 'web') {
+    const returnPath = authRedirectPathRef.current;
+    authRedirectPathRef.current = null;
+
+    if (returnPath === '/download') {
+      setIsDownloadPageOpen(true);
+      if (Platform.OS === 'web') {
+        navigateWeb('/download', true);
+      }
+    } else if (returnPath === '/privacy') {
+      setIsPrivacyPageOpen(true);
+      if (Platform.OS === 'web') {
+        navigateWeb('/privacy', true);
+      }
+    } else if (Platform.OS === 'web') {
       navigateWeb('/', true);
     }
   };
@@ -1457,6 +1484,24 @@ function ReelApp() {
       setIsAuthPageOpen(false);
       setAuthEmail('');
       setAuthPassword('');
+
+      const returnPath = authRedirectPathRef.current;
+      authRedirectPathRef.current = null;
+
+      if (returnPath === '/download') {
+        setIsDownloadPageOpen(true);
+        if (Platform.OS === 'web') {
+          navigateWeb('/download', true);
+        }
+        return;
+      }
+      if (returnPath === '/privacy') {
+        setIsPrivacyPageOpen(true);
+        if (Platform.OS === 'web') {
+          navigateWeb('/privacy', true);
+        }
+        return;
+      }
 
       // Auto-launch playback if user was trying to play
       if (pendingPlayRef.current) {
@@ -2645,7 +2690,7 @@ function ReelApp() {
       );
     } else if (isDownloadPageOpen) {
       updateWebMetaTags(
-        'Download MovieFlix Android APK (v1.1.4) - Free Movies & TV Shows',
+        'Download MovieFlix Android APK (v1.1.5) - Free Movies & TV Shows',
         'Download the official MovieFlix Android app. Stream & download movies and series in 4K/1080p offline with zero ads.',
         'https://movieflix-pi-six.vercel.app/assets/og-banner.png',
         'https://movieflix-pi-six.vercel.app/download'
@@ -2665,7 +2710,7 @@ function ReelApp() {
       updateWebMetaTags(title, desc, img, url);
     } else {
       updateWebMetaTags(
-        'MovieFlix - Watch & Download Free Movies, TV Series & Official APK (v1.1.4)',
+        'MovieFlix - Watch & Download Free Movies, TV Series & Official APK (v1.1.5)',
         'Stream and download thousands of HD movies, web series, Hindi dubbed blockbusters, and anime in 4K/1080p with zero ads. Download the official MovieFlix Android APK.',
         'https://movieflix-pi-six.vercel.app/assets/og-banner.png',
         'https://movieflix-pi-six.vercel.app/'
@@ -2745,6 +2790,9 @@ function ReelApp() {
 
       // Route: /auth
       if (pathname.startsWith('/auth')) {
+        setIsDownloadPageOpen(false);
+        setIsPrivacyPageOpen(false);
+        setIs404PageOpen(false);
         setIsAuthPageOpen(true);
         return;
       } else {
@@ -2753,6 +2801,9 @@ function ReelApp() {
 
       // Route: /privacy
       if (pathname.startsWith('/privacy')) {
+        setIsDownloadPageOpen(false);
+        setIsAuthPageOpen(false);
+        setIs404PageOpen(false);
         setIsPrivacyPageOpen(true);
         return;
       } else {
@@ -2761,6 +2812,9 @@ function ReelApp() {
 
       // Route: /download
       if (pathname.startsWith('/download')) {
+        setIsAuthPageOpen(false);
+        setIsPrivacyPageOpen(false);
+        setIs404PageOpen(false);
         setIsDownloadPageOpen(true);
         return;
       } else {
@@ -2948,14 +3002,20 @@ function ReelApp() {
         return;
       }
       if (pathname.startsWith('/auth')) {
+        setIsDownloadPageOpen(false);
+        setIsPrivacyPageOpen(false);
         setIsAuthPageOpen(true);
         return;
       }
       if (pathname.startsWith('/privacy')) {
+        setIsDownloadPageOpen(false);
+        setIsAuthPageOpen(false);
         setIsPrivacyPageOpen(true);
         return;
       }
       if (pathname.startsWith('/download')) {
+        setIsAuthPageOpen(false);
+        setIsPrivacyPageOpen(false);
         setIsDownloadPageOpen(true);
         return;
       }
@@ -3379,6 +3439,20 @@ function ReelApp() {
     }
   }
 
+  // ─── WEB / REUSABLE /auth PAGE VIEW ──────────────────────────────────────
+  if (isAuthPageOpen) {
+    return (
+      <AuthScreen
+        initialMode={authMode}
+        authError={authError}
+        authLoading={authLoading}
+        onSubmit={handleAuthSubmit}
+        onClose={closeAuthPage}
+        onOpenPrivacy={handleOpenPrivacy}
+      />
+    );
+  }
+
   // ─── /privacy PAGE VIEW (DIRECT ROUTE ON WEB) ─────────────────────────────
   if (isPrivacyPageOpen) {
     return (
@@ -3396,21 +3470,7 @@ function ReelApp() {
         onOpenPrivacy={handleOpenPrivacy}
         authUser={authUser}
         authAccessToken={authAccessToken}
-        onOpenAuth={(mode) => openAuthPage(mode || 'login')}
-      />
-    );
-  }
-
-  // ─── WEB / REUSABLE /auth PAGE VIEW ──────────────────────────────────────
-  if (isAuthPageOpen) {
-    return (
-      <AuthScreen
-        initialMode={authMode}
-        authError={authError}
-        authLoading={authLoading}
-        onSubmit={handleAuthSubmit}
-        onClose={closeAuthPage}
-        onOpenPrivacy={handleOpenPrivacy}
+        onOpenAuth={(mode) => openAuthPage(mode || 'login', '/download')}
       />
     );
   }
