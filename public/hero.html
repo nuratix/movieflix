@@ -1,0 +1,915 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>MovieFlix - 16:9 Cinematic Hero with Realistic Atmospheric Smoke</title>
+<style>
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    -webkit-tap-highlight-color: transparent;
+  }
+  html, body {
+    height: 100%;
+    margin: 0;
+    background: #0a0a0a;
+    color: #f5f5f1;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    overflow-x: hidden;
+  }
+
+  /* Control Bar at Top for Testing */
+  .control-bar {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: rgba(18, 18, 20, 0.88);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    padding: 10px 16px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: 13px;
+  }
+  .control-bar .brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+    color: #e50914;
+    font-size: 16px;
+  }
+  .control-bar .actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .btn-chip {
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    padding: 6px 14px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+  .btn-chip:hover, .btn-chip.active {
+    background: #e50914;
+    border-color: #e50914;
+    box-shadow: 0 2px 10px rgba(229, 9, 20, 0.4);
+  }
+  .slider-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #a3a3a3;
+    font-size: 12px;
+  }
+  .slider-group input[type="range"] {
+    accent-color: #e50914;
+    cursor: pointer;
+  }
+
+  /* Viewport Wrapper */
+  .app-container {
+    width: 100%;
+    margin: 0 auto;
+    transition: max-width 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .app-container.mobile-mode {
+    max-width: 480px;
+    box-shadow: 0 0 60px rgba(0, 0, 0, 0.9);
+    border-left: 1px solid rgba(255, 255, 255, 0.05);
+    border-right: 1px solid rgba(255, 255, 255, 0.05);
+  }
+  .app-container.desktop-mode {
+    max-width: 1400px;
+  }
+
+  /* ─────────────────────────────────────────────────────────────
+     CINEMATIC WIDESCREEN HERO BANNER SECTION (FULL HEIGHT ON MOBILE & DESKTOP)
+     ───────────────────────────────────────────────────────────── */
+  .hero-section {
+    position: relative;
+    width: 100%;
+    height: 500px;
+    background: #0a0a0a;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+  }
+  .desktop-mode .hero-section {
+    height: 540px;
+    max-height: 620px;
+  }
+
+  /* Banner Images Container */
+  .hero-banner-wrap {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+  }
+  .hero-banner-img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
+    opacity: 0;
+    transform: scale(1.02);
+    transition: opacity 0.65s cubic-bezier(0.2, 0.8, 0.2, 1), transform 0.65s cubic-bezier(0.2, 0.8, 0.2, 1);
+    will-change: opacity, transform;
+  }
+  .hero-banner-img.active {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  /* Soft Ambient Color Fill Behind */
+  .hero-ambient-blur {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    filter: blur(20px);
+    opacity: 0.25;
+    transform: scale(1.1);
+    pointer-events: none;
+  }
+
+  /* Minimal Top Gradient Vignette (Leaves upper artwork bright and crystal-clear) */
+  .hero-top-vignette {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 80px;
+    background: linear-gradient(to bottom, rgba(10, 10, 10, 0.75) 0%, rgba(10, 10, 10, 0.2) 50%, transparent 100%);
+    pointer-events: none;
+    z-index: 2;
+  }
+
+  /* ─────────────────────────────────────────────────────────────
+     AUTHENTIC ATMOSPHERIC ROLLING SMOKE & FOG ENGINE
+     Overlaid directly on top of the bottom of the banner image!
+     ───────────────────────────────────────────────────────────── */
+  .smoke-canvas {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    height: 38%;
+    pointer-events: none;
+    z-index: 3;
+    opacity: 0.9;
+  }
+
+  /* Deep Base Fog Bed (seamlessly blends bottom edge into #0a0a0a) */
+  .hero-base-fog {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 32%;
+    background: linear-gradient(
+      to bottom,
+      transparent 0%,
+      rgba(10, 10, 10, 0.25) 25%,
+      rgba(10, 10, 10, 0.7) 60%,
+      rgba(10, 10, 10, 0.95) 85%,
+      #0a0a0a 100%
+    );
+    pointer-events: none;
+    z-index: 4;
+  }
+
+  /* Floating Atmospheric Smoke Wisps (CSS Particle Waves) */
+  .smoke-layer {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -10px;
+    height: 120px;
+    pointer-events: none;
+    z-index: 5;
+    overflow: hidden;
+  }
+  .smoke-wisp {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(28px);
+    pointer-events: none;
+    animation: smokeDrift 6s infinite ease-in-out alternate;
+  }
+  .smoke-wisp-1 {
+    width: 220px;
+    height: 60px;
+    bottom: 15px;
+    left: 10%;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.12) 0%, rgba(200, 210, 230, 0.05) 50%, transparent 75%);
+    animation-duration: 7.2s;
+  }
+  .smoke-wisp-2 {
+    width: 280px;
+    height: 75px;
+    bottom: 25px;
+    right: 8%;
+    background: radial-gradient(circle, rgba(229, 9, 20, 0.12) 0%, rgba(255, 255, 255, 0.06) 45%, transparent 75%);
+    animation-duration: 9.4s;
+    animation-delay: -3s;
+  }
+  .smoke-wisp-3 {
+    width: 320px;
+    height: 80px;
+    bottom: 5px;
+    left: 35%;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.1) 0%, rgba(180, 200, 220, 0.04) 50%, transparent 70%);
+    animation-duration: 8.5s;
+    animation-delay: -5s;
+  }
+
+  @keyframes smokeDrift {
+    0% {
+      transform: translate(0, 0) scale(1);
+      opacity: 0.5;
+    }
+    50% {
+      transform: translate(15px, -18px) scale(1.12);
+      opacity: 0.85;
+    }
+    100% {
+      transform: translate(-12px, -8px) scale(1.04);
+      opacity: 0.6;
+    }
+  }
+
+  /* ─────────────────────────────────────────────────────────────
+     HERO CONTENT OVERLAY (Title, Metadata, Actions, Carousel)
+     ───────────────────────────────────────────────────────────── */
+  .hero-content {
+    position: relative;
+    z-index: 10;
+    width: 100%;
+    padding: 0 20px 14px 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+
+  .hero-title {
+    font-size: 26px;
+    font-weight: 800;
+    color: #f5f5f1;
+    letter-spacing: -0.4px;
+    margin-bottom: 4px;
+    text-shadow: 0 2px 12px rgba(0, 0, 0, 0.8);
+    transition: opacity 0.3s ease, transform 0.3s ease;
+  }
+  .mobile-mode .hero-title {
+    font-size: 20px;
+    margin-bottom: 2px;
+  }
+
+  /* Metadata Row */
+  .hero-meta-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 6px;
+    font-size: 12px;
+  }
+  .match-score {
+    color: #46d369;
+    font-weight: 700;
+    font-size: 13px;
+  }
+  .meta-glass-pill {
+    padding: 2px 7px;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: #c7c7cc;
+    font-weight: 600;
+    font-size: 11px;
+  }
+  .hero-genre {
+    color: #a3a3a3;
+    font-weight: 500;
+  }
+
+  /* Synopsis Snippet (Visible on wider screens for sleek balance) */
+  .hero-synopsis {
+    font-size: 12.5px;
+    line-height: 1.45;
+    color: #d6d6e0;
+    max-width: 620px;
+    margin-bottom: 10px;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-shadow: 0 1px 8px rgba(0, 0, 0, 0.85);
+  }
+  .mobile-mode .hero-synopsis {
+    display: none; /* Hide on mobile so image headroom is clean */
+  }
+
+  /* Hero Actions Row */
+  .hero-actions {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin-bottom: 8px;
+  }
+  .btn-play {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: #e50914;
+    color: #fff;
+    border: none;
+    padding: 8px 20px;
+    border-radius: 999px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 4px 16px rgba(229, 9, 20, 0.45);
+    transition: transform 0.15s ease, background 0.15s ease;
+  }
+  .btn-play:hover {
+    background: #ff1926;
+    transform: scale(1.03);
+  }
+  .btn-play:active {
+    transform: scale(0.97);
+  }
+  .btn-play svg {
+    width: 16px;
+    height: 16px;
+    fill: currentColor;
+  }
+
+  .btn-list, .btn-info {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(255, 255, 255, 0.14);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    color: #f5f5f1;
+    padding: 8px 16px;
+    border-radius: 999px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .btn-list:hover, .btn-info:hover {
+    background: rgba(255, 255, 255, 0.24);
+    transform: scale(1.02);
+  }
+  .btn-info {
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    justify-content: center;
+    border-radius: 50%;
+  }
+
+  /* Carousel Dots */
+  .hero-dots {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    margin-top: 4px;
+  }
+  .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.3);
+    cursor: pointer;
+    transition: all 0.25s ease;
+  }
+  .dot.active {
+    width: 18px;
+    background: #e50914;
+    box-shadow: 0 0 8px rgba(229, 9, 20, 0.6);
+  }
+
+  /* Sample Shelves Below to Demonstrate Seamless Transition into Content */
+  .shelf-section {
+    padding: 20px 16px 40px;
+  }
+  .shelf-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+  .shelf-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: #f5f5f1;
+  }
+  .see-more-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: #e50914;
+    font-size: 12px;
+    font-weight: 700;
+    text-decoration: none;
+  }
+  .poster-row {
+    display: flex;
+    gap: 12px;
+    overflow-x: auto;
+    padding-bottom: 12px;
+    scrollbar-width: none;
+  }
+  .poster-row::-webkit-scrollbar { display: none; }
+  .dummy-card {
+    flex: 0 0 120px;
+    height: 180px;
+    border-radius: 8px;
+    background: #18181b;
+    overflow: hidden;
+    position: relative;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  .dummy-card img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  .card-label {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    background: linear-gradient(to top, rgba(0,0,0,0.9), transparent);
+  }
+</style>
+</head>
+<body>
+
+<!-- Testing Control Bar -->
+<div class="control-bar">
+  <div class="brand">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M4 3h16a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zm1 2v3h3V5H5zm5 0v3h4V5h-4zm6 0v3h3V5h-3zM5 10v4h14v-4H5zm0 6v3h3v-3H5zm5 0v3h4v-3h-4zm6 0v3h3v-3h-3z"/>
+    </svg>
+    MOVIEFLIX 16:9 HERO
+  </div>
+
+  <div class="actions">
+    <!-- View Mode Switch -->
+    <button class="btn-chip" id="btnToggleView" onclick="toggleViewMode()">Switch to Desktop Widescreen</button>
+
+    <!-- Cycle Banner Button -->
+    <button class="btn-chip" onclick="nextBanner()">Next Banner (1-11)</button>
+
+    <!-- Smoke Density Control -->
+    <div class="slider-group">
+      <span>Smoke Density:</span>
+      <input type="range" id="smokeDensity" min="0.1" max="1.5" step="0.1" value="0.9" oninput="updateSmokeDensity(this.value)">
+    </div>
+  </div>
+</div>
+
+<!-- Main App Viewport Container -->
+<div class="app-container mobile-mode" id="appContainer">
+
+  <!-- 16:9 HERO BANNER SECTION -->
+  <section class="hero-section" id="heroSection">
+    
+    <!-- Banner Images -->
+    <div class="hero-banner-wrap" id="bannerWrap">
+      <!-- Ambient Blur Layer -->
+      <img id="ambientImg" class="hero-ambient-blur" src="" alt="ambient">
+
+      <!-- Dynamic Widescreen Banner Images -->
+      <img class="hero-banner-img active" id="bannerImg" src="https://pbcdnw.aoneroom.com/image/2026/09/28/0e35dc8679da7aba8cf1d4e62f802612.webp" alt="Runner">
+    </div>
+
+    <!-- Soft Top Vignette (Header clarity, leaves artwork bright) -->
+    <div class="hero-top-vignette"></div>
+
+    <!-- ATMOSPHERIC ROLLING SMOKE CANVAS (BILLOWING FROM BOTTOM) -->
+    <canvas id="smokeCanvas" class="smoke-canvas"></canvas>
+
+    <!-- Deep Base Fog Bed (seamlessly blends bottom edge into #0a0a0a) -->
+    <div class="hero-base-fog"></div>
+
+    <!-- Floating Atmosphere Wisps (CSS Radial Glow Plumes) -->
+    <div class="smoke-layer">
+      <div class="smoke-wisp smoke-wisp-1" id="wisp1"></div>
+      <div class="smoke-wisp smoke-wisp-2" id="wisp2"></div>
+      <div class="smoke-wisp smoke-wisp-3" id="wisp3"></div>
+    </div>
+
+    <!-- Hero Content Overlay (Anchored cleanly at bottom) -->
+    <div class="hero-content">
+      <h1 class="hero-title" id="heroTitle">Runner</h1>
+
+      <div class="hero-meta-row">
+        <span class="match-score" id="heroMatch">99% match</span>
+        <span class="meta-glass-pill" id="heroYear">2026</span>
+        <span class="meta-glass-pill">4K ULTRA</span>
+        <span class="hero-genre" id="heroGenre">Action · Suspense · Crime</span>
+      </div>
+
+      <p class="hero-synopsis" id="heroSynopsis">
+        An adrenaline-fueled high-octane thriller where every second counts. Pursued by ruthless forces across neon-drenched cityscapes.
+      </p>
+
+      <div class="hero-actions">
+        <button class="btn-play" onclick="handlePlay()">
+          <svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          Play
+        </button>
+
+        <button class="btn-list" id="btnList" onclick="toggleMyList()">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          <span id="listText">My List</span>
+        </button>
+
+        <button class="btn-info" onclick="handleInfo()" title="Details">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+        </button>
+      </div>
+
+      <!-- Carousel Dots -->
+      <div class="hero-dots" id="dotsContainer"></div>
+    </div>
+  </section>
+
+  <!-- Sample Content Shelf Below (Verifying seamless blend into pure black) -->
+  <section class="shelf-section">
+    <div class="shelf-header">
+      <h2 class="shelf-title">Recommended For You</h2>
+      <a href="#" class="see-more-link" onclick="event.preventDefault()">
+        See More
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>
+      </a>
+    </div>
+
+    <div class="poster-row">
+      <div class="dummy-card">
+        <img src="https://pbcdnw.aoneroom.com/image/2026/09/24/ded94aef0b9a9709b1a488fb3e96923e.jpg" alt="Runner">
+        <div class="card-label">Runner</div>
+      </div>
+      <div class="dummy-card">
+        <img src="https://pbcdnw.aoneroom.com/image/2026/09/14/cae6bf74aeb0d6411d531ca0bedd36b1.jpg" alt="Neagley">
+        <div class="card-label">Neagley</div>
+      </div>
+      <div class="dummy-card">
+        <img src="https://pbcdnw.aoneroom.com/image/2026/09/01/988cbdb133d471922a5f4a772c648880.jpg" alt="The Fix">
+        <div class="card-label">The Fix</div>
+      </div>
+      <div class="dummy-card">
+        <img src="https://pbcdnw.aoneroom.com/image/2026/10/02/37f26bbfc29924544b861a0dcc16634a.jpg" alt="Kill Jackie">
+        <div class="card-label">Kill Jackie</div>
+      </div>
+      <div class="dummy-card">
+        <img src="https://pbcdnw.aoneroom.com/image/2026/09/29/08f3c478145359eedb8c9a447a5d88f1.jpg" alt="Coven Academy">
+        <div class="card-label">Coven Academy</div>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<script>
+// ─────────────────────────────────────────────────────────────
+// 11 OFFICIAL SERVER 16:9 BANNERS (Extracted directly from API)
+// ─────────────────────────────────────────────────────────────
+const BANNERS = [
+  {
+    name: "Runner",
+    url: "https://pbcdnw.aoneroom.com/image/2026/09/28/0e35dc8679da7aba8cf1d4e62f802612.webp",
+    year: "2026",
+    match: "99% match",
+    genre: "Action · Suspense · Crime",
+    synopsis: "An adrenaline-fueled high-octane thriller where every second counts. Pursued by ruthless forces across neon-drenched cityscapes."
+  },
+  {
+    name: "Coven Academy",
+    url: "https://pbcdnw.aoneroom.com/image/2026/10/03/902874b08f6d0f9db1d65b58ab92966f-s.png",
+    year: "2026",
+    match: "98% match",
+    genre: "Fantasy · Supernatural · Mystery",
+    synopsis: "At an elite school for young witches, dangerous ancient secrets threaten to unravel the fragile balance between humanity and the occult."
+  },
+  {
+    name: "Kill Jackie",
+    url: "https://pbcdnw.aoneroom.com/image/2026/10/03/cfbd63615f0f255c1135c2c7a83eee49.png",
+    year: "2026",
+    match: "97% match",
+    genre: "Crime · Action · Revenge",
+    synopsis: "A rogue operative becomes the prime target of a worldwide assassin network after uncovering a deadly global conspiracy."
+  },
+  {
+    name: "Blood Legacy Season 2",
+    url: "https://pbcdnw.aoneroom.com/image/2026/09/25/d61d99c796db5fcef8d8a767668115d0.png",
+    year: "2026",
+    match: "99% match",
+    genre: "Drama · Crime · Dynasty",
+    synopsis: "The battle for succession escalates into open warfare as family secrets and ruthless ambition tear the empire apart."
+  },
+  {
+    name: "A Different World",
+    url: "https://pbcdnw.aoneroom.com/image/2026/09/25/abade93fc0eabd7ebfba92fb488b52f8.webp",
+    year: "2026",
+    match: "96% match",
+    genre: "Sci-Fi · Parallel Worlds · Drama",
+    synopsis: "When an astrophysicist accidentally opens a rift between parallel realities, she must confront alternate versions of her own destiny."
+  },
+  {
+    name: "The Love Hypothesis",
+    url: "https://pbcdnw.aoneroom.com/image/2026/09/23/cfea48c317b394e757b5185782a70d75.webp",
+    year: "2026",
+    match: "98% match",
+    genre: "Romance · Comedy · Drama",
+    synopsis: "A fake relationship between two passionate scientists quickly spirals into undeniable real chemistry."
+  },
+  {
+    name: "The Fix",
+    url: "https://pbcdnw.aoneroom.com/image/2026/09/18/d03fc02fe897ffdb7b8b4f97477986ea.jpeg",
+    year: "2026",
+    match: "97% match",
+    genre: "Action · Thriller · Mystery",
+    synopsis: "A high-stakes fixer must navigate corruption and danger when a simple assignment turns into an explosive trap."
+  },
+  {
+    name: "Neagley",
+    url: "https://pbcdnw.aoneroom.com/image/2026/09/16/258db67557b23779312dcad1458b9c0a.webp",
+    year: "2026",
+    match: "99% match",
+    genre: "Action · Investigation · Military",
+    synopsis: "Frances Neagley uses her razor-sharp military instincts and lethal skills to dismantle a ruthless criminal syndicate."
+  },
+  {
+    name: "MobLand Season 2",
+    url: "https://pbcdnw.aoneroom.com/image/2026/09/18/5fb7013fa1189d2ac3ce9d8b1127eb5a.jpeg",
+    year: "2026",
+    match: "96% match",
+    genre: "Gangster · Crime · Neo-Noir",
+    synopsis: "In a lawless border town, rival mob families clash over territorial control as federal agents close in."
+  },
+  {
+    name: "Paris Has Fallen",
+    url: "https://pbcdnw.aoneroom.com/image/2026/09/23/dc4b3d7a95e7d56fd811f59c880cbad3.webp",
+    year: "2026",
+    match: "98% match",
+    genre: "Action · Political Thriller",
+    synopsis: "A French protection officer and an MI6 operative team up to protect the city of Paris from a devastating terrorist plot."
+  },
+  {
+    name: "Bleach: Thousand-Year Blood War",
+    url: "https://pbcdnw.aoneroom.com/image/2026/09/01/b4515dac7fe9fdf8fc461b299a9785df.png",
+    year: "2026",
+    match: "99% match",
+    genre: "Anime · Supernatural · Action",
+    synopsis: "The peace is suddenly broken when warning sirens blare through the Soul Society. The final battle begins."
+  }
+];
+
+let currentIndex = 0;
+let autoTimer = null;
+let inMyList = false;
+
+// Initialize Carousel Dots
+const dotsContainer = document.getElementById('dotsContainer');
+BANNERS.slice(0, 8).forEach((_, idx) => {
+  const dot = document.createElement('div');
+  dot.className = `dot ${idx === 0 ? 'active' : ''}`;
+  dot.onclick = () => selectBanner(idx);
+  dotsContainer.appendChild(dot);
+});
+
+function updateBannerUI(idx) {
+  const item = BANNERS[idx];
+  const bannerImg = document.getElementById('bannerImg');
+  const ambientImg = document.getElementById('ambientImg');
+  const title = document.getElementById('heroTitle');
+  const match = document.getElementById('heroMatch');
+  const year = document.getElementById('heroYear');
+  const genre = document.getElementById('heroGenre');
+  const synopsis = document.getElementById('heroSynopsis');
+
+  // Fade transition
+  bannerImg.classList.remove('active');
+  title.style.opacity = '0';
+  title.style.transform = 'translateY(6px)';
+
+  setTimeout(() => {
+    bannerImg.src = item.url;
+    ambientImg.src = item.url;
+    title.textContent = item.name;
+    match.textContent = item.match;
+    year.textContent = item.year;
+    genre.textContent = item.genre;
+    synopsis.textContent = item.synopsis;
+
+    bannerImg.classList.add('active');
+    title.style.opacity = '1';
+    title.style.transform = 'translateY(0)';
+  }, 220);
+
+  // Update dots
+  const dots = document.querySelectorAll('.dot');
+  dots.forEach((dot, dIdx) => {
+    dot.className = `dot ${(idx % dots.length) === dIdx ? 'active' : ''}`;
+  });
+}
+
+function selectBanner(idx) {
+  currentIndex = idx;
+  updateBannerUI(currentIndex);
+  resetAutoRotation();
+}
+
+function nextBanner() {
+  currentIndex = (currentIndex + 1) % BANNERS.length;
+  updateBannerUI(currentIndex);
+  resetAutoRotation();
+}
+
+function resetAutoRotation() {
+  clearInterval(autoTimer);
+  autoTimer = setInterval(nextBanner, 4500);
+}
+resetAutoRotation();
+
+function toggleViewMode() {
+  const container = document.getElementById('appContainer');
+  const btn = document.getElementById('btnToggleView');
+  if (container.classList.contains('mobile-mode')) {
+    container.classList.remove('mobile-mode');
+    container.classList.add('desktop-mode');
+    btn.textContent = 'Switch to Mobile (480px)';
+  } else {
+    container.classList.remove('desktop-mode');
+    container.classList.add('mobile-mode');
+    btn.textContent = 'Switch to Desktop Widescreen';
+  }
+}
+
+function toggleMyList() {
+  inMyList = !inMyList;
+  const btn = document.getElementById('btnList');
+  const text = document.getElementById('listText');
+  if (inMyList) {
+    btn.style.color = '#46d369';
+    btn.style.borderColor = '#46d369';
+    text.textContent = 'In My List';
+  } else {
+    btn.style.color = '#f5f5f1';
+    btn.style.borderColor = 'rgba(255, 255, 255, 0.25)';
+    text.textContent = 'My List';
+  }
+}
+
+function handlePlay() {
+  alert(`Launching Player for: ${BANNERS[currentIndex].name}`);
+}
+
+function handleInfo() {
+  alert(`Viewing Movie Details for: ${BANNERS[currentIndex].name}`);
+}
+
+// ─────────────────────────────────────────────────────────────
+// PROCEDURAL REAL-TIME CANVAS SMOKE ENGINE
+// Billows upward from the bottom, dispersing naturally!
+// ─────────────────────────────────────────────────────────────
+const canvas = document.getElementById('smokeCanvas');
+const ctx = canvas.getContext('2d');
+let smokeIntensity = 0.9;
+
+function resizeCanvas() {
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * (window.devicePixelRatio || 1);
+  canvas.height = rect.height * (window.devicePixelRatio || 1);
+  ctx.scale(window.devicePixelRatio || 1, window.devicePixelRatio || 1);
+}
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+
+class SmokeParticle {
+  constructor(w, h) {
+    this.reset(w, h, true);
+  }
+
+  reset(w, h, randomY = false) {
+    this.x = Math.random() * w;
+    this.y = randomY ? h - Math.random() * (h * 0.7) : h + Math.random() * 20;
+    this.vx = (Math.random() - 0.5) * 0.45;
+    this.vy = -(0.35 + Math.random() * 0.55);
+    this.radius = 40 + Math.random() * 55;
+    this.maxRadius = this.radius * (1.8 + Math.random() * 0.8);
+    this.life = 0;
+    this.maxLife = 140 + Math.random() * 100;
+    this.alpha = 0;
+    this.peakAlpha = (0.12 + Math.random() * 0.16) * smokeIntensity;
+    this.rotation = Math.random() * Math.PI * 2;
+    this.rotSpeed = (Math.random() - 0.5) * 0.008;
+  }
+
+  update(w, h) {
+    this.life++;
+    this.x += this.vx + Math.sin(this.life * 0.03) * 0.25;
+    this.y += this.vy;
+    this.rotation += this.rotSpeed;
+
+    const progress = this.life / this.maxLife;
+    this.radius += 0.28;
+
+    // Fade in from bottom, linger, then dissolve before top
+    if (progress < 0.25) {
+      this.alpha = (progress / 0.25) * this.peakAlpha;
+    } else if (progress > 0.6) {
+      this.alpha = (1 - (progress - 0.6) / 0.4) * this.peakAlpha;
+    } else {
+      this.alpha = this.peakAlpha;
+    }
+
+    if (this.life >= this.maxLife || this.y < -this.radius) {
+      this.reset(w, h);
+    }
+  }
+
+  draw(context) {
+    if (this.alpha <= 0.005) return;
+    context.save();
+    context.translate(this.x, this.y);
+    context.rotate(this.rotation);
+
+    const grad = context.createRadialGradient(0, 0, 0, 0, 0, this.radius);
+    grad.addColorStop(0, `rgba(230, 235, 245, ${this.alpha})`);
+    grad.addColorStop(0.4, `rgba(200, 210, 225, ${this.alpha * 0.6})`);
+    grad.addColorStop(0.7, `rgba(160, 175, 195, ${this.alpha * 0.2})`);
+    grad.addColorStop(1, 'rgba(10, 10, 10, 0)');
+
+    context.fillStyle = grad;
+    context.beginPath();
+    context.arc(0, 0, this.radius, 0, Math.PI * 2);
+    context.fill();
+    context.restore();
+  }
+}
+
+const rect = canvas.getBoundingClientRect();
+const particles = [];
+const PARTICLE_COUNT = 32;
+for (let i = 0; i < PARTICLE_COUNT; i++) {
+  particles.push(new SmokeParticle(rect.width, rect.height));
+}
+
+function renderSmoke() {
+  const w = canvas.getBoundingClientRect().width;
+  const h = canvas.getBoundingClientRect().height;
+  ctx.clearRect(0, 0, w, h);
+
+  particles.forEach(p => {
+    p.update(w, h);
+    p.draw(ctx);
+  });
+
+  requestAnimationFrame(renderSmoke);
+}
+requestAnimationFrame(renderSmoke);
+
+function updateSmokeDensity(val) {
+  smokeIntensity = parseFloat(val);
+  particles.forEach(p => {
+    p.peakAlpha = (0.12 + Math.random() * 0.16) * smokeIntensity;
+  });
+}
+</script>
+</body>
+</html>

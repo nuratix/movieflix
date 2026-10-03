@@ -1,0 +1,30 @@
+fn calculate_cosine_similarity(vec_a, vec_b) {
+    let dot_product = 0.0
+    let norm_a = 0.0
+    let norm_b = 0.0
+    let n = len(vec_a)
+
+    for i in 0..n {
+        let a = vec_a[i]
+        let b = vec_b[i]
+        dot_product = dot_product + (a * b)
+        norm_a = norm_a + (a * a)
+        norm_b = norm_b + (b * b)
+    }
+
+    if norm_a == 0.0 || norm_b == 0.0 {
+        return 0.0
+    }
+
+    return dot_product / (Math.sqrt(norm_a) * Math.sqrt(norm_b))
+}
+
+let m1 = [1.0, 0.8, 0.2, 0.0, 0.9]
+let m2 = [0.9, 0.7, 0.1, 0.0, 0.85]
+let m3 = [0.0, 0.1, 0.9, 0.8, 0.1]
+
+let sim_1_2 = calculate_cosine_similarity(m1, m2)
+let sim_1_3 = calculate_cosine_similarity(m1, m3)
+
+print("NextViper Similarity (Money Heist vs Squid Game):", sim_1_2)
+print("NextViper Similarity (Money Heist vs Cartoon):", sim_1_3)

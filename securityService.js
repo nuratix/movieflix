@@ -23,15 +23,34 @@ export function detectInjectionArtifacts() {
   };
 
   try {
-    // Check global scope
+    // Check global and window scopes
     const g = typeof global !== 'undefined' ? global : typeof window !== 'undefined' ? window : {};
+    const w = typeof window !== 'undefined' ? window : {};
 
-    if (g.__frida || g.frida || g.Frida || g._frida || g['frida:rpc']) {
+    if (
+      g.__frida ||
+      g.frida ||
+      g.Frida ||
+      g._frida ||
+      g['frida:rpc'] ||
+      w.__frida ||
+      w.frida ||
+      w.Frida ||
+      w._frida ||
+      w['frida:rpc']
+    ) {
       signals.fridaDetected = true;
       signals.injectedLibrariesDetected = true;
     }
 
-    if (g.__xposed || g.XposedBridge || g._xposed || g['de.robv.android.xposed.XposedBridge']) {
+    if (
+      g.__xposed ||
+      g.XposedBridge ||
+      g._xposed ||
+      g['de.robv.android.xposed.XposedBridge'] ||
+      w.__xposed ||
+      w.XposedBridge
+    ) {
       signals.xposedDetected = true;
       signals.injectedLibrariesDetected = true;
     }
@@ -49,18 +68,7 @@ export function detectInjectionArtifacts() {
  * Perform comprehensive Build Server Security & Authenticity Verification
  */
 export async function verifyAppSecurityAsync(apiBase = OFFICIAL_DOWNLOAD_ORIGIN) {
-  // Web browser visits: verify origin
-  if (Platform.OS === 'web') {
-    return {
-      verified: true,
-      authentic: true,
-      isTampered: false,
-      buildOrigin: OFFICIAL_DOWNLOAD_ORIGIN,
-      fingerprint: OFFICIAL_BUILD_FINGERPRINT,
-    };
-  }
-
-  // 1. Local Runtime Injection & Tampering Check
+  // 1. Local Runtime Injection & Tampering Check (Runs on all platforms to catch injected hooks)
   const tamperSignals = detectInjectionArtifacts();
   const hasInjection =
     tamperSignals.fridaDetected ||
@@ -68,6 +76,8 @@ export async function verifyAppSecurityAsync(apiBase = OFFICIAL_DOWNLOAD_ORIGIN)
     tamperSignals.injectedLibrariesDetected;
 
   if (hasInjection) {
+    // Clear verification cache so injection is instantly flagged
+    await AsyncStorage.removeItem(SECURITY_CACHE_KEY).catch(() => {});
     return {
       verified: false,
       authentic: false,
@@ -75,6 +85,18 @@ export async function verifyAppSecurityAsync(apiBase = OFFICIAL_DOWNLOAD_ORIGIN)
       reason: 'CODE_INJECTION_DETECTED',
       message: 'Unauthorized runtime code injection detected in the application.',
       downloadOrigin: OFFICIAL_DOWNLOAD_ORIGIN,
+      tamperSignals,
+    };
+  }
+
+  // Web browser visits in production without injection: verify origin
+  if (Platform.OS === 'web' && !__DEV__) {
+    return {
+      verified: true,
+      authentic: true,
+      isTampered: false,
+      buildOrigin: OFFICIAL_DOWNLOAD_ORIGIN,
+      fingerprint: OFFICIAL_BUILD_FINGERPRINT,
     };
   }
 

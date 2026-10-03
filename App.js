@@ -16,6 +16,7 @@ import {
   Easing,
   PanResponder,
   Linking,
+  RefreshControl,
 } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import { StatusBar } from 'expo-status-bar';
@@ -79,6 +80,7 @@ import {
 } from './homeCatalog';
 import { LOCAL_POSTERS } from './assets/posters';
 import { getImdbData } from './imdbService';
+import { getContentBasedRecommendations, getPersonalizedRecommendations } from './recommendationService';
 import WelcomeScreen from './WelcomeScreen';
 import AuthScreen from './AuthScreen';
 import CustomSplashScreen from './CustomSplashScreen';
@@ -246,6 +248,7 @@ export function normalizeMovie(item, fallbackSlug = '') {
   const name = item.name || item.title || item.postTitle || '';
   const slug = item.slug || item.detailPath || fallbackSlug || '';
   const subject_id = item.subject_id || item.subjectId || item.id || '';
+  const banner_url = item.banner_url || item.image?.url || item.cover?.url || item.poster_url || item.coverUrl || '';
   const poster_url = item.poster_url || item.cover?.url || item.banner_url || item.coverUrl || '';
   const isSeries = Boolean(
     item.isSeries ||
@@ -261,6 +264,7 @@ export function normalizeMovie(item, fallbackSlug = '') {
     slug: String(slug),
     subject_id: String(subject_id),
     subjectId: String(subject_id),
+    banner_url,
     poster_url,
     cover: typeof item.cover === 'object' && item.cover !== null ? item.cover : { url: poster_url },
     isSeries,
@@ -555,21 +559,21 @@ function getEpisodesArray(seasonObj) {
 // Fast, ultra-resilient SafeImage powered by expo-image with automatic error reset, bundled require() assets, and multi-protocol fallback
 const SafeImage = React.memo(function SafeImage({ uri, style, resizeMode = 'cover', contentPosition = 'center' }) {
   const [hasError, setHasError] = useState(false);
-  const isWeb = Platform.OS === 'web';
   const prevUriRef = useRef(uri);
 
-  // Only reset error state if the actual URI prop changes to a new target
-  useEffect(() => {
-    if (prevUriRef.current !== uri) {
-      prevUriRef.current = uri;
+  // Synchronously reset error state when URI prop changes so new banners display immediately
+  if (prevUriRef.current !== uri) {
+    prevUriRef.current = uri;
+    if (hasError) {
       setHasError(false);
     }
-  }, [uri]);
+  }
 
   // 1. Packaged local asset (require('./assets/...'))
   if (typeof uri === 'number') {
     return (
       <ExpoImage
+        key={String(uri)}
         source={uri}
         style={style}
         contentFit={resizeMode === 'contain' ? 'contain' : (resizeMode || 'cover')}
@@ -585,6 +589,7 @@ const SafeImage = React.memo(function SafeImage({ uri, style, resizeMode = 'cove
     const fileUri = uri.startsWith('file://') ? uri : `file://${uri}`;
     return (
       <ExpoImage
+        key={fileUri}
         source={{ uri: fileUri }}
         style={style}
         contentFit={resizeMode === 'contain' ? 'contain' : (resizeMode || 'cover')}
@@ -608,6 +613,7 @@ const SafeImage = React.memo(function SafeImage({ uri, style, resizeMode = 'cove
     else if (typeof uri.default === 'number') {
       return (
         <ExpoImage
+          key={String(uri.default)}
           source={uri.default}
           style={style}
           contentFit={resizeMode === 'contain' ? 'contain' : (resizeMode || 'cover')}
@@ -624,6 +630,7 @@ const SafeImage = React.memo(function SafeImage({ uri, style, resizeMode = 'cove
     if (fallbackPoster) {
       return (
         <ExpoImage
+          key={`fallback-${cleanUri || 'none'}`}
           source={fallbackPoster}
           style={style}
           contentFit={resizeMode === 'contain' ? 'contain' : (resizeMode || 'cover')}
@@ -646,26 +653,10 @@ const SafeImage = React.memo(function SafeImage({ uri, style, resizeMode = 'cove
     effectiveUri = effectiveUri.replace('http://', 'https://');
   }
 
-  // On Web: never pass custom headers to ExpoImage.
-  // Passing headers forces expo-image to run client-side fetch() with useHeaders(),
-  // which resets image to null on every parent re-render and causes images to flash/disappear!
-  const imageSource = useMemo(() => {
-    if (isWeb) {
-      return { uri: effectiveUri };
-    }
-    return {
-      uri: effectiveUri,
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36',
-        'Referer': 'https://moviebox.ph/',
-        'Accept': 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
-      },
-    };
-  }, [effectiveUri, isWeb]);
-
   return (
     <ExpoImage
-      source={imageSource}
+      key={effectiveUri}
+      source={{ uri: effectiveUri }}
       style={style}
       contentFit={resizeMode === 'contain' ? 'contain' : (resizeMode || 'cover')}
       contentPosition={contentPosition}
@@ -743,6 +734,7 @@ const CURATED_HERO_ITEMS = [
     name: "Wednesday",
     slug: "wednesday-urChTxajYKa",
     subject_id: "9028867555875774472",
+    banner_url: LOCAL_HERO_ASSETS.wednesday,
     poster_url: LOCAL_HERO_ASSETS.wednesday,
     match: "99% match",
     year: "2025",
@@ -755,6 +747,7 @@ const CURATED_HERO_ITEMS = [
     name: "Squid Game",
     slug: "squid-game-4CyZm1LfdG3",
     subject_id: "3089349649006742360",
+    banner_url: LOCAL_HERO_ASSETS.squidGame,
     poster_url: LOCAL_HERO_ASSETS.squidGame,
     match: "98% match",
     year: "2025",
@@ -767,6 +760,7 @@ const CURATED_HERO_ITEMS = [
     name: "Money Heist",
     slug: "money-heist-8UcoFG3Uog",
     subject_id: "222030967182086936",
+    banner_url: LOCAL_HERO_ASSETS.moneyHeist,
     poster_url: LOCAL_HERO_ASSETS.moneyHeist,
     match: "99% match",
     year: "2024",
@@ -779,6 +773,7 @@ const CURATED_HERO_ITEMS = [
     name: "Demon Slayer",
     slug: "demon-slayer-kimetsu-no-yaiba-english-cK8E2dUTaC8",
     subject_id: "7231184498325966096",
+    banner_url: LOCAL_HERO_ASSETS.demonSlayer,
     poster_url: LOCAL_HERO_ASSETS.demonSlayer,
     match: "97% match",
     year: "2025",
@@ -879,6 +874,7 @@ const DEFAULT_HINDI_MOVIES = [
     name: "Singham Again",
     slug: "singham-again-alwCCc6RCq1",
     subject_id: "1199747538023236688",
+    banner_url: "https://pbcdnw.aoneroom.com/image/2026/01/26/aca56b29eb6010435c6ecaaa294bdeff.jpg",
     poster_url: "https://pbcdnw.aoneroom.com/image/2026/01/26/aca56b29eb6010435c6ecaaa294bdeff.jpg",
     isSeries: false,
   },
@@ -886,6 +882,7 @@ const DEFAULT_HINDI_MOVIES = [
     name: "Pushpa",
     slug: "pushpa-OTJ90wVDEr2",
     subject_id: "2052974282610834608",
+    banner_url: "https://pbcdnw.aoneroom.com/image/2026/04/26/f75dc1594bc341912a6274f49bf6690e.jpg",
     poster_url: "https://pbcdnw.aoneroom.com/image/2026/04/26/f75dc1594bc341912a6274f49bf6690e.jpg",
     isSeries: false,
   },
@@ -893,6 +890,7 @@ const DEFAULT_HINDI_MOVIES = [
     name: "Animal",
     slug: "animal-c8zmSROvma7",
     subject_id: "6015381968286796952",
+    banner_url: "https://pbcdnw.aoneroom.com/image/2026/01/26/d5d4623300ebab2e73a68ace0f2b219e.jpg",
     poster_url: "https://pbcdnw.aoneroom.com/image/2026/01/26/d5d4623300ebab2e73a68ace0f2b219e.jpg",
     isSeries: false,
   },
@@ -900,6 +898,7 @@ const DEFAULT_HINDI_MOVIES = [
     name: "Stree 3",
     slug: "stree-3-ufEwn7KRXL9",
     subject_id: "8203008691864490480",
+    banner_url: "https://pbcdnw.aoneroom.com/image/2026/02/10/558248244bba7eb1557c85bfff9fa870.jpg",
     poster_url: "https://pbcdnw.aoneroom.com/image/2026/02/10/558248244bba7eb1557c85bfff9fa870.jpg",
     isSeries: false,
   },
@@ -907,6 +906,7 @@ const DEFAULT_HINDI_MOVIES = [
     name: "Pathaan",
     slug: "pathaan-WR6qz1rLVK4",
     subject_id: "3992515881552203432",
+    banner_url: "https://pbcdnw.aoneroom.com/image/2026/01/26/67063b8af69d0745c7b1ea87caeb5b8a.jpg",
     poster_url: "https://pbcdnw.aoneroom.com/image/2026/01/26/67063b8af69d0745c7b1ea87caeb5b8a.jpg",
     isSeries: false,
   },
@@ -914,12 +914,13 @@ const DEFAULT_HINDI_MOVIES = [
     name: "RRR",
     slug: "rrr-0GHAuwZXoo3",
     subject_id: "2848239607093808728",
+    banner_url: "https://pbcdnw.aoneroom.com/image/2022/10/14/48698840c718cbe05d5524a8b734a58a.jpg",
     poster_url: "https://pbcdnw.aoneroom.com/image/2022/10/14/48698840c718cbe05d5524a8b734a58a.jpg",
     isSeries: false,
   },
 ];
 
-// COOL MODERN ATMOSPHERIC SMOKE EFFECT FOR HERO (SMALL, SUBTLE & CLEAN)
+// DELICATE ATMOSPHERIC ROLLING SMOKE & MIST EFFECT
 function HeroSmokeEffect() {
   const smokeAnim1 = useRef(new Animated.Value(0)).current;
   const smokeAnim2 = useRef(new Animated.Value(0)).current;
@@ -1018,10 +1019,10 @@ function HeroSmokeEffect() {
         ]}
       />
 
-      {/* Butter-smooth bottom fade into pure black (no harsh lines) */}
+      {/* Deep bottom fade for text & content clarity */}
       <LinearGradient
-        colors={['transparent', 'rgba(10, 10, 10, 0.4)', 'rgba(10, 10, 10, 0.85)', '#0a0a0a']}
-        locations={[0, 0.45, 0.8, 1]}
+        colors={['transparent', 'rgba(10, 10, 10, 0.25)', 'rgba(10, 10, 10, 0.75)', 'rgba(10, 10, 10, 0.96)', '#0a0a0a']}
+        locations={[0, 0.35, 0.65, 0.88, 1]}
         style={styles.heroBottomFade}
       />
     </View>
@@ -1605,9 +1606,43 @@ function ReelApp() {
     } catch (e) {}
   };
 
+  const [refreshing, setRefreshing] = useState(false);
+
   // References to ensure explore grid never fetches or shows the same items
   const catalogPoolRef = useRef([]);
   const shownSlugsRef = useRef(new Set());
+  const mainScrollRef = useRef(null);
+
+  // Vectorized Recommendation Engine: Personalized Catalog Recommendations
+  const nextViperRecommendations = useMemo(() => {
+    const allPool = [
+      ...trendingNow,
+      ...latestReleases,
+      ...netflixPopular,
+      ...hindiMoviesList,
+      ...animeTrending,
+      ...animeLatest,
+      ...webSeriesLatest,
+      ...cartoonsList,
+      ...(catalogPoolRef.current || []),
+    ];
+    return getPersonalizedRecommendations({
+      userProfile: { watchHistory, myList },
+      catalog: allPool,
+      limit: 12,
+    });
+  }, [
+    watchHistory,
+    myList,
+    trendingNow,
+    latestReleases,
+    netflixPopular,
+    hindiMoviesList,
+    animeTrending,
+    animeLatest,
+    webSeriesLatest,
+    cartoonsList,
+  ]);
 
   // Handle Android Hardware Back Button for Me subpages
   useEffect(() => {
@@ -1627,40 +1662,24 @@ function ReelApp() {
   useEffect(() => {
     if (homeCategory !== 'All' || isSearching) return;
     const interval = setInterval(() => {
-      setHeroIndex((prev) => (prev + 1) % CURATED_HERO_ITEMS.length);
+      setHeroIndex((prev) => (prev + 1) % (heroList.length > 0 ? heroList.length : 1));
     }, 3000);
     return () => clearInterval(interval);
-  }, [homeCategory, isSearching]);
+  }, [homeCategory, isSearching, heroList.length]);
 
-  // Smooth slide, scale, and crossfade transition on hero poster change
+  // Butter-smooth pure crossfade on hero poster change
   const heroFadeAnim = useRef(new Animated.Value(1)).current;
-  const heroSlideAnim = useRef(new Animated.Value(0)).current;
-  const heroScaleAnim = useRef(new Animated.Value(1)).current;
   const heroContentSlideAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     heroFadeAnim.setValue(0);
-    heroSlideAnim.setValue(35);
-    heroScaleAnim.setValue(1.05);
-    heroContentSlideAnim.setValue(10);
+    heroContentSlideAnim.setValue(6);
 
     Animated.parallel([
       Animated.timing(heroFadeAnim, {
         toValue: 1,
-        duration: 480,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }),
-      Animated.timing(heroSlideAnim, {
-        toValue: 0,
-        duration: 480,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }),
-      Animated.timing(heroScaleAnim, {
-        toValue: 1,
-        duration: 650,
-        easing: Easing.out(Easing.quad),
+        duration: 500,
+        easing: Easing.inOut(Easing.ease),
         useNativeDriver: true,
       }),
       Animated.timing(heroContentSlideAnim, {
@@ -1687,19 +1706,20 @@ function ReelApp() {
       return;
     }
 
-    // 2. All catalog pool items shown - fetch fresh random titles from online API
+    // 2. All catalog pool items shown - fetch fresh random page from server
     try {
-      const searchTerms = ['action', 'space', 'detective', 'adventure', 'marvel', 'star', 'war', 'secret', 'dragon', 'mystery'];
-      const randomTerm = searchTerms[Math.floor(Math.random() * searchTerms.length)];
-      const res = await apiFetch(`${API_BASE}/api/content?endpoint=search&q=${encodeURIComponent(randomTerm)}`);
+      const randPage = Math.floor(Math.random() * 50) + 1;
+      const endpoint = Math.random() > 0.5 ? 'movies' : 'tv-series';
+      const res = await apiFetch(`${API_BASE}/api/content?endpoint=${endpoint}&page=${randPage}`);
       const data = await res.json();
-      const freshOnline = (data.items || []).filter(
-        item => !shownSlugsRef.current.has(item.slug || item.subject_id)
-      );
+      const freshOnline = (data.items || [])
+        .map(item => normalizeMovie({ ...item, isSeries: endpoint === 'tv-series' }))
+        .filter(item => item && !shownSlugsRef.current.has(item.slug || item.subject_id));
 
       if (freshOnline.length > 0) {
         const nextBatch = freshOnline.slice(0, 15);
         nextBatch.forEach(item => shownSlugsRef.current.add(item.slug || item.subject_id));
+        catalogPoolRef.current = [...(catalogPoolRef.current || []), ...freshOnline];
         setExploreGridList(prev => [...prev, ...nextBatch]);
         setExploreVisibleCount(prev => prev + nextBatch.length);
         return;
@@ -1789,6 +1809,21 @@ function ReelApp() {
           setCategoryItemsMap(prev => ({ ...prev, Animation: data.items }));
         }
       } catch (e) {}
+    }
+  };
+
+  // Handler for 'See More' on shelves: displays all items in responsive grid view
+  const handleSeeMoreSection = (title, items) => {
+    triggerHaptic('light');
+    if (Array.isArray(items) && items.length > 0) {
+      setCategoryItemsMap(prev => ({
+        ...prev,
+        [title]: items,
+      }));
+    }
+    setHomeCategory(title);
+    if (mainScrollRef.current?.scrollTo) {
+      mainScrollRef.current.scrollTo({ y: 0, animated: true });
     }
   };
 
@@ -1923,40 +1958,206 @@ function ReelApp() {
     }
   };
 
-  const fetchContent = async () => {
-    // 1. Instant load from local storage cache if available
-    try {
-      const cached = await getHomeFeedCache();
-      if (cached) {
-        if (cached.trendingNow?.length > 0) setTrendingNow(cached.trendingNow);
-        if (cached.latestReleases?.length > 0) setLatestReleases(cached.latestReleases);
-        if (cached.netflixPopular?.length > 0) setNetflixPopular(cached.netflixPopular);
-        if (cached.hindiMovies?.length > 0) setHindiMoviesList(cached.hindiMovies);
-        if (cached.animeTrending?.length > 0) setAnimeTrending(cached.animeTrending);
-        if (cached.animeLatest?.length > 0) setAnimeLatest(cached.animeLatest);
-        if (cached.webSeriesLatest?.length > 0) setWebSeriesLatest(cached.webSeriesLatest);
-        if (cached.cartoons?.length > 0) setCartoonsList(cached.cartoons);
-        setLoading(false); // Render immediately with zero delay!
+  const fetchContent = async (isRefresh = false) => {
+    // 1. Instant load from local storage cache if available (first launch)
+    if (!isRefresh) {
+      try {
+        const cached = await getHomeFeedCache();
+        if (cached) {
+          if (cached.trendingNow?.length > 0) setTrendingNow(cached.trendingNow);
+          if (cached.latestReleases?.length > 0) setLatestReleases(cached.latestReleases);
+          if (cached.netflixPopular?.length > 0) setNetflixPopular(cached.netflixPopular);
+          if (cached.hindiMovies?.length > 0) setHindiMoviesList(cached.hindiMovies);
+          if (cached.animeTrending?.length > 0) setAnimeTrending(cached.animeTrending);
+          if (cached.animeLatest?.length > 0) setAnimeLatest(cached.animeLatest);
+          if (cached.webSeriesLatest?.length > 0) setWebSeriesLatest(cached.webSeriesLatest);
+          if (cached.cartoons?.length > 0) setCartoonsList(cached.cartoons);
+          if (cached.heroList?.length > 0) setHeroList(cached.heroList);
+          setLoading(false); // Render feed instantly with zero delay!
+        }
+      } catch (ce) {
+        console.log("Cache load note:", ce);
       }
-    } catch (ce) {
-      console.log("Cache load note:", ce);
     }
 
     try {
-      // 2. Set curated 8 categories for October 2026 OTT & Netflix India
-      setTrendingNow(TRENDING_NOW);
-      setLatestReleases(LATEST_RELEASES);
-      setNetflixPopular(NETFLIX_POPULAR);
-      setHindiMoviesList(HINDI_MOVIES);
-      setAnimeTrending(ANIME_TRENDING);
-      setAnimeLatest(ANIME_LATEST);
-      setWebSeriesLatest(WEBSERIES_LATEST);
-      setCartoonsList(CARTOONS);
-      setHeroList(CURATED_HERO_ITEMS);
-      setLoading(false); // Render feed instantly with zero delay!
+      // 2. Fetch fresh, randomized content from the server
+      const randMoviesPage1 = Math.floor(Math.random() * 50) + 1;
+      let randMoviesPage2 = Math.floor(Math.random() * 50) + 1;
+      while (randMoviesPage2 === randMoviesPage1) {
+        randMoviesPage2 = Math.floor(Math.random() * 50) + 1;
+      }
+      const randSeriesPage1 = Math.floor(Math.random() * 40) + 1;
+      let randSeriesPage2 = Math.floor(Math.random() * 40) + 1;
+      while (randSeriesPage2 === randSeriesPage1) {
+        randSeriesPage2 = Math.floor(Math.random() * 40) + 1;
+      }
+      const randAnimPage = Math.floor(Math.random() * 25) + 1;
 
-      // 3. Build diverse randomized grid of movies & series for bottom explore section
-      const allPool = [
+      const results = await Promise.allSettled([
+        apiFetch(`${API_BASE}/api/content?endpoint=home`),
+        apiFetch(`${API_BASE}/api/content?endpoint=movies&page=${randMoviesPage1}`),
+        apiFetch(`${API_BASE}/api/content?endpoint=movies&page=${randMoviesPage2}`),
+        apiFetch(`${API_BASE}/api/content?endpoint=tv-series&page=${randSeriesPage1}`),
+        apiFetch(`${API_BASE}/api/content?endpoint=tv-series&page=${randSeriesPage2}`),
+        apiFetch(`${API_BASE}/api/content?endpoint=animation&page=${randAnimPage}`),
+      ]);
+
+      const parseResponse = async (settledResult) => {
+        if (settledResult.status !== 'fulfilled' || !settledResult.value || !settledResult.value.ok) {
+          return null;
+        }
+        try {
+          return await settledResult.value.json();
+        } catch (_) {
+          return null;
+        }
+      };
+
+      const [homeData, moviesData1, moviesData2, seriesData1, seriesData2, animData] = await Promise.all([
+        parseResponse(results[0]),
+        parseResponse(results[1]),
+        parseResponse(results[2]),
+        parseResponse(results[3]),
+        parseResponse(results[4]),
+        parseResponse(results[5]),
+      ]);
+
+      setIsOffline(false);
+
+      // Section mapping from live home endpoint
+      const serverSectionMap = {};
+      if (homeData && Array.isArray(homeData.sections)) {
+        const serverCats = [
+          { id: 'All', label: 'All Titles', icon: 'sparkles' },
+          { id: 'Movies', label: 'Movies', icon: 'film-outline', isApi: true, endpoint: '/movies' },
+          { id: 'TV Series', label: 'TV Series', icon: 'tv-outline', isApi: true, endpoint: '/tv-series' },
+          { id: 'Animation', label: 'Animation', icon: 'color-wand-outline', isApi: true, endpoint: '/animation' },
+        ];
+        const itemsMap = {};
+        homeData.sections.forEach(s => {
+          if (s.items && s.items.length > 0) {
+            const normalizedItems = s.items.map(i => normalizeMovie(i)).filter(Boolean);
+            serverSectionMap[s.section] = normalizedItems;
+            if (s.section !== 'Banner') {
+              const rawName = s.section;
+              const clean = rawName.replace(/[🔥💓]/g, '').trim();
+              serverCats.push({
+                id: rawName,
+                label: clean,
+                icon: getCategoryIcon(rawName),
+                itemCount: normalizedItems.length,
+              });
+              itemsMap[rawName] = normalizedItems;
+            }
+          }
+        });
+        setServerCategories(serverCats);
+        setCategoryItemsMap(itemsMap);
+      }
+
+      // Helper to extract & normalize items from paginated responses
+      const extractItems = (data, isSeries = false) => {
+        if (!data || !Array.isArray(data.items)) return [];
+        return data.items.map(item => normalizeMovie({ ...item, isSeries: isSeries || item.isSeries })).filter(Boolean);
+      };
+
+      const pageMovies1 = extractItems(moviesData1, false);
+      const pageMovies2 = extractItems(moviesData2, false);
+      const pageSeries1 = extractItems(seriesData1, true);
+      const pageSeries2 = extractItems(seriesData2, true);
+      const pageAnim = extractItems(animData, false);
+
+      // Helper function: Fisher-Yates array shuffle
+      const shuffleArray = (arr) => {
+        const copy = [...arr];
+        for (let i = copy.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [copy[i], copy[j]] = [copy[j], copy[i]];
+        }
+        return copy;
+      };
+
+      // Helper function: Deduplicate list by slug or subject_id
+      const dedupList = (list) => {
+        const seen = new Set();
+        const res = [];
+        for (const item of list) {
+          if (!item) continue;
+          const key = item.slug || item.subject_id;
+          if (key && !seen.has(key)) {
+            seen.add(key);
+            res.push(item);
+          }
+        }
+        return res;
+      };
+
+      // 1. Hero List (Widget posters and requested image URLs)
+      const newHero = CURATED_HERO_ITEMS;
+      setHeroList(newHero);
+
+      // 2. Trending Now (Popular Movies + fresh random movies)
+      const popMovies = serverSectionMap['Popular Movie'] || [];
+      const trendingPool = dedupList([...popMovies, ...pageMovies1, ...TRENDING_NOW]);
+      const newTrending = shuffleArray(trendingPool).slice(0, 18);
+      setTrendingNow(newTrending);
+
+      // 3. Latest Releases (Random Movies 2 + Action Movies)
+      const actionMovies = serverSectionMap['Action Movies'] || serverSectionMap['Action&Thriller'] || [];
+      const latestPool = dedupList([...pageMovies2, ...actionMovies, ...LATEST_RELEASES]);
+      const newLatest = shuffleArray(latestPool).slice(0, 18);
+      setLatestReleases(newLatest);
+
+      // 4. Netflix Popular (Popular Series + Random Series 1)
+      const popSeries = serverSectionMap['Popular Series'] || [];
+      const seriesPool = dedupList([...popSeries, ...pageSeries1, ...NETFLIX_POPULAR]);
+      const newNetflix = shuffleArray(seriesPool).slice(0, 18);
+      setNetflixPopular(newNetflix);
+
+      // 5. Hindi & International (K-Drama, C-Drama, Nollywood, Bet+, Hindi Movies)
+      const kdrama = serverSectionMap['K-Drama'] || [];
+      const cdrama = serverSectionMap['C-Drama'] || [];
+      const nollywood = serverSectionMap['Nollywood Movie'] || [];
+      const betPlus = serverSectionMap['Bet+'] || [];
+      const hindiPool = dedupList([...kdrama, ...cdrama, ...nollywood, ...betPlus, ...HINDI_MOVIES]);
+      const newHindi = shuffleArray(hindiPool).slice(0, 18);
+      setHindiMoviesList(newHindi);
+
+      // 6. Anime Trending (Anime Dubbed + Random Animation)
+      const animeDub = serverSectionMap['Anime[English Dubbed]'] || [];
+      const animeTrendPool = dedupList([...animeDub, ...pageAnim, ...ANIME_TRENDING]);
+      const newAnimeTrend = shuffleArray(animeTrendPool).slice(0, 18);
+      setAnimeTrending(newAnimeTrend);
+
+      // 7. Latest Anime (Adult Animation + Teen Fantasy + Anime Latest)
+      const adultAnim = serverSectionMap['Adult Animation'] || [];
+      const teenFantasy = serverSectionMap['Teen Fantasy'] || [];
+      const animeLatePool = dedupList([...adultAnim, ...teenFantasy, ...ANIME_LATEST]);
+      const newAnimeLate = shuffleArray(animeLatePool).slice(0, 18);
+      setAnimeLatest(newAnimeLate);
+
+      // 8. Web Series (Superhero Series + Hot Short TV + Random Series 2)
+      const superHero = serverSectionMap['Superhero Series'] || [];
+      const shortTv = serverSectionMap['🔥Hot Short TV'] || [];
+      const webSeriesPool = dedupList([...superHero, ...shortTv, ...pageSeries2, ...WEBSERIES_LATEST]);
+      const newWebSeries = shuffleArray(webSeriesPool).slice(0, 18);
+      setWebSeriesLatest(newWebSeries);
+
+      // 9. Cartoons & Family (Sitcom, Epic Fantasy, Cartoons)
+      const sitcom = serverSectionMap['Sitcom'] || [];
+      const fantasy = serverSectionMap['Epic Fantasy'] || [];
+      const cartoonPool = dedupList([...sitcom, ...fantasy, ...CARTOONS]);
+      const newCartoons = shuffleArray(cartoonPool).slice(0, 18);
+      setCartoonsList(newCartoons);
+
+      // Master catalog pool for recommendations and explore grid (hundreds of items!)
+      const masterItems = [];
+      Object.values(serverSectionMap).forEach(arr => {
+        if (Array.isArray(arr)) masterItems.push(...arr);
+      });
+      masterItems.push(...pageMovies1, ...pageMovies2, ...pageSeries1, ...pageSeries2, ...pageAnim);
+      masterItems.push(
         ...TRENDING_NOW,
         ...LATEST_RELEASES,
         ...NETFLIX_POPULAR,
@@ -1964,90 +2165,50 @@ function ReelApp() {
         ...ANIME_TRENDING,
         ...ANIME_LATEST,
         ...WEBSERIES_LATEST,
-        ...CARTOONS,
-      ];
-      const uniquePool = [];
-      const seenSlugs = new Set();
-      for (const item of allPool) {
-        const key = item.slug || item.subject_id;
-        if (key && !seenSlugs.has(key)) {
-          seenSlugs.add(key);
-          uniquePool.push(item);
-        }
-      }
-      catalogPoolRef.current = uniquePool;
+        ...CARTOONS
+      );
 
-      // Pick first 15 randomized unshown items
-      const shuffled = [...uniquePool].sort(() => 0.5 - Math.random());
-      const initialBatch = shuffled.slice(0, 15);
+      const uniqueMasterPool = dedupList(masterItems);
+      const shuffledMaster = shuffleArray(uniqueMasterPool);
+      catalogPoolRef.current = shuffledMaster;
+
+      // Pick first 15 randomized unshown items for Explore Grid
+      const initialBatch = shuffledMaster.slice(0, 15);
       shownSlugsRef.current = new Set(initialBatch.map(i => i.slug || i.subject_id));
       setExploreGridList(initialBatch);
       setExploreVisibleCount(15);
 
-      // 4. Fetch live server categories and sections from backend & verify online connectivity
-      try {
-        const homeRes = await apiFetch(`${API_BASE}/api/content?endpoint=home`);
-        if (homeRes.ok) {
-          setIsOffline(false);
-          const homeText = await homeRes.text();
-          let homeData = null;
-          try {
-            homeData = JSON.parse(homeText);
-          } catch (_) {}
-          if (homeData && Array.isArray(homeData.sections)) {
-            const serverCats = [
-              { id: 'All', label: 'All Titles', icon: 'sparkles' },
-              { id: 'Movies', label: 'Movies', icon: 'film-outline', isApi: true, endpoint: '/movies' },
-              { id: 'TV Series', label: 'TV Series', icon: 'tv-outline', isApi: true, endpoint: '/tv-series' },
-              { id: 'Animation', label: 'Animation', icon: 'color-wand-outline', isApi: true, endpoint: '/animation' },
-            ];
-            const itemsMap = {};
-            homeData.sections.forEach(s => {
-              if (s.items && s.items.length > 0 && s.section !== 'Banner') {
-                const rawName = s.section;
-                const clean = rawName.replace(/[🔥💓]/g, '').trim();
-                serverCats.push({
-                  id: rawName,
-                  label: clean,
-                  icon: getCategoryIcon(rawName),
-                  itemCount: s.items.length,
-                });
-                itemsMap[rawName] = s.items;
-              }
-            });
-            setServerCategories(serverCats);
-            setCategoryItemsMap(itemsMap);
-          }
-        } else {
-          setIsOffline(false);
-        }
-      } catch (catErr) {
-        console.log("Server categories live fetch note:", catErr);
-        NetInfo.fetch().then((netState) => {
-          if (netState.isConnected === false) {
-            setIsOffline(true);
-          }
-        }).catch(() => {});
-      }
-
       // Persist to local storage for instant loading on next app launch
       await saveHomeFeedCache({
-        trendingNow: TRENDING_NOW,
-        latestReleases: LATEST_RELEASES,
-        netflixPopular: NETFLIX_POPULAR,
-        hindiMovies: HINDI_MOVIES,
-        animeTrending: ANIME_TRENDING,
-        animeLatest: ANIME_LATEST,
-        webSeriesLatest: WEBSERIES_LATEST,
-        cartoons: CARTOONS,
+        trendingNow: newTrending,
+        latestReleases: newLatest,
+        netflixPopular: newNetflix,
+        hindiMovies: newHindi,
+        animeTrending: newAnimeTrend,
+        animeLatest: newAnimeLate,
+        webSeriesLatest: newWebSeries,
+        cartoons: newCartoons,
+        heroList: newHero,
       });
     } catch (e) {
       console.error("Home feed fetch error:", e);
-      setIsOffline(true);
+      NetInfo.fetch().then((netState) => {
+        if (netState.isConnected === false) {
+          setIsOffline(true);
+        }
+      }).catch(() => {});
     } finally {
       setLoading(false);
     }
   };
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await fetchContent(true);
+    } catch (_) {}
+    setRefreshing(false);
+  }, []);
 
   // Search Handler
   const handleSearch = async (text) => {
@@ -2125,20 +2286,28 @@ function ReelApp() {
       secondaryPool = [...WEBSERIES_LATEST, ...CARTOONS];
     }
 
-    const seen = new Set([currentSlug, currentId]);
-    const cleanList = [];
-    const combined = [...priorityPool.sort(() => 0.5 - Math.random()), ...secondaryPool.sort(() => 0.5 - Math.random())];
-    for (const item of combined) {
-      const s = item.slug || '';
-      const id = String(item.subject_id || '');
-      if (s && seen.has(s)) continue;
-      if (id && seen.has(id)) continue;
-      if (s) seen.add(s);
-      if (id) seen.add(id);
-      cleanList.push(normalizeMovie(item));
-      if (cleanList.length >= 10) break;
-    }
-    setRelatedTitles(cleanList);
+    // Vectorized Content-Based Recommendation (Cosine Similarity + Genre Alignment)
+    const fullCatalogPool = [
+      ...priorityPool,
+      ...secondaryPool,
+      ...trendingNow,
+      ...latestReleases,
+      ...netflixPopular,
+      ...hindiMoviesList,
+      ...animeTrending,
+      ...animeLatest,
+      ...webSeriesLatest,
+      ...cartoonsList,
+      ...(catalogPoolRef.current || []),
+    ];
+
+    const recommendedList = getContentBasedRecommendations({
+      targetMovie: movie,
+      catalog: fullCatalogPool,
+      limit: 10,
+    });
+
+    setRelatedTitles(recommendedList.map((item) => normalizeMovie(item)));
 
     try {
       const res = await apiFetch(`${API_BASE}/api/content?endpoint=detail&slug=${encodeURIComponent(movie.slug)}`);
@@ -3586,9 +3755,21 @@ function ReelApp() {
 
       {/* MAIN SCROLLABLE CONTENT AREA */}
       <ScrollView
+        ref={mainScrollRef}
         style={styles.mainScrollView}
         contentContainerStyle={{ paddingBottom: Math.max(insets.bottom + 96, 110) }}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          mainTab === 'Home' ? (
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor="#e50914"
+              colors={['#e50914']}
+              progressBackgroundColor="#1a1a1a"
+            />
+          ) : undefined
+        }
       >
         {/* ==================================================== */}
         {/* VIEW 1: ME (PROFILE, HISTORY, MY LIST, DOWNLOADS)   */}
@@ -4363,14 +4544,11 @@ function ReelApp() {
                       StyleSheet.absoluteFillObject,
                       {
                         opacity: heroFadeAnim,
-                        transform: [
-                          { translateX: heroSlideAnim },
-                          { scale: heroScaleAnim },
-                        ],
                       },
                     ]}
                   >
                     <SafeImage
+                      key={`hero-poster-${heroItem?.slug || heroIndex}`}
                       uri={heroItem.poster_url}
                       style={styles.heroPosterImage}
                       resizeMode="cover"
@@ -4403,12 +4581,12 @@ function ReelApp() {
                       },
                     ]}
                   >
-                    <Text numberOfLines={2} style={styles.heroTitleText}>
+                    <Text numberOfLines={isDesktop ? 2 : 1} style={[styles.heroTitleText, !isDesktop && { fontSize: 20, marginBottom: 3 }]}>
                       {heroItem.name}
                     </Text>
 
                     {/* Metadata Row (Clean, No Emojis, No Tags) */}
-                    <View style={styles.heroMetaRow}>
+                    <View style={[styles.heroMetaRow, !isDesktop && { marginBottom: 4 }]}>
                       <Text style={styles.heroMatchScore}>{heroItem.match || "99% match"}</Text>
                       <View style={styles.metaGlassPill}>
                         <Text style={styles.metaGlassPillText}>{heroItem.year || "2025"}</Text>
@@ -4416,10 +4594,12 @@ function ReelApp() {
                       <Text style={styles.heroGenreText}>{heroItem.genre || "Action · Thriller"}</Text>
                     </View>
 
-                    {/* Synopsis snippet */}
-                    <Text numberOfLines={2} style={styles.heroSynopsis}>
-                      {heroItem.synopsis || "A captivating journey featuring explosive action, high stakes, and unforgettable storytelling."}
-                    </Text>
+                    {/* Synopsis snippet (shown on wider screens for sleek cinematic balance) */}
+                    {isDesktop && (
+                      <Text numberOfLines={2} style={styles.heroSynopsis}>
+                        {heroItem.synopsis || "A captivating journey featuring explosive action, high stakes, and unforgettable storytelling."}
+                      </Text>
+                    )}
 
                     {/* Hero Action Buttons */}
                     <View style={styles.heroActionsRow}>
@@ -4460,13 +4640,13 @@ function ReelApp() {
                     {/* Carousel Indicator Dots */}
                     {heroList.length > 1 && (
                       <View style={styles.heroDotsContainer}>
-                        {heroList.map((_, idx) => (
+                        {heroList.slice(0, 8).map((_, idx) => (
                           <TouchableOpacity
                             key={`hero-dot-${idx}`}
                             onPress={() => setHeroIndex(idx)}
                             style={[
                               styles.heroDot,
-                              heroIndex === idx ? styles.heroDotActive : styles.heroDotInactive,
+                              (heroIndex % Math.min(heroList.length, 8)) === idx ? styles.heroDotActive : styles.heroDotInactive,
                             ]}
                             hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
                           />
@@ -4480,10 +4660,79 @@ function ReelApp() {
               {/* CATALOG CONTENT ROWS FOR 'ALL' */}
               {homeCategory === 'All' && (
                 <>
+
+                  {/* User Saved "My List" */}
+                  {myList.length > 0 && (
+                    <View style={styles.rowSection}>
+                      <View style={styles.sectionHeaderRow}>
+                        <Text style={styles.sectionHeaderTitle}>My List</Text>
+                        <TouchableOpacity
+                          style={styles.seeMoreBtn}
+                          onPress={() => {
+                            setMainTab('Me');
+                            setMeSubTab('MyList');
+                          }}
+                          hitSlop={{ top: 8, bottom: 8, left: 10, right: 10 }}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={styles.seeMoreText}>See All ({myList.length})</Text>
+                          <Feather name="chevron-right" size={14} color="#e50914" style={{ marginLeft: 2 }} />
+                        </TouchableOpacity>
+                      </View>
+                      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalTrack}>
+                        {myList.map((movie, idx) => (
+                          <GlassMovieCard
+                            key={`home-mylist-${movie.slug || movie.subject_id}-${idx}`}
+                            movie={movie}
+                            onPress={() => openDetail(movie)}
+                          />
+                        ))}
+                      </ScrollView>
+                    </View>
+                  )}
+
+                  {/* Personalized Recommendations */}
+                  {nextViperRecommendations.length > 0 && (
+                    <View style={styles.rowSection}>
+                      <View style={styles.sectionHeaderRow}>
+                        <Text style={styles.sectionHeaderTitle}>Recommended For You</Text>
+                        <TouchableOpacity
+                          style={styles.seeMoreBtn}
+                          onPress={() => handleSeeMoreSection('Recommended For You', nextViperRecommendations)}
+                          hitSlop={{ top: 8, bottom: 8, left: 10, right: 10 }}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={styles.seeMoreText}>See More</Text>
+                          <Feather name="chevron-right" size={14} color="#e50914" style={{ marginLeft: 2 }} />
+                        </TouchableOpacity>
+                      </View>
+                      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalTrack}>
+                        {nextViperRecommendations.map((movie, idx) => (
+                          <GlassMovieCard
+                            key={`nv-rec-${movie.slug || movie.subject_id}-${idx}`}
+                            movie={movie}
+                            onPress={() => openDetail(movie)}
+                          />
+                        ))}
+                      </ScrollView>
+                    </View>
+                  )}
+
                   {/* 1. Trending Now */}
                   {trendingNow.length > 0 && (
                     <View style={styles.rowSection}>
-                      <Text style={styles.sectionHeaderTitle}>Trending Now</Text>
+                      <View style={styles.sectionHeaderRow}>
+                        <Text style={styles.sectionHeaderTitle}>Trending Now</Text>
+                        <TouchableOpacity
+                          style={styles.seeMoreBtn}
+                          onPress={() => handleSeeMoreSection('Trending Now', trendingNow)}
+                          hitSlop={{ top: 8, bottom: 8, left: 10, right: 10 }}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={styles.seeMoreText}>See More</Text>
+                          <Feather name="chevron-right" size={14} color="#e50914" style={{ marginLeft: 2 }} />
+                        </TouchableOpacity>
+                      </View>
                       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalTrack}>
                         {trendingNow.map((movie, idx) => (
                           <GlassMovieCard
@@ -4499,7 +4748,18 @@ function ReelApp() {
                   {/* 2. Latest Releases */}
                   {latestReleases.length > 0 && (
                     <View style={styles.rowSection}>
-                      <Text style={styles.sectionHeaderTitle}>Latest Releases</Text>
+                      <View style={styles.sectionHeaderRow}>
+                        <Text style={styles.sectionHeaderTitle}>Latest Releases</Text>
+                        <TouchableOpacity
+                          style={styles.seeMoreBtn}
+                          onPress={() => handleSeeMoreSection('Latest Releases', latestReleases)}
+                          hitSlop={{ top: 8, bottom: 8, left: 10, right: 10 }}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={styles.seeMoreText}>See More</Text>
+                          <Feather name="chevron-right" size={14} color="#e50914" style={{ marginLeft: 2 }} />
+                        </TouchableOpacity>
+                      </View>
                       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalTrack}>
                         {latestReleases.map((movie, idx) => (
                           <GlassMovieCard
@@ -4515,7 +4775,18 @@ function ReelApp() {
                   {/* 3. Netflix Popular */}
                   {netflixPopular.length > 0 && (
                     <View style={styles.rowSection}>
-                      <Text style={styles.sectionHeaderTitle}>Netflix Popular</Text>
+                      <View style={styles.sectionHeaderRow}>
+                        <Text style={styles.sectionHeaderTitle}>Netflix Popular</Text>
+                        <TouchableOpacity
+                          style={styles.seeMoreBtn}
+                          onPress={() => handleSeeMoreSection('Netflix Popular', netflixPopular)}
+                          hitSlop={{ top: 8, bottom: 8, left: 10, right: 10 }}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={styles.seeMoreText}>See More</Text>
+                          <Feather name="chevron-right" size={14} color="#e50914" style={{ marginLeft: 2 }} />
+                        </TouchableOpacity>
+                      </View>
                       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalTrack}>
                         {netflixPopular.map((series, idx) => (
                           <GlassMovieCard
@@ -4532,7 +4803,18 @@ function ReelApp() {
                   {/* 4. Hindi Movies */}
                   {hindiMoviesList.length > 0 && (
                     <View style={styles.rowSection}>
-                      <Text style={styles.sectionHeaderTitle}>Hindi Movies</Text>
+                      <View style={styles.sectionHeaderRow}>
+                        <Text style={styles.sectionHeaderTitle}>Hindi Movies</Text>
+                        <TouchableOpacity
+                          style={styles.seeMoreBtn}
+                          onPress={() => handleSeeMoreSection('Hindi Movies', hindiMoviesList)}
+                          hitSlop={{ top: 8, bottom: 8, left: 10, right: 10 }}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={styles.seeMoreText}>See More</Text>
+                          <Feather name="chevron-right" size={14} color="#e50914" style={{ marginLeft: 2 }} />
+                        </TouchableOpacity>
+                      </View>
                       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalTrack}>
                         {hindiMoviesList.map((movie, idx) => (
                           <GlassMovieCard
@@ -4548,7 +4830,18 @@ function ReelApp() {
                   {/* 5. Anime Trending */}
                   {animeTrending.length > 0 && (
                     <View style={styles.rowSection}>
-                      <Text style={styles.sectionHeaderTitle}>Anime Trending</Text>
+                      <View style={styles.sectionHeaderRow}>
+                        <Text style={styles.sectionHeaderTitle}>Anime Trending</Text>
+                        <TouchableOpacity
+                          style={styles.seeMoreBtn}
+                          onPress={() => handleSeeMoreSection('Anime Trending', animeTrending)}
+                          hitSlop={{ top: 8, bottom: 8, left: 10, right: 10 }}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={styles.seeMoreText}>See More</Text>
+                          <Feather name="chevron-right" size={14} color="#e50914" style={{ marginLeft: 2 }} />
+                        </TouchableOpacity>
+                      </View>
                       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalTrack}>
                         {animeTrending.map((anime, idx) => (
                           <GlassMovieCard
@@ -4565,7 +4858,18 @@ function ReelApp() {
                   {/* 6. Latest Anime */}
                   {animeLatest.length > 0 && (
                     <View style={styles.rowSection}>
-                      <Text style={styles.sectionHeaderTitle}>Latest Anime</Text>
+                      <View style={styles.sectionHeaderRow}>
+                        <Text style={styles.sectionHeaderTitle}>Latest Anime</Text>
+                        <TouchableOpacity
+                          style={styles.seeMoreBtn}
+                          onPress={() => handleSeeMoreSection('Latest Anime', animeLatest)}
+                          hitSlop={{ top: 8, bottom: 8, left: 10, right: 10 }}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={styles.seeMoreText}>See More</Text>
+                          <Feather name="chevron-right" size={14} color="#e50914" style={{ marginLeft: 2 }} />
+                        </TouchableOpacity>
+                      </View>
                       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalTrack}>
                         {animeLatest.map((anime, idx) => (
                           <GlassMovieCard
@@ -4582,7 +4886,18 @@ function ReelApp() {
                   {/* 7. Web Series */}
                   {webSeriesLatest.length > 0 && (
                     <View style={styles.rowSection}>
-                      <Text style={styles.sectionHeaderTitle}>Web Series</Text>
+                      <View style={styles.sectionHeaderRow}>
+                        <Text style={styles.sectionHeaderTitle}>Web Series</Text>
+                        <TouchableOpacity
+                          style={styles.seeMoreBtn}
+                          onPress={() => handleSeeMoreSection('Web Series', webSeriesLatest)}
+                          hitSlop={{ top: 8, bottom: 8, left: 10, right: 10 }}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={styles.seeMoreText}>See More</Text>
+                          <Feather name="chevron-right" size={14} color="#e50914" style={{ marginLeft: 2 }} />
+                        </TouchableOpacity>
+                      </View>
                       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalTrack}>
                         {webSeriesLatest.map((show, idx) => (
                           <GlassMovieCard
@@ -4599,7 +4914,18 @@ function ReelApp() {
                   {/* 8. Cartoons & Animation */}
                   {cartoonsList.length > 0 && (
                     <View style={styles.rowSection}>
-                      <Text style={styles.sectionHeaderTitle}>Cartoons & Animation</Text>
+                      <View style={styles.sectionHeaderRow}>
+                        <Text style={styles.sectionHeaderTitle}>Cartoons & Animation</Text>
+                        <TouchableOpacity
+                          style={styles.seeMoreBtn}
+                          onPress={() => handleSeeMoreSection('Cartoons & Animation', cartoonsList)}
+                          hitSlop={{ top: 8, bottom: 8, left: 10, right: 10 }}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={styles.seeMoreText}>See More</Text>
+                          <Feather name="chevron-right" size={14} color="#e50914" style={{ marginLeft: 2 }} />
+                        </TouchableOpacity>
+                      </View>
                       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalTrack}>
                         {cartoonsList.map((cartoon, idx) => (
                           <GlassMovieCard
@@ -4615,7 +4941,18 @@ function ReelApp() {
                   {/* 9. EXPLORE MORE (RANDOM MOVIES & SERIES IN 3-COLUMN GRID VIEW) */}
                   {exploreGridList.length > 0 && (
                     <View style={styles.exploreGridSection}>
-                      <Text style={styles.sectionHeaderTitle}>Explore More</Text>
+                      <View style={styles.sectionHeaderRow}>
+                        <Text style={styles.sectionHeaderTitle}>Explore More</Text>
+                        <TouchableOpacity
+                          style={styles.seeMoreBtn}
+                          onPress={handleLoadMoreExplore}
+                          hitSlop={{ top: 8, bottom: 8, left: 10, right: 10 }}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={styles.seeMoreText}>See More</Text>
+                          <Feather name="chevron-right" size={14} color="#e50914" style={{ marginLeft: 2 }} />
+                        </TouchableOpacity>
+                      </View>
                       <View style={styles.exploreGridContainer}>
                         {exploreGridList.slice(0, exploreVisibleCount).map((item, idx) => (
                           <GlassMovieCard
@@ -7851,6 +8188,79 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     marginBottom: 12,
     letterSpacing: -0.2,
+  },
+  recommendationHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 0,
+    paddingRight: 16,
+  },
+  seeAllBtnText: {
+    color: '#e50914',
+    fontSize: 12,
+    fontWeight: '700',
+    paddingRight: 16,
+    marginBottom: 12,
+  },
+  seeMoreBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingRight: 16,
+    marginBottom: 12,
+  },
+  seeMoreText: {
+    color: '#e50914',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  continueWatchingCard: {
+    width: 140,
+  },
+  continueWatchingThumbWrap: {
+    width: 140,
+    height: 84,
+    borderRadius: 8,
+    overflow: 'hidden',
+    backgroundColor: '#202020',
+    position: 'relative',
+  },
+  continueWatchingThumb: {
+    width: '100%',
+    height: '100%',
+  },
+  continueWatchingPlayOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  continueWatchingProgressBg: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 3,
+    backgroundColor: 'rgba(255,255,255,0.25)',
+  },
+  continueWatchingProgressFill: {
+    height: '100%',
+    backgroundColor: '#e50914',
+  },
+  continueWatchingTitle: {
+    color: '#f5f5f1',
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 6,
+  },
+  continueWatchingSubtitle: {
+    color: '#8c8c8c',
+    fontSize: 11,
+    fontWeight: '500',
+    marginTop: 2,
   },
   horizontalTrack: {
     paddingHorizontal: 16,

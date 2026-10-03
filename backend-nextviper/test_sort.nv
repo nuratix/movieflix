@@ -1,0 +1,24 @@
+fn compare_scores(a, b) {
+    if b["score"] > a["score"] {
+        return 1
+    }
+    return -1
+}
+
+let items = [{"name": "A", "score": 0.5}, {"name": "B", "score": 0.9}]
+fn sort_items(arr) {
+    let n = len(arr)
+    for i in 0..n {
+        for j in 0..(n - 1) {
+            if arr[j]["score"] < arr[j + 1]["score"] {
+                let temp = arr[j]
+                arr[j] = arr[j + 1]
+                arr[j + 1] = temp
+            }
+        }
+    }
+    return arr
+}
+
+let sorted = sort_items(items)
+print("Sorted:", sorted[0]["name"])

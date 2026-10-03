@@ -1,0 +1,5 @@
+let n = 5
+let max_idx = n - 1
+for i in 0..max_idx {
+    print("i is:", i)
+}
