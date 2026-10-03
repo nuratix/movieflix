@@ -4,18 +4,16 @@ import { Linking, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Current App Version (aligned with package.json & app.json)
-export const CURRENT_APP_VERSION = '1.1.3';
+export const CURRENT_APP_VERSION = '1.1.4';
 
-// GitHub Repository Configuration
-export const GITHUB_OWNER = 'nuratix';
-export const GITHUB_REPO = 'movieflix';
-export const GITHUB_API_URL = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases`;
-
-// Authenticated token for accessing private GitHub repository releases
-const GITHUB_TOKEN = process.env.EXPO_PUBLIC_GITHUB_TOKEN || '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';
+// Secure Backend Update & Download Endpoints (Hosted on Vercel)
+// The client APK communicates exclusively with the backend service.
+// Zero GitHub credentials or personal access tokens are stored in the client APK.
+export const UPDATE_API_ENDPOINT = 'https://movieflix-pi-six.vercel.app/api/update';
+export const APK_DOWNLOAD_ENDPOINT = 'https://movieflix-pi-six.vercel.app/api/download';
 
 /**
- * Clean & compare semantic versions (e.g., "v1.0.1" vs "1.0.0")
+ * Clean & compare semantic versions (e.g., "v1.1.4" vs "1.1.3")
  * Returns true if remoteVersion > currentVersion
  */
 export function isNewerVersion(remoteVer, currentVer = CURRENT_APP_VERSION) {
@@ -41,7 +39,7 @@ export function isNewerVersion(remoteVer, currentVer = CURRENT_APP_VERSION) {
 }
 
 /**
- * Format bytes to human readable string (e.g. 15.4 MB)
+ * Format bytes to human readable string (e.g. 94.6 MB)
  */
 export function formatBytes(bytes, decimals = 1) {
   if (!bytes || bytes === 0) return '0 B';
@@ -53,41 +51,34 @@ export function formatBytes(bytes, decimals = 1) {
 }
 
 /**
- * Check GitHub repository for the latest release
+ * Check for the latest release via the secure Movieflix backend update API.
+ * The backend proxies GitHub releases using its secure server-side environment variables.
  */
 export async function checkForUpdateAsync() {
   try {
-    const headers = {
-      Accept: 'application/vnd.github.v3+json',
-      'User-Agent': 'Movieflix-App',
-    };
-    if (GITHUB_TOKEN) {
-      headers.Authorization = `token ${GITHUB_TOKEN}`;
-    }
+    const checkUrl = `${UPDATE_API_ENDPOINT}?current=${encodeURIComponent(
+      CURRENT_APP_VERSION
+    )}&_t=${Date.now()}`;
 
-    const response = await fetch(GITHUB_API_URL, { headers });
+    const response = await fetch(checkUrl, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        'User-Agent': 'Movieflix-App/1.1.4',
+      },
+    });
+
     if (!response.ok) {
-      console.log('GitHub releases fetch status:', response.status);
+      console.log('Update backend check status:', response.status);
       return {
         hasUpdate: false,
         currentVersion: CURRENT_APP_VERSION,
-        error: `GitHub check returned status ${response.status}`,
+        error: `Update service returned status ${response.status}`,
       };
     }
 
-    const releases = await response.json();
-    if (!Array.isArray(releases) || releases.length === 0) {
-      return {
-        hasUpdate: false,
-        currentVersion: CURRENT_APP_VERSION,
-        latestVersion: CURRENT_APP_VERSION,
-        releasesCount: 0,
-      };
-    }
-
-    // Filter out draft releases and get the latest published release
-    const validReleases = releases.filter((r) => !r.draft);
-    if (validReleases.length === 0) {
+    const data = await response.json();
+    if (!data || typeof data !== 'object') {
       return {
         hasUpdate: false,
         currentVersion: CURRENT_APP_VERSION,
@@ -95,54 +86,43 @@ export async function checkForUpdateAsync() {
       };
     }
 
-    const latest = validReleases[0];
-    const remoteTag = latest.tag_name || latest.name || '';
-    const cleanTag = remoteTag.replace(/^v/i, '');
-    const hasUpdate = isNewerVersion(remoteTag, CURRENT_APP_VERSION);
+    const latestTag = data.latestTag || data.latestVersion || CURRENT_APP_VERSION;
+    const cleanTag = (data.latestVersion || latestTag).replace(/^v/i, '');
+    const hasUpdate = Boolean(data.hasUpdate || isNewerVersion(latestTag, CURRENT_APP_VERSION));
 
-    // Look for an APK asset in the release
-    let apkAsset = null;
-    if (Array.isArray(latest.assets)) {
-      const found = latest.assets.find(
-        (a) =>
-          (a.name && a.name.toLowerCase().endsWith('.apk')) ||
-          a.content_type === 'application/vnd.android.package-archive'
-      );
-      if (found) {
-        apkAsset = {
-          id: found.id,
-          name: found.name,
-          size: found.size,
-          sizeFormatted: formatBytes(found.size),
-          downloadUrl: found.browser_download_url,
-          apiUrl: found.url,
-        };
-      }
-    }
+    const apkAsset = data.apkAsset
+      ? {
+          name: data.apkAsset.name || `movieflix-v${cleanTag}.apk`,
+          size: data.apkAsset.size || 0,
+          sizeFormatted: data.apkAsset.sizeFormatted || formatBytes(data.apkAsset.size || 0),
+          downloadUrl: data.apkAsset.downloadUrl || APK_DOWNLOAD_ENDPOINT,
+        }
+      : null;
 
     const updateInfo = {
       hasUpdate,
       currentVersion: CURRENT_APP_VERSION,
       latestVersion: cleanTag,
-      latestTag: remoteTag,
-      releaseTitle: latest.name || `Version ${remoteTag}`,
-      releaseNotes: latest.body || 'Performance improvements and bug fixes.',
-      publishedAt: latest.published_at,
-      releaseUrl: latest.html_url,
+      latestTag,
+      releaseTitle: data.releaseTitle || `Movieflix v${cleanTag}`,
+      releaseNotes: data.releaseNotes || 'Performance improvements and stability fixes.',
+      publishedAt: data.publishedAt,
+      releaseUrl: data.releaseUrl,
+      downloadUrl: data.downloadUrl || APK_DOWNLOAD_ENDPOINT,
       apkAsset,
     };
 
-    // Cache latest check result
+    // Cache latest check result locally
     try {
       await AsyncStorage.setItem(
         '@movieflix_last_update_check',
         JSON.stringify({ ...updateInfo, checkedAt: Date.now() })
       );
-    } catch (e) {}
+    } catch (_) {}
 
     return updateInfo;
   } catch (err) {
-    console.warn('Update check failed:', err);
+    console.warn('Backend update check failed:', err);
     return {
       hasUpdate: false,
       currentVersion: CURRENT_APP_VERSION,
@@ -152,15 +132,13 @@ export async function checkForUpdateAsync() {
 }
 
 /**
- * Download APK file with progress and trigger Android package installation
+ * Download APK file with progress callback and trigger Android package installation.
+ * The download source points to the secure backend proxy (which redirects to signed S3 binary).
  */
 export async function downloadAndInstallApkAsync(apkAsset, onProgress) {
   try {
-    if (!apkAsset) {
-      throw new Error('No APK asset specified for download.');
-    }
-
-    const fileName = apkAsset.name || `movieflix-v${Date.now()}.apk`;
+    const downloadSourceUrl = apkAsset?.downloadUrl || APK_DOWNLOAD_ENDPOINT;
+    const fileName = apkAsset?.name || `movieflix-v${Date.now()}.apk`;
     const targetDir = `${FileSystem.documentDirectory}updates/`;
 
     // Ensure update directory exists
@@ -177,38 +155,11 @@ export async function downloadAndInstallApkAsync(apkAsset, onProgress) {
       await FileSystem.deleteAsync(localFileUri, { idempotent: true });
     }
 
-    // Determine download URL:
-    // For private repo releases, GitHub API asset endpoint redirects to direct signed S3 URL
-    let downloadSourceUrl = apkAsset.downloadUrl;
-    const downloadHeaders = {};
-
-    if (apkAsset.apiUrl && GITHUB_TOKEN) {
-      // Use asset API endpoint with octet-stream accept header to get direct S3 redirect
-      try {
-        const headRes = await fetch(apkAsset.apiUrl, {
-          method: 'GET',
-          headers: {
-            Authorization: `token ${GITHUB_TOKEN}`,
-            Accept: 'application/octet-stream',
-            'User-Agent': 'Movieflix-App',
-          },
-          redirect: 'follow',
-        });
-        if (headRes.ok && headRes.url) {
-          downloadSourceUrl = headRes.url;
-        }
-      } catch (redirectErr) {
-        console.log('Redirect resolution fallback:', redirectErr);
-        downloadHeaders['Authorization'] = `token ${GITHUB_TOKEN}`;
-        downloadHeaders['Accept'] = 'application/octet-stream';
-      }
-    }
-
-    // Initialize download with progress callback
+    // Initialize resumable download from backend proxy with progress callback
     const downloadResumable = FileSystem.createDownloadResumable(
       downloadSourceUrl,
       localFileUri,
-      { headers: downloadHeaders },
+      {},
       (downloadProgress) => {
         const total = downloadProgress.totalBytesExpectedToWrite;
         const written = downloadProgress.totalBytesWritten;
@@ -250,17 +201,13 @@ export async function downloadAndInstallApkAsync(apkAsset, onProgress) {
           await Linking.openURL(contentUri);
           return { success: true, uri: result.uri, installed: true };
         } catch (e2) {
-          if (apkAsset.downloadUrl) {
-            await Linking.openURL(apkAsset.downloadUrl);
-          }
+          await Linking.openURL(downloadSourceUrl);
           return { success: true, uri: result.uri, fallbackWeb: true };
         }
       }
     } else {
-      // Non-android: open release page
-      if (apkAsset.downloadUrl) {
-        await Linking.openURL(apkAsset.downloadUrl);
-      }
+      // Non-android / web preview: open release download
+      await Linking.openURL(downloadSourceUrl);
       return { success: true, uri: result.uri };
     }
   } catch (err) {

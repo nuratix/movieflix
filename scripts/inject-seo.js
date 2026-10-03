@@ -71,9 +71,12 @@ const SEO_HEAD = `
     <meta name="twitter:image" content="https://movieflix-pi-six.vercel.app/assets/og-banner.png" />
     <meta name="twitter:image:alt" content="MovieFlix Banner" />
 
-    <!-- Favicons -->
-    <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon.png" />
-    <link rel="apple-touch-icon" sizes="180x180" href="/assets/icon-512.png" />
+    <!-- Favicon & Google Search Result Brand Icon -->
+    <link rel="icon" type="image/png" href="https://movieflix-pi-six.vercel.app/favicon.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="https://movieflix-pi-six.vercel.app/favicon.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="https://movieflix-pi-six.vercel.app/favicon.png" />
+    <link rel="shortcut icon" type="image/png" href="https://movieflix-pi-six.vercel.app/favicon.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="https://movieflix-pi-six.vercel.app/assets/icon-512.png" />
 
     <!-- Structured Data (Schema.org JSON-LD) -->
     <script type="application/ld+json">
@@ -92,7 +95,7 @@ const SEO_HEAD = `
             "url": "https://movieflix-pi-six.vercel.app/",
             "logo": {
               "@type": "ImageObject",
-              "url": "https://movieflix-pi-six.vercel.app/assets/icon-512.png"
+              "url": "https://movieflix-pi-six.vercel.app/favicon.png"
             }
           },
           "potentialAction": [
@@ -148,7 +151,7 @@ if (fs.existsSync(assetsDir)) {
     const srcPath = path.join(assetsDir, file);
     if (fs.statSync(srcPath).isFile()) {
       fs.copyFileSync(srcPath, path.join(distAssetsDir, file));
-      if (['icon.png', 'icon-512.png', 'og-banner.png', 'favicon.png', 'movieflix_brand_logo.png'].includes(file)) {
+      if (['icon.png', 'icon-512.png', 'og-banner.png', 'favicon.png', 'favicon.ico', 'movieflix_brand_logo.png'].includes(file)) {
         fs.copyFileSync(srcPath, path.join(distDir, file));
       }
     }

@@ -57,6 +57,18 @@
       "destination": "/api/og-image"
     },
     {
+      "source": "/favicon.png",
+      "destination": "/api/favicon"
+    },
+    {
+      "source": "/favicon.ico",
+      "destination": "/api/favicon?format=ico"
+    },
+    {
+      "source": "/assets/favicon.png",
+      "destination": "/api/favicon"
+    },
+    {
       "source": "/icon.png",
       "destination": "/api/icon"
     },

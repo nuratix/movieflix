@@ -205,7 +205,7 @@ export default async function handler(req, res) {
       headers: {
         'Accept': 'application/json, text/plain, */*',
         'X-App-Key': providerKey,
-        'User-Agent': 'Movieflix-Proxy/1.1.3',
+        'User-Agent': 'Movieflix-Proxy/1.1.4',
       },
       signal: controller.signal,
     });

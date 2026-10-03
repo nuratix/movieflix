@@ -1,7 +1,12 @@
 User-agent: *
 Allow: /
-Disallow: /api/
+Allow: /favicon.png
+Allow: /favicon.ico
+Allow: /assets/
+Allow: /api/favicon
+Allow: /api/icon
 Allow: /api/download
 Allow: /api/sitemap
+Disallow: /api/
 
 Sitemap: https://movieflix-pi-six.vercel.app/sitemap.xml

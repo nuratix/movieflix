@@ -1,13 +1,10 @@
 // ─── Movieflix Official APK Download Serverless Proxy ──────────────────────────
 // Securely resolves and redirects to the latest release APK from GitHub Releases
-// without exposing token credentials or requiring end users to authenticate.
+// using process.env.GITHUB_TOKEN without exposing credentials to client devices.
 
 const GITHUB_OWNER = 'nuratix';
 const GITHUB_REPO = 'movieflix';
-const GITHUB_TOKEN =
-  process.env.GITHUB_TOKEN ||
-  process.env.EXPO_PUBLIC_GITHUB_TOKEN ||
-  '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';
+const GITHUB_TOKEN = process.env.GITHUB_TOKEN ? process.env.GITHUB_TOKEN.trim() : '';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -22,14 +19,20 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed. Only GET is supported.' });
   }
 
+  const authHeader = GITHUB_TOKEN
+    ? GITHUB_TOKEN.startsWith('Bearer ') || GITHUB_TOKEN.startsWith('token ')
+      ? GITHUB_TOKEN
+      : `token ${GITHUB_TOKEN}`
+    : null;
+
   try {
     const listRes = await fetch(
       `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases`,
       {
         headers: {
-          'User-Agent': 'Movieflix-Download-Proxy/1.1.3',
+          'User-Agent': 'Movieflix-Download-Proxy/1.1.4',
           'Accept': 'application/vnd.github.v3+json',
-          ...(GITHUB_TOKEN ? { Authorization: `token ${GITHUB_TOKEN}` } : {}),
+          ...(authHeader ? { Authorization: authHeader } : {}),
         },
       }
     );
@@ -67,8 +70,8 @@ export default async function handler(req, res) {
     if (req.query && req.query.info === 'true') {
       return res.status(200).json({
         success: true,
-        version: (latestRelease.tag_name || '1.1.3').replace(/^v/i, ''),
-        tag: latestRelease.tag_name || 'v1.1.3',
+        version: (latestRelease.tag_name || '1.1.4').replace(/^v/i, ''),
+        tag: latestRelease.tag_name || 'v1.1.4',
         releaseName: latestRelease.name || `Movieflix ${latestRelease.tag_name}`,
         apkName: apkAsset.name,
         sizeBytes: apkAsset.size,
@@ -81,9 +84,9 @@ export default async function handler(req, res) {
     const assetDownloadRes = await fetch(apkAsset.url, {
       method: 'GET',
       headers: {
-        'User-Agent': 'Movieflix-Download-Proxy/1.1.3',
+        'User-Agent': 'Movieflix-Download-Proxy/1.1.4',
         'Accept': 'application/octet-stream',
-        ...(GITHUB_TOKEN ? { Authorization: `token ${GITHUB_TOKEN}` } : {}),
+        ...(authHeader ? { Authorization: authHeader } : {}),
       },
       redirect: 'manual', // intercept 302 to forward signed S3 URL directly
     });
