@@ -112,7 +112,7 @@
               "targetCellWidth": 4,
               "targetCellHeight": 2,
               "description": "MovieFlix 2x4 trending movies widget",
-              "previewImage": "./assets/splash-icon.png",
+              "previewImage": "./assets/widget_preview.png",
               "updatePeriodMillis": 1800000
             }
           ]
