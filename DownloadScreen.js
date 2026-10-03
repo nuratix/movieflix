@@ -20,8 +20,8 @@ export const PRIVACY_POLICY_URL = '/privacy';
 export default function DownloadScreen({ onClose, onOpenPrivacy }) {
   const insets = useSafeAreaInsets();
   const [releaseInfo, setReleaseInfo] = useState({
-    version: '1.1.4',
-    tag: 'v1.1.4',
+    version: '1.1.5',
+    tag: 'v1.1.5',
     sizeFormatted: '~98 MB',
     downloadUrl: DOWNLOAD_URL,
   });

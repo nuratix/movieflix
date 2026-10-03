@@ -85,12 +85,13 @@ jobs:
 
             Built automatically via **GitHub Actions Cloud**!
 
-            #### 🔒 Security & Fixes in v${{ steps.prepare_apk.outputs.version }}:
-            * **Fixed Video Player Gestures**: Resolved VideoPlayer.seekBy SharedObject crash during scrubbing.
-            * **Zero Client Secrets**: Purged all GitHub access tokens from client APK; update checks now route through secure backend API proxy.
-            * **Official Brand Favicon**: Integrated custom 1024x1024 brand icon for Google search indexing and web bookmarks.
+            #### 🚀 What's New & Fixed in v${{ steps.prepare_apk.outputs.version }}:
+            * **Apple-Style Floating Navigation Bar**: Pill-shaped floating bottom bar with fluid sliding indicator and horizontal swipe gestures.
+            * **Vibrant Red Category Filters**: Movie and TV category header pills redesigned with signature MovieFlix red glow and haptic feedback.
+            * **Fixed Next Episode Navigation**: Resolved episode switching in video player; smooth automatic stream reloading with zero freeze.
+            * **Apple-Grade Spring Physics & Haptics**: Silky smooth tactile feedback and responsive gestures across all screens.
+            * **Zero Blank Images**: Hardened poster fallbacks ensuring zero blank or black cards across carousels and grids.
             * **Server-Side Security**: Upstream provider API credentials protected on backend proxy—zero secrets embedded in mobile APK.
-            * **Hardware Media Controls**: Smooth gestures for brightness and volume, with instant streaming.
           files: |
             output/movieflix-v${{ steps.prepare_apk.outputs.version }}.apk
         env:

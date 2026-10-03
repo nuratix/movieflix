@@ -541,6 +541,17 @@ function getFallbackPoster(key) {
   return LOCAL_POSTERS[Math.abs(hash) % LOCAL_POSTERS.length];
 }
 
+// Helper to parse episodes array from season object safely everywhere
+function getEpisodesArray(seasonObj) {
+  if (!seasonObj) return [1];
+  if (seasonObj.allEp && seasonObj.allEp.trim().length > 0) {
+    const list = seasonObj.allEp.split(',').map(n => parseInt(n.trim(), 10)).filter(Boolean);
+    if (list.length > 0) return list;
+  }
+  const max = seasonObj.maxEp || 1;
+  return Array.from({ length: Math.max(1, max) }, (_, idx) => idx + 1);
+}
+
 // Fast, ultra-resilient SafeImage powered by expo-image with automatic error reset, bundled require() assets, and multi-protocol fallback
 const SafeImage = React.memo(function SafeImage({ uri, style, resizeMode = 'cover', contentPosition = 'center' }) {
   const [hasError, setHasError] = useState(false);
@@ -2502,9 +2513,16 @@ function ReelApp() {
   };
 
   // Play Next Episode
+  const isSwitchingEpisodeRef = useRef(false);
   const playNextEpisode = async () => {
+    if (isSwitchingEpisodeRef.current) return;
+    isSwitchingEpisodeRef.current = true;
+    setTimeout(() => { isSwitchingEpisodeRef.current = false; }, 1200);
+
     const movie = playerMovie || detailMovie;
     if (!movie) return;
+
+    triggerHaptic('light');
 
     const isRealSeries = Boolean(
       isSeries || currentSe > 0 || currentEp > 0 || movie.isSeries || movie.subjectType === 2
@@ -2515,11 +2533,12 @@ function ReelApp() {
     const activeEp = currentEp || 1;
 
     // 1. Get seasons list from ref, detailData, or fetch on demand
-    let seasons = seriesSeasonsRef.current;
-    if (!seasons || seasons.length === 0) {
-      if (detailData?.seasons && detailData.seasons.length > 0) {
-        seasons = detailData.seasons;
-      }
+    let seasons = null;
+    const isIdMatch = seriesSeasonsMovieIdRef.current && (seriesSeasonsMovieIdRef.current === movie.subject_id || seriesSeasonsMovieIdRef.current === movie.slug);
+    if (isIdMatch && seriesSeasonsRef.current?.length > 0) {
+      seasons = seriesSeasonsRef.current;
+    } else if (detailData?.seasons?.length > 0 && (detailMovie?.slug === movie.slug || detailMovie?.subject_id === movie.subject_id)) {
+      seasons = detailData.seasons;
     }
 
     if (!seasons || seasons.length === 0) {
@@ -2532,7 +2551,7 @@ function ReelApp() {
         if (fetched.length > 0) {
           seasons = fetched;
           seriesSeasonsRef.current = fetched;
-          seriesSeasonsMovieIdRef.current = movie.subject_id;
+          seriesSeasonsMovieIdRef.current = movie.subject_id || movie.slug;
         }
       } catch (err) {
         console.warn('Seasons lookup failed:', err);
@@ -3029,16 +3048,6 @@ function ReelApp() {
 
     initialRouteResolver();
   }, []);
-
-  // Helper to parse episodes array
-  const getEpisodesArray = (seasonObj) => {
-    if (!seasonObj) return [1];
-    if (seasonObj.allEp && seasonObj.allEp.trim().length > 0) {
-      return seasonObj.allEp.split(',').map(n => parseInt(n.trim(), 10)).filter(Boolean);
-    }
-    const max = seasonObj.maxEp || 1;
-    return Array.from({ length: max }, (_, idx) => idx + 1);
-  };
 
   // Safe Local Storage Toggle for My List
   const toggleMyList = async (movie) => {
@@ -5128,6 +5137,7 @@ function ReelApp() {
 
           {activeStreamUrl ? (
             <ReelCustomPlayer
+              key={`player-${playerMovie?.slug || playerMovie?.subject_id}-S${currentSe}-E${currentEp}-${activeResolution}`}
               videoUrl={activeStreamUrl}
               movie={playerMovie}
               imdbData={playerImdb}
@@ -6341,6 +6351,25 @@ function ReelCustomPlayer({
 
   // Synchronously update playerRef with the active player instance on every render
   playerRef.current = player;
+
+  // Handle stream url changes (e.g. Next Episode, Audio Dub, or Quality switch)
+  const currentStreamUrlRef = useRef(videoUrl);
+  useEffect(() => {
+    if (player && videoUrl && videoUrl !== currentStreamUrlRef.current) {
+      currentStreamUrlRef.current = videoUrl;
+      try {
+        if (typeof player.replace === 'function') {
+          player.replace(buildVideoSource(videoUrl));
+          if (initialResumeTime > 0) {
+            player.currentTime = initialResumeTime;
+          }
+          player.play();
+        }
+      } catch (err) {
+        console.warn('[Player] player.replace note:', err);
+      }
+    }
+  }, [player, videoUrl, initialResumeTime]);
 
   useEffect(() => {
     playerRef.current = player;
