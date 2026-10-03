@@ -21,8 +21,8 @@ let html = fs.readFileSync(indexPath, 'utf8');
 
 const SEO_HEAD = `
     <!-- Primary SEO Meta Tags -->
-    <title>MovieFlix - Watch & Download Free Movies, TV Series & Official APK (v1.1.3)</title>
-    <meta name="title" content="MovieFlix - Watch & Download Free Movies, TV Series & Official APK (v1.1.3)" />
+    <title>MovieFlix - Watch & Download Free Movies, TV Series & Official APK (v1.1.4)</title>
+    <meta name="title" content="MovieFlix - Watch & Download Free Movies, TV Series & Official APK (v1.1.4)" />
     <meta name="description" content="Stream and download thousands of HD movies, web series, Hindi dubbed blockbusters, and anime in 4K/1080p with zero ads. Download the official MovieFlix Android APK." />
     <meta name="author" content="MovieFlix" />
     <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
@@ -34,7 +34,7 @@ const SEO_HEAD = `
     <link rel="canonical" href="https://movieflix-pi-six.vercel.app/" />
 
     <!-- 100+ High-Volume SEO Keywords -->
-    <meta name="keywords" content="movieflix, movieflix app, movieflix apk, movieflix download, movieflix official, movieflix web, movieflix online, movieflix free, movieflix android, movieflix apk download, movieflix 1.1.3, movieflix streaming, free movies, watch movies online, free movie streaming, full hd movies, 1080p movies, 4k movies, watch movies free, stream movies online free, latest movies 2026, new release movies, hollywood movies in hindi, bollywood movies free, south indian movies hindi dubbed, action movies, romantic movies, comedy movies, horror movies online, thriller movies, sci fi movies, drama films, family movies, web series free, watch web series online, tv series download, popular tv shows, binge watch series, hindi web series, english tv shows, korean drama hindi dubbed, kdrama streaming, netflix series free, anime series, watch anime online, anime in hindi, japanese animation free, tv shows streaming hd, download movies apk, movie downloader android, free apk download, watch offline movies, download web series, download movies on mobile, free video streaming app, ad free movie app, no ads movie streaming, hindi dubbed movies, english movies with subtitles, tamil movies hindi dubbed, telugu movies in hindi, dual audio movies 720p 1080p, multi audio streaming, movieflix hindi, free hindi streaming, spanish dubbed movies, french dubbed movies, netflix alternative free, prime video alternative, disney plus alternative, cinema hd alternative, moviebox alternative, streamex alternative, hdo box alternative, free ott platform, no subscription streaming, instant streaming without login, safe movie apk, verified movie apk, streaming apk 2026, watch movie trailers, high bitrate video player, subscene subtitles, download movies fast, private video app, zero tracking movie app, movieflix community, free cinema app, watch blockbusters online, top rated imdb movies, popular movies today, new ott releases, movies on android phone, android smart tv movies, offline cinema player" />
+    <meta name="keywords" content="movieflix, movieflix app, movieflix apk, movieflix download, movieflix official, movieflix web, movieflix online, movieflix free, movieflix android, movieflix apk download, movieflix 1.1.4, movieflix streaming, free movies, watch movies online, free movie streaming, full hd movies, 1080p movies, 4k movies, watch movies free, stream movies online free, latest movies 2026, new release movies, hollywood movies in hindi, bollywood movies free, south indian movies hindi dubbed, action movies, romantic movies, comedy movies, horror movies online, thriller movies, sci fi movies, drama films, family movies, web series free, watch web series online, tv series download, popular tv shows, binge watch series, hindi web series, english tv shows, korean drama hindi dubbed, kdrama streaming, netflix series free, anime series, watch anime online, anime in hindi, japanese animation free, tv shows streaming hd, download movies apk, movie downloader android, free apk download, watch offline movies, download web series, download movies on mobile, free video streaming app, ad free movie app, no ads movie streaming, hindi dubbed movies, english movies with subtitles, tamil movies hindi dubbed, telugu movies in hindi, dual audio movies 720p 1080p, multi audio streaming, movieflix hindi, free hindi streaming, spanish dubbed movies, french dubbed movies, netflix alternative free, prime video alternative, disney plus alternative, cinema hd alternative, moviebox alternative, streamex alternative, hdo box alternative, free ott platform, no subscription streaming, instant streaming without login, safe movie apk, verified movie apk, streaming apk 2026, watch movie trailers, high bitrate video player, subscene subtitles, download movies fast, private video app, zero tracking movie app, movieflix community, free cinema app, watch blockbusters online, top rated imdb movies, popular movies today, new ott releases, movies on android phone, android smart tv movies, offline cinema player" />
 
     <!-- Open Graph / WhatsApp / Instagram / Telegram / Facebook Card Tags -->
     <meta property="og:type" content="website" />
@@ -113,7 +113,7 @@ const SEO_HEAD = `
           "operatingSystem": "Android 7.0 and up",
           "applicationCategory": "EntertainmentApplication",
           "applicationSubCategory": "VideoStreamingApplication",
-          "softwareVersion": "1.1.3",
+          "softwareVersion": "1.1.4",
           "fileSize": "98MB",
           "downloadUrl": "https://movieflix-pi-six.vercel.app/api/download",
           "installUrl": "https://movieflix-pi-six.vercel.app/download",

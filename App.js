@@ -2400,7 +2400,7 @@ function ReelApp() {
       );
     } else if (isDownloadPageOpen) {
       updateWebMetaTags(
-        'Download MovieFlix Android APK (v1.1.3) - Free Movies & TV Shows',
+        'Download MovieFlix Android APK (v1.1.4) - Free Movies & TV Shows',
         'Download the official MovieFlix Android app. Stream & download movies and series in 4K/1080p offline with zero ads.',
         'https://movieflix-pi-six.vercel.app/assets/og-banner.png',
         'https://movieflix-pi-six.vercel.app/download'
@@ -2420,7 +2420,7 @@ function ReelApp() {
       updateWebMetaTags(title, desc, img, url);
     } else {
       updateWebMetaTags(
-        'MovieFlix - Watch & Download Free Movies, TV Series & Official APK (v1.1.3)',
+        'MovieFlix - Watch & Download Free Movies, TV Series & Official APK (v1.1.4)',
         'Stream and download thousands of HD movies, web series, Hindi dubbed blockbusters, and anime in 4K/1080p with zero ads. Download the official MovieFlix Android APK.',
         'https://movieflix-pi-six.vercel.app/assets/og-banner.png',
         'https://movieflix-pi-six.vercel.app/'
@@ -3453,7 +3453,7 @@ function ReelApp() {
                         <View style={styles.meNavTitleRow}>
                           <Text style={styles.meNavTitle}>Download Android App</Text>
                           <View style={styles.meNavBadge}>
-                            <Text style={styles.meNavBadgeText}>v1.1.3 APK</Text>
+                            <Text style={styles.meNavBadgeText}>v1.1.4 APK</Text>
                           </View>
                         </View>
                         <Text style={styles.meNavSubtitle}>
@@ -5434,7 +5434,7 @@ function ReelApp() {
                   Install Movieflix APK for a better experience
                 </Text>
                 <Text style={styles.webInstallSubtitle} numberOfLines={1}>
-                  Tap to download latest v1.1.3 · Faster stream · 0 ads
+                  Tap to download latest v1.1.4 · Faster stream · 0 ads
                 </Text>
               </View>
               <View style={styles.webInstallBtn}>
@@ -5714,6 +5714,13 @@ function ReelCustomPlayer({
   const showControlsRef = useRef(true);
   const currentSpeedRef = useRef('1.0×');
   const playerRef = useRef(null);
+  const seekRelativeRef = useRef(null);
+  const wakeControlsRef = useRef(null);
+  const triggerDoubleTapFeedbackRef = useRef(null);
+  const windowWidthRef = useRef(windowWidth);
+  const windowHeightRef = useRef(windowHeight);
+  const durationRef = useRef(0);
+  const currentTimeRef = useRef(0);
   const lastTapTimeRef = useRef(0);
   const lastTapXRef = useRef(0);
   const singleTapTimerRef = useRef(null);
@@ -5722,6 +5729,12 @@ function ReelCustomPlayer({
   const isLongPressActiveRef = useRef(false);
   const startDragValRef = useRef(0);
   const dragTypeRef = useRef(null); // 'brightness' | 'volume' | null
+
+  // Keep dimension and timing refs current on every render
+  windowWidthRef.current = windowWidth;
+  windowHeightRef.current = windowHeight;
+  durationRef.current = duration;
+  currentTimeRef.current = currentTime;
 
   useEffect(() => {
     showControlsRef.current = showControls;
@@ -5817,7 +5830,9 @@ function ReelCustomPlayer({
       setIs2xActive(false);
       const restoreSpeed = originalSpeedRef.current || 1.0;
       if (playerRef.current) {
-        playerRef.current.playbackRate = restoreSpeed;
+        try {
+          playerRef.current.playbackRate = restoreSpeed;
+        } catch (_) {}
       }
     }
   };
@@ -5839,7 +5854,7 @@ function ReelCustomPlayer({
       },
       onPanResponderGrant: (evt) => {
         const { locationX } = evt.nativeEvent;
-        const screenW = windowWidth || 800;
+        const screenW = windowWidthRef.current || windowWidth || 800;
 
         isDraggingRef.current = false;
         isLongPressActiveRef.current = false;
@@ -5855,7 +5870,9 @@ function ReelCustomPlayer({
             isLongPressActiveRef.current = true;
             originalSpeedRef.current = parseSpeed(currentSpeedRef.current);
             if (playerRef.current) {
-              playerRef.current.playbackRate = 2.0;
+              try {
+                playerRef.current.playbackRate = 2.0;
+              } catch (_) {}
             }
             setIs2xActive(true);
 
@@ -5881,7 +5898,7 @@ function ReelCustomPlayer({
           isDraggingRef.current = true;
           end2xHold();
 
-          const screenH = windowHeight || 400;
+          const screenH = windowHeightRef.current || windowHeight || 400;
           const delta = -gestureState.dy / (screenH * 0.55);
 
           if (dragTypeRef.current === 'brightness') {
@@ -5897,7 +5914,9 @@ function ReelCustomPlayer({
             setVolume(nextV);
             volumeRef.current = nextV;
             if (playerRef.current) {
-              playerRef.current.volume = nextV;
+              try {
+                playerRef.current.volume = nextV;
+              } catch (_) {}
             }
             triggerHud('volume');
           }
@@ -5926,7 +5945,7 @@ function ReelCustomPlayer({
         // Tap handling: Single Tap vs Double Tap
         const x = evt.nativeEvent.locationX;
         const now = Date.now();
-        const screenW = windowWidth || 800;
+        const screenW = windowWidthRef.current || windowWidth || 800;
 
         if (now - lastTapTimeRef.current < 320 && Math.abs(x - lastTapXRef.current) < 90) {
           // DOUBLE TAP DETECTED: 10s move
@@ -5937,11 +5956,29 @@ function ReelCustomPlayer({
           lastTapTimeRef.current = 0;
 
           if (x < screenW / 2) {
-            seekRelative(-10);
-            triggerDoubleTapFeedback('left');
+            try {
+              if (seekRelativeRef.current) seekRelativeRef.current(-10);
+              else seekRelative(-10);
+            } catch (err) {
+              console.warn('[Player] Double tap seek backward error:', err);
+            }
+            if (triggerDoubleTapFeedbackRef.current) {
+              triggerDoubleTapFeedbackRef.current('left');
+            } else {
+              triggerDoubleTapFeedback('left');
+            }
           } else {
-            seekRelative(10);
-            triggerDoubleTapFeedback('right');
+            try {
+              if (seekRelativeRef.current) seekRelativeRef.current(10);
+              else seekRelative(10);
+            } catch (err) {
+              console.warn('[Player] Double tap seek forward error:', err);
+            }
+            if (triggerDoubleTapFeedbackRef.current) {
+              triggerDoubleTapFeedbackRef.current('right');
+            } else {
+              triggerDoubleTapFeedback('right');
+            }
           }
         } else {
           // SINGLE TAP: Toggle Player UI (show or close)
@@ -5956,7 +5993,8 @@ function ReelCustomPlayer({
               setShowControls(false);
               if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
             } else {
-              wakeControls();
+              if (wakeControlsRef.current) wakeControlsRef.current();
+              else wakeControls();
             }
           }, 320);
         }
@@ -6025,16 +6063,28 @@ function ReelCustomPlayer({
 
   // Initialize expo-video player with anti-hotlink Referer headers
   const player = useVideoPlayer(buildVideoSource(videoUrl), (p) => {
-    p.loop = false;
-    p.timeUpdateEventInterval = 0.05; // 50ms interval (20 checks/second) ensures subtitles NEVER skip!
-    if (initialResumeTime > 0) {
-      p.currentTime = initialResumeTime;
+    try {
+      p.loop = false;
+      p.timeUpdateEventInterval = 0.05; // 50ms interval (20 checks/second) ensures subtitles NEVER skip!
+      if (initialResumeTime > 0) {
+        p.currentTime = initialResumeTime;
+      }
+      p.play();
+    } catch (e) {
+      console.warn('[Player] useVideoPlayer setup note:', e);
     }
-    p.play();
   });
+
+  // Synchronously update playerRef with the active player instance on every render
+  playerRef.current = player;
 
   useEffect(() => {
     playerRef.current = player;
+    return () => {
+      if (playerRef.current === player) {
+        playerRef.current = null;
+      }
+    };
   }, [player]);
 
   // Keep ref updated
@@ -6119,19 +6169,28 @@ function ReelCustomPlayer({
   // Handle source switch smoothly and seek to resume time if set
   useEffect(() => {
     setPlayerStatus('loading');
-    if (videoUrl && player) {
+    const activePlayer = playerRef.current || player;
+    if (videoUrl && activePlayer) {
       const src = buildVideoSource(videoUrl);
       const afterSwitch = () => {
-        if (initialResumeTime > 0) {
-          player.currentTime = initialResumeTime;
+        try {
+          if (initialResumeTime > 0) {
+            activePlayer.currentTime = initialResumeTime;
+          }
+          activePlayer.play();
+        } catch (e) {
+          console.warn('[Player] afterSwitch note:', e);
         }
-        player.play();
       };
-      if (typeof player.replaceAsync === 'function') {
-        player.replaceAsync(src).then(afterSwitch).catch(console.warn);
-      } else if (typeof player.replace === 'function') {
-        player.replace(src);
-        afterSwitch();
+      try {
+        if (typeof activePlayer.replaceAsync === 'function') {
+          activePlayer.replaceAsync(src).then(afterSwitch).catch(console.warn);
+        } else if (typeof activePlayer.replace === 'function') {
+          activePlayer.replace(src);
+          afterSwitch();
+        }
+      } catch (e) {
+        console.warn('[Player] replace note:', e);
       }
     }
   }, [videoUrl, initialResumeTime]);
@@ -6240,8 +6299,13 @@ function ReelCustomPlayer({
     subtitleCuesRef.current = [];
     setSubtitleCues([]);
     setCurrentSubtitleText('');
-    if (player) {
-      player.subtitleTrack = track;
+    const activePlayer = playerRef.current || player;
+    if (activePlayer) {
+      try {
+        activePlayer.subtitleTrack = track;
+      } catch (e) {
+        console.warn('[Player] set subtitleTrack note:', e);
+      }
     }
     setIsAudioSubsModalOpen(false);
   };
@@ -6258,15 +6322,24 @@ function ReelCustomPlayer({
 
   // Handle stream audio track switch (multi-audio within same container)
   const handleSelectAudioTrack = (track) => {
+    const activePlayer = playerRef.current || player;
     if (!track || track === 'default') {
       setSelectedAudio('Original Audio (Default)');
-      if (player && streamAudioTracks.length > 0) {
-        player.audioTrack = streamAudioTracks[0];
+      if (activePlayer && streamAudioTracks.length > 0) {
+        try {
+          activePlayer.audioTrack = streamAudioTracks[0];
+        } catch (e) {
+          console.warn('[Player] set default audioTrack note:', e);
+        }
       }
     } else {
       setSelectedAudio(track.label || track.language || 'Selected Audio');
-      if (player) {
-        player.audioTrack = track;
+      if (activePlayer) {
+        try {
+          activePlayer.audioTrack = track;
+        } catch (e) {
+          console.warn('[Player] set audioTrack note:', e);
+        }
       }
     }
     setIsAudioSubsModalOpen(false);
@@ -6372,23 +6445,52 @@ function ReelCustomPlayer({
     const nextIdx = (currentIdx + 1) % speeds.length;
     const nextSpeed = speeds[nextIdx];
     setCurrentSpeed(nextSpeed.label);
-    if (player) {
-      player.playbackRate = nextSpeed.val;
-    }
-  };
-
-  // Seek by delta seconds
-  const seekRelative = (delta) => {
-    wakeControls();
-    if (player) {
-      if (typeof player.seekBy === 'function') {
-        player.seekBy(delta);
-      } else {
-        const target = Math.max(0, Math.min(duration, currentTime + delta));
-        player.currentTime = target;
+    const activePlayer = playerRef.current || player;
+    if (activePlayer) {
+      try {
+        activePlayer.playbackRate = nextSpeed.val;
+      } catch (e) {
+        console.warn('[Player] Failed to set playbackRate:', e);
       }
     }
   };
+
+  // Seek by delta seconds (with ultra-safe released SharedObject protection)
+  const seekRelative = (delta) => {
+    if (wakeControlsRef.current) wakeControlsRef.current();
+    else wakeControls();
+
+    const activePlayer = playerRef.current || player;
+    if (!activePlayer) return;
+
+    try {
+      const cur = typeof activePlayer.currentTime === 'number' && !isNaN(activePlayer.currentTime)
+        ? activePlayer.currentTime
+        : (currentTimeRef.current || currentTime || 0);
+      const dur = typeof activePlayer.duration === 'number' && !isNaN(activePlayer.duration)
+        ? activePlayer.duration
+        : (durationRef.current || duration || 0);
+      const target = Math.max(0, dur > 0 ? Math.min(dur, cur + delta) : Math.max(0, cur + delta));
+
+      // Attempt seekBy first if available, wrapped safely in its own try-catch
+      if (typeof activePlayer.seekBy === 'function') {
+        try {
+          activePlayer.seekBy(delta);
+          return;
+        } catch (seekByErr) {
+          console.warn('[Player] seekBy call threw, falling back to currentTime:', seekByErr);
+        }
+      }
+      activePlayer.currentTime = target;
+    } catch (err) {
+      console.warn('[Player] seekRelative error caught and handled safely:', err);
+    }
+  };
+
+  // Keep helper refs pointing to the latest functions
+  seekRelativeRef.current = seekRelative;
+  wakeControlsRef.current = wakeControls;
+  triggerDoubleTapFeedbackRef.current = triggerDoubleTapFeedback;
 
   // Format time HH:MM:SS or MM:SS
   const formatTime = (seconds) => {
@@ -6621,8 +6723,13 @@ function ReelCustomPlayer({
               style={styles.playerPlayBigRoundBtn}
               onPress={() => {
                 wakeControls();
-                if (isPlaying) player?.pause?.();
-                else player?.play?.();
+                const activePlayer = playerRef.current || player;
+                try {
+                  if (isPlaying) activePlayer?.pause?.();
+                  else activePlayer?.play?.();
+                } catch (e) {
+                  console.warn('[Player] Play/Pause center button error:', e);
+                }
               }}
               activeOpacity={0.8}
             >
@@ -6664,18 +6771,32 @@ function ReelCustomPlayer({
               onStartShouldSetResponder={() => true}
               onResponderGrant={(e) => {
                 wakeControls();
-                if (duration > 0 && player) {
-                  const locationX = e.nativeEvent.locationX;
-                  const ratio = Math.max(0, Math.min(1, locationX / (windowWidth - 40)));
-                  player.currentTime = ratio * duration;
+                const activePlayer = playerRef.current || player;
+                const dur = durationRef.current || duration || 0;
+                if (dur > 0 && activePlayer) {
+                  try {
+                    const locationX = e.nativeEvent.locationX;
+                    const screenW = windowWidthRef.current || windowWidth || 800;
+                    const ratio = Math.max(0, Math.min(1, locationX / (screenW - 40)));
+                    activePlayer.currentTime = ratio * dur;
+                  } catch (err) {
+                    console.warn('[Player] Scrubber grant error:', err);
+                  }
                 }
               }}
               onResponderMove={(e) => {
                 wakeControls();
-                if (duration > 0 && player) {
-                  const locationX = e.nativeEvent.locationX;
-                  const ratio = Math.max(0, Math.min(1, locationX / (windowWidth - 40)));
-                  player.currentTime = ratio * duration;
+                const activePlayer = playerRef.current || player;
+                const dur = durationRef.current || duration || 0;
+                if (dur > 0 && activePlayer) {
+                  try {
+                    const locationX = e.nativeEvent.locationX;
+                    const screenW = windowWidthRef.current || windowWidth || 800;
+                    const ratio = Math.max(0, Math.min(1, locationX / (screenW - 40)));
+                    activePlayer.currentTime = ratio * dur;
+                  } catch (err) {
+                    console.warn('[Player] Scrubber move error:', err);
+                  }
                 }
               }}
             >
@@ -6692,8 +6813,13 @@ function ReelCustomPlayer({
                 <TouchableOpacity
                   onPress={() => {
                     wakeControls();
-                    if (isPlaying) player?.pause?.();
-                    else player?.play?.();
+                    const activePlayer = playerRef.current || player;
+                    try {
+                      if (isPlaying) activePlayer?.pause?.();
+                      else activePlayer?.play?.();
+                    } catch (e) {
+                      console.warn('[Player] Mini play/pause button error:', e);
+                    }
                   }}
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 >
