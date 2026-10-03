@@ -16,6 +16,7 @@ import {
   Easing,
   PanResponder,
   Linking,
+  Alert,
 } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import { StatusBar } from 'expo-status-bar';
@@ -74,6 +75,9 @@ import {
   hapticSuccess,
 } from './hapticService';
 import { AppleSpringPressable } from './components/AppleSpringPressable';
+import { MovieFlixInAppWidget } from './components/MovieFlixInAppWidget';
+import { getRandomWidgetPosters } from './widget/widgetData';
+import { updateHomeScreenWidgetAsync, pinWidgetToHomeScreenAsync } from './widget/widgetService';
 import {
   TRENDING_NOW,
   LATEST_RELEASES,
@@ -1083,6 +1087,37 @@ function ReelApp() {
   const [notFoundPath, setNotFoundPath] = useState('');
   const [showWebInstallBanner, setShowWebInstallBanner] = useState(true);
   const [securityStatus, setSecurityStatus] = useState({ verified: true, authentic: true, isTampered: false });
+
+  // ─── 2x4 MovieFlix Widget State & Shuffling ────────────────────────────────
+  const [widgetPosters, setWidgetPosters] = useState(() => getRandomWidgetPosters());
+
+  // Automatically randomize widget posters every time the user opens the app
+  useEffect(() => {
+    try {
+      const fresh = getRandomWidgetPosters();
+      setWidgetPosters(fresh);
+      updateHomeScreenWidgetAsync().catch(() => {});
+    } catch (_) {}
+  }, []);
+
+  const handleShuffleWidgetPosters = () => {
+    triggerHaptic('medium');
+    const fresh = getRandomWidgetPosters();
+    setWidgetPosters(fresh);
+    updateHomeScreenWidgetAsync().catch(() => {});
+  };
+
+  const handlePinWidgetToHomeScreen = async () => {
+    triggerHaptic('medium');
+    const pinned = await pinWidgetToHomeScreenAsync();
+    if (!pinned && Platform.OS === 'android') {
+      Alert.alert(
+        'Add Widget',
+        'To add the MovieFlix 2×4 Widget to your home screen:\n\n1. Long-press an empty space on your Android home screen.\n2. Tap "Widgets".\n3. Scroll down to "MovieFlix" and tap or drag "MovieFlix 2×4" onto your home screen!',
+        [{ text: 'Got it' }]
+      );
+    }
+  };
 
   // Sync access token to module-level var so apiFetch picks it up automatically
   useEffect(() => { _authToken = authAccessToken; }, [authAccessToken]);
@@ -3607,6 +3642,54 @@ function ReelApp() {
                   </AppleSpringPressable>
                 </View>
 
+                {/* ─── 2x4 Home Screen Widget Showcase Card ─── */}
+                <View style={styles.meWidgetCardContainer}>
+                  <View style={styles.meWidgetHeaderRow}>
+                    <View style={styles.meWidgetHeaderLeft}>
+                      <View style={[styles.meNavIconCircle, { backgroundColor: 'rgba(229, 9, 20, 0.12)', borderColor: 'rgba(229, 9, 20, 0.28)' }]}>
+                        <Feather name="grid" size={17} color="#e50914" />
+                      </View>
+                      <View>
+                        <Text style={styles.meWidgetCardTitle}>MovieFlix Widget 2×4</Text>
+                        <Text style={styles.meWidgetCardSubtitle}>Trending now · Changes on every app open</Text>
+                      </View>
+                    </View>
+                    <AppleSpringPressable
+                      style={styles.meWidgetShuffleBtn}
+                      onPress={handleShuffleWidgetPosters}
+                      scaleTo={0.93}
+                      haptic="medium"
+                    >
+                      <Feather name="refresh-cw" size={12} color="#f5f5f1" style={{ marginRight: 4 }} />
+                      <Text style={styles.meWidgetShuffleBtnText}>Shuffle</Text>
+                    </AppleSpringPressable>
+                  </View>
+
+                  <View style={styles.meWidgetPreviewWrapper}>
+                    <MovieFlixInAppWidget
+                      posters={widgetPosters}
+                      onPressPoster={(item) => {
+                        const match = [...trendingNow, ...latestReleases].find(
+                          m => m.name?.toLowerCase().includes(item.title.toLowerCase())
+                        );
+                        if (match) openDetail(match);
+                      }}
+                    />
+                  </View>
+
+                  {!isWeb && (
+                    <AppleSpringPressable
+                      style={styles.meWidgetPinBtn}
+                      onPress={handlePinWidgetToHomeScreen}
+                      scaleTo={0.97}
+                      haptic="medium"
+                    >
+                      <Feather name="plus-circle" size={15} color="#FFFFFF" style={{ marginRight: 6 }} />
+                      <Text style={styles.meWidgetPinBtnText}>Add Widget to Home Screen</Text>
+                    </AppleSpringPressable>
+                  )}
+                </View>
+
                 {/* Minimal App Updates Section (Native Mobile Only) */}
                 {!isWeb && (
                   <View style={styles.minimalUpdateContainer}>
@@ -4298,6 +4381,19 @@ function ReelApp() {
                   </Animated.View>
                 </View>
               )}
+
+              {/* MOVIEFLIX 2x4 WIDGET (CLEAN MINIMAL 100% SPEC) */}
+              <View style={styles.homeWidgetSection}>
+                <MovieFlixInAppWidget
+                  posters={widgetPosters}
+                  onPressPoster={(item) => {
+                    const match = [...trendingNow, ...latestReleases].find(
+                      m => m.name?.toLowerCase().includes(item.title?.toLowerCase() || '')
+                    );
+                    if (match) openDetail(match);
+                  }}
+                />
+              </View>
 
               {/* CATALOG CONTENT ROWS FOR 'ALL' */}
               {homeCategory === 'All' && (
@@ -8923,6 +9019,84 @@ const styles = StyleSheet.create({
   meNavBadgeText: {
     color: '#e50914',
     fontSize: 11,
+    fontWeight: '700',
+  },
+
+  // 2x4 MOVIEFLIX WIDGET STYLES
+  homeWidgetSection: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  meWidgetCardContainer: {
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    padding: 16,
+    marginBottom: 14,
+  },
+  meWidgetHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  meWidgetHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  meWidgetCardTitle: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  meWidgetCardSubtitle: {
+    color: '#8e8e93',
+    fontSize: 12,
+    fontWeight: '400',
+    marginTop: 2,
+  },
+  meWidgetShuffleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.16)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+  },
+  meWidgetShuffleBtnText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#f5f5f1',
+  },
+  meWidgetPreviewWrapper: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+  },
+  meWidgetPinBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#e50914',
+    borderRadius: 12,
+    paddingVertical: 10,
+    marginTop: 12,
+    shadowColor: '#e50914',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.35,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  meWidgetPinBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
     fontWeight: '700',
   },
 

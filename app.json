@@ -99,7 +99,25 @@
           "imageWidth": 160
         }
       ],
-      "expo-updates"
+      "expo-updates",
+      [
+        "react-native-android-widget",
+        {
+          "widgets": [
+            {
+              "name": "MovieFlixWidget",
+              "label": "MovieFlix 2x4",
+              "minWidth": "250dp",
+              "minHeight": "110dp",
+              "targetCellWidth": 4,
+              "targetCellHeight": 2,
+              "description": "MovieFlix 2x4 trending movies widget",
+              "previewImage": "./assets/splash-icon.png",
+              "updatePeriodMillis": 1800000
+            }
+          ]
+        }
+      ]
     ],
     "updates": {
       "url": "https://u.expo.dev/1794b566-0be5-4647-ab45-1696f5785c62",
