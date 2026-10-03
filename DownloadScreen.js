@@ -24,25 +24,21 @@ export const PRIVACY_POLICY_URL = '/privacy';
 const SCREENSHOTS = [
   {
     id: '1',
-    title: 'Featured Movies & Fast Search',
     source: require('./assets/screenshots/screen1.png'),
     webUri: '/screenshots/screen1.png',
   },
   {
     id: '2',
-    title: 'Ultra HD 4K Cinematic Player',
     source: require('./assets/screenshots/screen2.png'),
     webUri: '/screenshots/screen2.png',
   },
   {
     id: '3',
-    title: 'Explore Categories & Multi-Audio Dubs',
     source: require('./assets/screenshots/screen3.png'),
     webUri: '/screenshots/screen3.png',
   },
   {
     id: '4',
-    title: 'Offline Cinema & High-Speed Downloads',
     source: require('./assets/screenshots/screen4.jpg'),
     webUri: '/screenshots/screen4.jpg',
   },
@@ -157,14 +153,13 @@ export default function DownloadScreen({
     }
   };
 
-  // Format real download count with Play Store styling
+  // Format real download count (strictly authentic count)
   const formattedDownloadCount = () => {
     const count = releaseInfo.realDownloads;
-    if (!count || count <= 0) return '10K+';
-    if (count < 1000) return `${count}+`;
-    if (count < 10000) return `${(count / 1000).toFixed(1)}K+`;
-    if (count < 1000000) return `${Math.floor(count / 1000)}K+`;
-    return `${(count / 1000000).toFixed(1)}M+`;
+    if (!count || count <= 0) return '0';
+    if (count < 1000) return `${count}`;
+    if (count < 1000000) return `${(count / 1000).toFixed(1)}K`;
+    return `${(count / 1000000).toFixed(1)}M`;
   };
 
   return (
@@ -185,7 +180,6 @@ export default function DownloadScreen({
 
           <View style={styles.topBarTitleBlock}>
             <Text style={styles.topBarHeaderTitle}>MovieFlix</Text>
-            <Text style={styles.topBarHeaderSub}>Google Play Verified</Text>
           </View>
 
           <View style={styles.topBarActions}>
@@ -247,21 +241,10 @@ export default function DownloadScreen({
           </View>
 
           {/* ==================================================== */}
-          {/* PLAY STORE 4-COLUMN STATS ROW                        */}
+          {/* VERIFIED REAL STATS ROW                              */}
           {/* ==================================================== */}
           <View style={styles.statsCard}>
-            {/* Stat 1: Rating */}
-            <View style={styles.statCol}>
-              <View style={styles.statValueRow}>
-                <Text style={styles.statNumber}>4.8</Text>
-                <Ionicons name="star" size={12} color="#E50914" style={{ marginLeft: 3 }} />
-              </View>
-              <Text style={styles.statLabel}>128K reviews</Text>
-            </View>
-
-            <View style={styles.statDivider} />
-
-            {/* Stat 2: Downloads (Real Live Count) */}
+            {/* Stat 1: Real Verified Downloads */}
             <View style={styles.statCol}>
               <Text style={styles.statNumber}>{formattedDownloadCount()}</Text>
               <Text style={styles.statLabel}>Downloads</Text>
@@ -269,20 +252,28 @@ export default function DownloadScreen({
 
             <View style={styles.statDivider} />
 
-            {/* Stat 3: Age Rating */}
+            {/* Stat 2: Age Rating */}
             <View style={styles.statCol}>
               <View style={styles.ageRatingBadge}>
-                <Text style={styles.ageRatingBadgeText}>18+</Text>
+                <Text style={styles.ageRatingBadgeText}>{releaseInfo.ageRating || '18+'}</Text>
               </View>
               <Text style={styles.statLabel}>Rated for 18+</Text>
             </View>
 
             <View style={styles.statDivider} />
 
-            {/* Stat 4: File Size */}
+            {/* Stat 3: File Size */}
             <View style={styles.statCol}>
               <Text style={styles.statNumber}>{releaseInfo.sizeFormatted}</Text>
               <Text style={styles.statLabel}>Size</Text>
+            </View>
+
+            <View style={styles.statDivider} />
+
+            {/* Stat 4: Version Tag */}
+            <View style={styles.statCol}>
+              <Text style={styles.statNumber}>{releaseInfo.tag}</Text>
+              <Text style={styles.statLabel}>Version</Text>
             </View>
           </View>
 
@@ -364,11 +355,6 @@ export default function DownloadScreen({
                     style={styles.screenshotImage}
                     resizeMode="cover"
                   />
-                  <View style={styles.screenshotOverlay}>
-                    <Text style={styles.screenshotCardTitle} numberOfLines={1}>
-                      {item.title}
-                    </Text>
-                  </View>
                 </TouchableOpacity>
               ))}
             </ScrollView>
@@ -430,9 +416,7 @@ export default function DownloadScreen({
               <View style={styles.infoTableRow}>
                 <Text style={styles.infoTableLabel}>Downloads</Text>
                 <Text style={[styles.infoTableValue, { color: '#E50914', fontWeight: '700' }]}>
-                  {releaseInfo.realDownloads > 0
-                    ? `${releaseInfo.realDownloads.toLocaleString()} verified downloads`
-                    : '10,000+ downloads'}
+                  {`${(releaseInfo.realDownloads || 0).toLocaleString()} verified`}
                 </Text>
               </View>
 
@@ -514,120 +498,9 @@ export default function DownloadScreen({
           </View>
 
           {/* ==================================================== */}
-          {/* RATINGS & REVIEWS (PLAY STORE STYLE)                 */}
+          {/* FOOTER PRIVACY & SECURITY TERMS                      */}
           {/* ==================================================== */}
-          <View style={styles.sectionContainer}>
-            <View style={styles.sectionHeaderRow}>
-              <Text style={styles.sectionHeadingText}>Ratings and reviews</Text>
-              <Feather name="arrow-right" size={18} color="#E50914" />
-            </View>
-
-            <View style={styles.reviewsOverviewCard}>
-              {/* Score Left */}
-              <View style={styles.scoreLeftCol}>
-                <Text style={styles.bigScoreText}>4.8</Text>
-                <View style={styles.starsRow}>
-                  {[1, 2, 3, 4, 5].map((s) => (
-                    <Ionicons key={`star-${s}`} name="star" size={14} color="#E50914" />
-                  ))}
-                </View>
-                <Text style={styles.totalReviewsCount}>128,420 ratings</Text>
-              </View>
-
-              {/* Progress Bars Right */}
-              <View style={styles.barsRightCol}>
-                <View style={styles.barRow}>
-                  <Text style={styles.barNumber}>5</Text>
-                  <View style={styles.barBg}>
-                    <View style={[styles.barFill, { width: '88%' }]} />
-                  </View>
-                </View>
-                <View style={styles.barRow}>
-                  <Text style={styles.barNumber}>4</Text>
-                  <View style={styles.barBg}>
-                    <View style={[styles.barFill, { width: '9%' }]} />
-                  </View>
-                </View>
-                <View style={styles.barRow}>
-                  <Text style={styles.barNumber}>3</Text>
-                  <View style={styles.barBg}>
-                    <View style={[styles.barFill, { width: '2%' }]} />
-                  </View>
-                </View>
-                <View style={styles.barRow}>
-                  <Text style={styles.barNumber}>2</Text>
-                  <View style={styles.barBg}>
-                    <View style={[styles.barFill, { width: '0.6%' }]} />
-                  </View>
-                </View>
-                <View style={styles.barRow}>
-                  <Text style={styles.barNumber}>1</Text>
-                  <View style={styles.barBg}>
-                    <View style={[styles.barFill, { width: '0.4%' }]} />
-                  </View>
-                </View>
-              </View>
-            </View>
-
-            {/* Individual Review 1 */}
-            <View style={styles.reviewItemCard}>
-              <View style={styles.reviewUserRow}>
-                <View style={styles.reviewAvatarCircle}>
-                  <Text style={styles.reviewAvatarLetter}>R</Text>
-                </View>
-                <View style={styles.reviewUserMeta}>
-                  <Text style={styles.reviewUserName}>Rahul S.</Text>
-                  <View style={styles.reviewStarsRow}>
-                    {[1, 2, 3, 4, 5].map((s) => (
-                      <Ionicons key={`r1-${s}`} name="star" size={11} color="#E50914" />
-                    ))}
-                    <Text style={styles.reviewDate}>Yesterday</Text>
-                  </View>
-                </View>
-              </View>
-              <Text style={styles.reviewComment}>
-                Hands down the best entertainment app. Streams load instantly without buffering, and offline downloads save straight to phone storage.
-              </Text>
-            </View>
-
-            {/* Individual Review 2 */}
-            <View style={styles.reviewItemCard}>
-              <View style={styles.reviewUserRow}>
-                <View style={styles.reviewAvatarCircle}>
-                  <Text style={styles.reviewAvatarLetter}>A</Text>
-                </View>
-                <View style={styles.reviewUserMeta}>
-                  <Text style={styles.reviewUserName}>Aman K.</Text>
-                  <View style={styles.reviewStarsRow}>
-                    {[1, 2, 3, 4, 5].map((s) => (
-                      <Ionicons key={`r2-${s}`} name="star" size={11} color="#E50914" />
-                    ))}
-                    <Text style={styles.reviewDate}>3 days ago</Text>
-                  </View>
-                </View>
-              </View>
-              <Text style={styles.reviewComment}>
-                The red and black dark theme is super clean and Apple-smooth. Dubbed tracks in Hindi and English switch with one tap.
-              </Text>
-            </View>
-          </View>
-
-          {/* ==================================================== */}
-          {/* BOTTOM FLOATING INSTALL CALL-TO-ACTION               */}
-          {/* ==================================================== */}
-          <View style={styles.bottomInstallContainer}>
-            <TouchableOpacity
-              style={styles.installButton}
-              onPress={handleInitiateDownload}
-              activeOpacity={0.85}
-              disabled={downloading}
-            >
-              <Feather name={authUser ? "download" : "lock"} size={19} color="#FFFFFF" style={{ marginRight: 8 }} />
-              <Text style={styles.installButtonText}>
-                {authUser ? `Install APK (${releaseInfo.tag})` : 'Sign In to Install APK'}
-              </Text>
-            </TouchableOpacity>
-
+          <View style={styles.footerContainer}>
             <TouchableOpacity
               style={styles.footerPrivacyLink}
               onPress={onOpenPrivacy}
@@ -665,9 +538,6 @@ export default function DownloadScreen({
                 style={styles.fullscreenImage}
                 resizeMode="contain"
               />
-              <Text style={styles.fullscreenCaption}>
-                {SCREENSHOTS[selectedScreenshotIndex]?.title}
-              </Text>
             </View>
           )}
         </View>
@@ -776,11 +646,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     letterSpacing: 0.2,
-  },
-  topBarHeaderSub: {
-    color: '#8E8E93',
-    fontSize: 11,
-    fontWeight: '500',
   },
   topBarActions: {
     flexDirection: 'row',
@@ -1006,19 +871,6 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
-  screenshotOverlay: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    padding: 8,
-    backgroundColor: 'rgba(10, 10, 10, 0.85)',
-  },
-  screenshotCardTitle: {
-    color: '#E5E5E5',
-    fontSize: 11,
-    fontWeight: '600',
-  },
 
   // ABOUT THIS APP
   sectionContainer: {
@@ -1122,125 +974,15 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
 
-  // REVIEWS & RATINGS
-  reviewsOverviewCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#18181c',
-    borderRadius: 14,
-    padding: 16,
-    marginBottom: 16,
-  },
-  scoreLeftCol: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: 110,
-    borderRightWidth: 1,
-    borderRightColor: 'rgba(255, 255, 255, 0.08)',
-    paddingRight: 14,
-  },
-  bigScoreText: {
-    color: '#FFFFFF',
-    fontSize: 38,
-    fontWeight: '800',
-    lineHeight: 44,
-  },
-  starsRow: {
-    flexDirection: 'row',
-    marginTop: 2,
-    marginBottom: 4,
-  },
-  totalReviewsCount: {
-    color: '#8E8E93',
-    fontSize: 11,
-    fontWeight: '500',
-  },
-  barsRightCol: {
-    flex: 1,
-    marginLeft: 14,
-  },
-  barRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  barNumber: {
-    color: '#8E8E93',
-    fontSize: 11,
-    width: 12,
-    fontWeight: '600',
-  },
-  barBg: {
-    flex: 1,
-    height: 6,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    borderRadius: 3,
-    marginLeft: 8,
-    overflow: 'hidden',
-  },
-  barFill: {
-    height: '100%',
-    backgroundColor: '#E50914',
-    borderRadius: 3,
-  },
-  reviewItemCard: {
-    backgroundColor: '#18181c',
-    borderRadius: 14,
-    padding: 14,
-    marginBottom: 10,
-  },
-  reviewUserRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  reviewAvatarCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#E50914',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 10,
-  },
-  reviewAvatarLetter: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '800',
-  },
-  reviewUserMeta: {
-    flex: 1,
-  },
-  reviewUserName: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  reviewStarsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 2,
-  },
-  reviewDate: {
-    color: '#737373',
-    fontSize: 10.5,
-    marginLeft: 8,
-  },
-  reviewComment: {
-    color: '#D4D4D4',
-    fontSize: 12.5,
-    lineHeight: 18,
-  },
-
-  // BOTTOM CTA
-  bottomInstallContainer: {
+  // FOOTER
+  footerContainer: {
     marginTop: 10,
     marginBottom: 20,
     alignItems: 'center',
+    paddingVertical: 10,
   },
   footerPrivacyLink: {
-    marginTop: 16,
-    padding: 6,
+    padding: 8,
   },
   footerPrivacyText: {
     color: '#737373',
@@ -1271,20 +1013,13 @@ const styles = StyleSheet.create({
   },
   fullscreenImageWrap: {
     width: '100%',
-    height: '80%',
+    height: '85%',
     alignItems: 'center',
     justifyContent: 'center',
   },
   fullscreenImage: {
     width: '100%',
-    height: '90%',
-  },
-  fullscreenCaption: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
-    marginTop: 14,
-    textAlign: 'center',
+    height: '100%',
   },
 
   // AUTH REQUIRED MODAL

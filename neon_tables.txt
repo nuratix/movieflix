@@ -1,0 +1,92 @@
+-- =============================================================================
+-- MOVIEFLIX NEON DATABASE - OFFICIAL DDL SCHEMA SCRIPT
+-- =============================================================================
+-- Compatibility: Neon Serverless PostgreSQL / Standard PostgreSQL 14+
+-- Target Database: Neon Postgres (Neon Console -> SQL Editor)
+--
+-- Instructions:
+-- 1. Open your Neon Console (https://console.neon.tech).
+-- 2. Select your MovieFlix project.
+-- 3. Click on "SQL Editor" in the left sidebar.
+-- 4. Copy and paste the entire SQL script below, then click "Run".
+-- =============================================================================
+
+-- Ensure clean transaction
+BEGIN;
+
+-- -----------------------------------------------------------------------------
+-- TABLE 1: mf_users
+-- Stores registered user accounts with securely hashed passwords (PBKDF2-SHA256).
+-- Only registered users are permitted to download official MovieFlix APK releases.
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS mf_users (
+    id SERIAL PRIMARY KEY,
+    email VARCHAR(255) UNIQUE NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    last_login TIMESTAMP WITH TIME ZONE
+);
+
+CREATE INDEX IF NOT EXISTS idx_mf_users_email ON mf_users(email);
+CREATE INDEX IF NOT EXISTS idx_mf_users_created ON mf_users(created_at DESC);
+
+-- -----------------------------------------------------------------------------
+-- TABLE 2: mf_refresh_tokens
+-- Stores long-lived JWT refresh tokens for secure persistent login sessions.
+-- Automatically removed when user account is deleted (ON DELETE CASCADE).
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS mf_refresh_tokens (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES mf_users(id) ON DELETE CASCADE,
+    token VARCHAR(512) UNIQUE NOT NULL,
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_mf_tokens_lookup ON mf_refresh_tokens(token);
+CREATE INDEX IF NOT EXISTS idx_mf_tokens_user ON mf_refresh_tokens(user_id);
+CREATE INDEX IF NOT EXISTS idx_mf_tokens_expires ON mf_refresh_tokens(expires_at);
+
+-- -----------------------------------------------------------------------------
+-- TABLE 3: mf_downloads
+-- Tracks authentic, real-time APK downloads per authenticated user session.
+-- Real counts displayed on /download page are queried directly from this table.
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS mf_downloads (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES mf_users(id) ON DELETE SET NULL,
+    user_email VARCHAR(255) NOT NULL,
+    version VARCHAR(50) NOT NULL DEFAULT '1.1.5',
+    ip_address VARCHAR(100),
+    user_agent TEXT,
+    downloaded_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_mf_downloads_email ON mf_downloads(user_email);
+CREATE INDEX IF NOT EXISTS idx_mf_downloads_time ON mf_downloads(downloaded_at DESC);
+CREATE INDEX IF NOT EXISTS idx_mf_downloads_version ON mf_downloads(version);
+CREATE INDEX IF NOT EXISTS idx_mf_downloads_user_id ON mf_downloads(user_id);
+
+COMMIT;
+
+-- =============================================================================
+-- VERIFICATION AND MONITORING QUERIES (RUN ANYTIME IN NEON CONSOLE)
+-- =============================================================================
+
+-- 1. Check Total Real Downloads:
+-- SELECT COUNT(*)::int AS real_download_count FROM mf_downloads;
+
+-- 2. Check Downloads Grouped By Version:
+-- SELECT version, COUNT(*)::int AS total_downloads
+-- FROM mf_downloads
+-- GROUP BY version
+-- ORDER BY total_downloads DESC;
+
+-- 3. View Recent 20 Real APK Downloads:
+-- SELECT id, user_email, version, ip_address, downloaded_at
+-- FROM mf_downloads
+-- ORDER BY downloaded_at DESC
+-- LIMIT 20;
+
+-- 4. Check Total Registered Users:
+-- SELECT COUNT(*)::int AS total_registered_users FROM mf_users;
