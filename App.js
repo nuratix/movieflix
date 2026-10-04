@@ -1294,6 +1294,7 @@ function ShotItem({
   const [playbackProgress, setPlaybackProgress] = useState(0);
   const [isScrubbing, setIsScrubbing] = useState(false);
   const [is2xActive, setIs2xActive] = useState(false);
+  const [isVideoReady, setIsVideoReady] = useState(false);
   const isScrubbingRef = useRef(false);
   const isHolding2x = useRef(false);
   const epStreamsCache = useRef({});
@@ -1462,6 +1463,7 @@ function ShotItem({
     if (!player || !videoStreamUrl) return;
     if (currentStreamUrlRef.current === videoStreamUrl) return;
     currentStreamUrlRef.current = videoStreamUrl;
+    setIsVideoReady(false);
     const doReplace = async () => {
       try {
         const src = buildVideoSource(videoStreamUrl);
@@ -1502,16 +1504,27 @@ function ShotItem({
     } catch (_) {}
   }, [player, isMuted]);
 
-  // Track playback time
+  // Track playback time and active rendering state
   useEffect(() => {
     if (!player) return;
     const sub = player.addListener?.('timeUpdate', ({ currentTime }) => {
+      if (currentTime > 0.05) {
+        setIsVideoReady(true);
+      }
       if (isScrubbingRef.current) return;
       if (typeof player.duration === 'number' && player.duration > 0) {
         setPlaybackProgress(Math.min(1, Math.max(0, currentTime / player.duration)));
       }
     });
-    return () => sub?.remove?.();
+    const statusSub = player.addListener?.('statusChange', (payload) => {
+      if (payload?.status === 'readyToPlay') {
+        setIsVideoReady(true);
+      }
+    });
+    return () => {
+      sub?.remove?.();
+      statusSub?.remove?.();
+    };
   }, [player]);
 
   // Reset 2x speed when item becomes inactive
@@ -1764,21 +1777,24 @@ function ShotItem({
       >
         {/* 9:16 Video Player or High-Res Poster */}
         <View style={StyleSheet.absoluteFillObject}>
-          {/* Base Layer: High-Res Poster ALWAYS rendered so screen is NEVER black */}
-          <SafeImage
-            uri={item.poster_url}
-            style={StyleSheet.absoluteFillObject}
-            resizeMode="contain"
-          />
+          {/* Base Layer: High-Res Poster displayed until video is actively rendering */}
+          <View style={[StyleSheet.absoluteFillObject, { opacity: isVideoReady ? 0 : 1 }]} pointerEvents="none">
+            <SafeImage
+              uri={item.poster_url}
+              style={StyleSheet.absoluteFillObject}
+              resizeMode="contain"
+            />
+          </View>
 
-          {/* Video Player Stream - full picture with no cutoff */}
+          {/* Video Player Stream - full picture with TextureView on Android to prevent blank video */}
           {videoStreamUrl && isActive && (
             <VideoView
+              key={`shot-video-${currentEp}-${videoStreamUrl}`}
               player={player}
               style={StyleSheet.absoluteFillObject}
               contentFit="contain"
+              surfaceType={Platform.OS === 'android' ? 'textureView' : 'surfaceView'}
               nativeControls={false}
-              pointerEvents="none"
             />
           )}
 
@@ -2448,7 +2464,7 @@ function ShotsFeedView({
             </View>
           ) : null
         }
-        removeClippedSubviews={Platform.OS !== 'web'}
+        removeClippedSubviews={false}
         getItemLayout={(_, index) => ({
           length: containerHeight,
           offset: containerHeight * index,
@@ -7895,6 +7911,7 @@ function MovieflixIntroLoadingScreen({
         <VideoView
           style={StyleSheet.absoluteFill}
           player={introPlayer}
+          surfaceType={Platform.OS === 'android' ? 'textureView' : 'surfaceView'}
           nativeControls={false}
           allowsFullscreen={false}
           contentFit="contain"
@@ -8880,6 +8897,7 @@ function ReelCustomPlayer({
             : { width: '100%', height: '100%' },
         ]}
         player={player}
+        surfaceType={Platform.OS === 'android' ? 'textureView' : 'surfaceView'}
         nativeControls={false}
         allowsFullscreen={false}
         allowsPictureInPicture={true}
