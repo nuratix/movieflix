@@ -177,13 +177,18 @@ export default async function handler(req, res) {
     });
   }
 
-  // Parse body
-  const body = req.body || {};
+  // Parse body safely (supports parsed JSON or raw string)
+  let body = req.body || {};
+  if (typeof body === 'string') {
+    try {
+      body = JSON.parse(body);
+    } catch (_) {}
+  }
   const query = req.query || {};
   const action = (body.action || query.action || '').toLowerCase();
 
-  // GET: Validate token & return user info
-  if (req.method === 'GET' || action === 'me') {
+  // 1. GET: Validate token & return user info (ONLY when action is 'me' or empty action on GET)
+  if (action === 'me' || (req.method === 'GET' && !action)) {
     const authHeader = req.headers.authorization || '';
     const token = authHeader.replace(/^Bearer\s+/i, '');
     const user = verifyJwt(token);
@@ -191,6 +196,88 @@ export default async function handler(req, res) {
       return res.status(401).json({ error: 'Unauthorized', detail: 'Invalid or expired token' });
     }
     return res.status(200).json({ status: 'success', user: { id: user.id, email: user.email } });
+  }
+
+  // 2. GET or POST: Retrieve likes count for a single shot
+  if (action === 'get-shot-likes') {
+    const shotId = String(body.shot_id || query.shot_id || '').trim();
+    const authHeader = req.headers.authorization || body.token || '';
+    const token = authHeader.replace(/^Bearer\s+/i, '');
+    const user = verifyJwt(token);
+
+    try {
+      let userLiked = false;
+      if (user && shotId) {
+        const userCheck = await sql`
+          SELECT 1 FROM mf_shots_likes WHERE user_id = ${user.id} AND shot_id = ${shotId} LIMIT 1
+        `;
+        userLiked = userCheck.length > 0;
+      }
+
+      const countRes = shotId ? await sql`
+        SELECT COUNT(*)::int AS count FROM mf_shots_likes WHERE shot_id = ${shotId}
+      ` : [{ count: 0 }];
+
+      return res.status(200).json({
+        status: 'success',
+        shot_id: shotId,
+        likes_count: countRes[0]?.count || 0,
+        user_liked: userLiked,
+      });
+    } catch (err) {
+      console.error('get-shot-likes error:', err);
+      return res.status(500).json({ error: 'Failed to retrieve shot likes.' });
+    }
+  }
+
+  // 3. GET or POST: Batch retrieve likes count for multiple shots
+  if (action === 'batch-shot-likes') {
+    const rawIds = body.shot_ids || query.shot_ids;
+    let shotIds = [];
+    if (Array.isArray(rawIds)) {
+      shotIds = rawIds.map(String);
+    } else if (typeof rawIds === 'string') {
+      shotIds = rawIds.split(',').map((s) => s.trim()).filter(Boolean);
+    }
+
+    const authHeader = req.headers.authorization || body.token || '';
+    const token = authHeader.replace(/^Bearer\s+/i, '');
+    const user = verifyJwt(token);
+
+    try {
+      let countsMap = {};
+      let userLikedSet = [];
+
+      if (shotIds.length > 0) {
+        const rows = await sql`
+          SELECT shot_id, COUNT(*)::int AS count
+          FROM mf_shots_likes
+          WHERE shot_id = ANY(${shotIds})
+          GROUP BY shot_id
+        `;
+        for (const r of rows) {
+          countsMap[r.shot_id] = r.count;
+        }
+
+        if (user) {
+          const userRows = await sql`
+            SELECT shot_id
+            FROM mf_shots_likes
+            WHERE user_id = ${user.id} AND shot_id = ANY(${shotIds})
+          `;
+          userLikedSet = userRows.map((r) => r.shot_id);
+        }
+      }
+
+      return res.status(200).json({
+        status: 'success',
+        counts: countsMap,
+        user_liked_ids: userLikedSet,
+      });
+    } catch (err) {
+      console.error('batch-shot-likes error:', err);
+      return res.status(500).json({ error: 'Failed to batch retrieve likes.' });
+    }
   }
 
   // POST Handlers
@@ -421,37 +508,6 @@ export default async function handler(req, res) {
       } catch (err) {
         console.error('unlike-shot error:', err);
         return res.status(500).json({ error: 'Failed to remove like.' });
-      }
-    }
-
-    if (action === 'get-shot-likes') {
-      const shotId = String(body.shot_id || query.shot_id || '').trim();
-      const authHeader = req.headers.authorization || body.token || '';
-      const token = authHeader.replace(/^Bearer\s+/i, '');
-      const user = verifyJwt(token);
-
-      try {
-        let userLiked = false;
-        if (user && shotId) {
-          const userCheck = await sql`
-            SELECT 1 FROM mf_shots_likes WHERE user_id = ${user.id} AND shot_id = ${shotId} LIMIT 1
-          `;
-          userLiked = userCheck.length > 0;
-        }
-
-        const countRes = shotId ? await sql`
-          SELECT COUNT(*)::int AS count FROM mf_shots_likes WHERE shot_id = ${shotId}
-        ` : [{ count: 0 }];
-
-        return res.status(200).json({
-          status: 'success',
-          shot_id: shotId,
-          likes_count: countRes[0]?.count || 0,
-          user_liked: userLiked,
-        });
-      } catch (err) {
-        console.error('get-shot-likes error:', err);
-        return res.status(500).json({ error: 'Failed to retrieve shot likes.' });
       }
     }
   }

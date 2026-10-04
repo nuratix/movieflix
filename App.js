@@ -2068,26 +2068,56 @@ function ShotsFeedView({
     }
   }, [activeShotIndex, shots]);
 
-  // Fetch authentic real-time likes count from Neon database for active shot
+  // Restore persisted likes state from AsyncStorage on mount
   useEffect(() => {
-    const cur = shots[activeShotIndex];
-    if (!cur) return;
-    const curId = String(cur.subject_id || cur.id);
+    AsyncStorage.getItem('@mf_shots_likes')
+      .then((data) => {
+        if (data) {
+          try {
+            const parsed = JSON.parse(data);
+            if (Array.isArray(parsed)) setLikedShotIds(new Set(parsed));
+          } catch (_) {}
+        }
+      })
+      .catch(() => {});
+
+    AsyncStorage.getItem('@mf_shots_likes_counts')
+      .then((data) => {
+        if (data) {
+          try {
+            const parsed = JSON.parse(data);
+            if (parsed && typeof parsed === 'object') setShotLikesCounts((prev) => ({ ...prev, ...parsed }));
+          } catch (_) {}
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  // Fetch authentic real-time likes for all shots from Neon DB in batch
+  useEffect(() => {
+    if (!shots || shots.length === 0) return;
+    const shotIds = shots.map((s) => String(s.subject_id || s.id));
     const headers = authAccessToken ? { Authorization: `Bearer ${authAccessToken}` } : {};
-    apiFetch(`${API_BASE}/api/auth?action=get-shot-likes&shot_id=${encodeURIComponent(curId)}`, { headers })
+    apiFetch(`${API_BASE}/api/auth?action=batch-shot-likes&shot_ids=${encodeURIComponent(shotIds.join(','))}`, { headers })
       .then((r) => r.json())
       .then((res) => {
-        if (res?.status === 'success') {
-          if (typeof res.likes_count === 'number') {
-            setShotLikesCounts((prev) => ({ ...prev, [curId]: res.likes_count }));
-          }
-          if (res.user_liked) {
-            setLikedShotIds((prev) => new Set([...prev, curId]));
+        if (res?.status === 'success' && res.counts) {
+          setShotLikesCounts((prev) => {
+            const merged = { ...prev, ...res.counts };
+            AsyncStorage.setItem('@mf_shots_likes_counts', JSON.stringify(merged)).catch(() => {});
+            return merged;
+          });
+          if (Array.isArray(res.user_liked_ids) && res.user_liked_ids.length > 0) {
+            setLikedShotIds((prev) => {
+              const merged = new Set([...prev, ...res.user_liked_ids]);
+              AsyncStorage.setItem('@mf_shots_likes', JSON.stringify([...merged])).catch(() => {});
+              return merged;
+            });
           }
         }
       })
       .catch(() => {});
-  }, [activeShotIndex, authAccessToken, shots]);
+  }, [shots, authAccessToken]);
 
   // Only logged-in users can like; records to Neon PostgreSQL
   const handleToggleLike = async (item) => {
@@ -2102,17 +2132,20 @@ function ShotsFeedView({
     const shotId = String(item.subject_id || item.id);
     const currentlyLiked = likedShotIds.has(shotId);
 
-    // Optimistic UI update
+    // Optimistic UI update with AsyncStorage persistence
     setLikedShotIds((prev) => {
       const next = new Set(prev);
       if (currentlyLiked) next.delete(shotId);
       else next.add(shotId);
+      AsyncStorage.setItem('@mf_shots_likes', JSON.stringify([...next])).catch(() => {});
       return next;
     });
-    setShotLikesCounts((prev) => ({
-      ...prev,
-      [shotId]: Math.max(0, (prev[shotId] || 0) + (currentlyLiked ? -1 : 1)),
-    }));
+    setShotLikesCounts((prev) => {
+      const nextCount = Math.max(0, (prev[shotId] || 0) + (currentlyLiked ? -1 : 1));
+      const updated = { ...prev, [shotId]: nextCount };
+      AsyncStorage.setItem('@mf_shots_likes_counts', JSON.stringify(updated)).catch(() => {});
+      return updated;
+    });
 
     // Update NextViper user interest vector dynamically
     if (!currentlyLiked) {
@@ -2135,7 +2168,11 @@ function ShotsFeedView({
       const data = await res.json();
       if (data?.status === 'success') {
         if (typeof data.likes_count === 'number') {
-          setShotLikesCounts((prev) => ({ ...prev, [shotId]: data.likes_count }));
+          setShotLikesCounts((prev) => {
+            const updated = { ...prev, [shotId]: data.likes_count };
+            AsyncStorage.setItem('@mf_shots_likes_counts', JSON.stringify(updated)).catch(() => {});
+            return updated;
+          });
         }
         showToast?.(currentlyLiked ? 'Unliked' : 'Liked Shot ❤️');
       }
