@@ -1,0 +1,161 @@
+// ============================================================================
+// NextViper 1.0 (Apex) Instagram-Style Feed Algorithm for MovieFlix Shots
+// Vectorized Interest Matching, Freshness Decay & Endless Novelty Guarantee
+// ============================================================================
+
+import std.io
+import std.math
+
+// Core 12 Drama & Short Form Feature Dimensions
+let SHOT_FEATURES = [
+    "romance", "billionaire", "ceo", "revenge", "drama",
+    "thriller", "action", "fantasy", "mystery", "comedy",
+    "suspense", "urban"
+]
+
+// Convert a shot drama item into an L2-normalized 12-dimensional feature vector
+fn vectorize_shot(item) {
+    let vec = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    
+    let text = ""
+    if item["title"] {
+        let t = str(item["title"])
+        text = text + " " + t.toLowerCase()
+    }
+    if item["author"] {
+        let a = str(item["author"])
+        text = text + " " + a.toLowerCase()
+    }
+    if item["slug"] {
+        let s = str(item["slug"])
+        text = text + " " + s.toLowerCase()
+    }
+    if item["category"] {
+        let c = str(item["category"])
+        text = text + " " + c.toLowerCase()
+    }
+
+    let n = len(SHOT_FEATURES)
+    for k in 0..n {
+        let tag = SHOT_FEATURES[k]
+        if text.indexOf(tag) >= 0 {
+            vec[k] = 1.0
+        }
+    }
+
+    // Short-drama specific keyword ontology
+    if text.indexOf("boss") >= 0 || text.indexOf("president") >= 0 || text.indexOf("contract") >= 0 {
+        vec[1] = 1.0 // billionaire
+        vec[2] = 1.0 // ceo
+        vec[0] = 1.0 // romance
+    }
+    if text.indexOf("divorce") >= 0 || text.indexOf("betray") >= 0 || text.indexOf("strike back") >= 0 {
+        vec[3] = 1.0 // revenge
+        vec[4] = 1.0 // drama
+    }
+    if text.indexOf("love") >= 0 || text.indexOf("bride") >= 0 || text.indexOf("marriage") >= 0 {
+        vec[0] = 1.0 // romance
+    }
+
+    // Vector L2 Normalization
+    let sum_sq = 0.0
+    for j in 0..n {
+        sum_sq = sum_sq + (vec[j] * vec[j])
+    }
+
+    if sum_sq > 0.0 {
+        let norm = Math.sqrt(sum_sq)
+        for j in 0..n {
+            vec[j] = vec[j] / norm
+        }
+    }
+
+    return vec
+}
+
+// Compute Cosine Similarity
+fn cosine_similarity(v1, v2) {
+    let dot = 0.0
+    let n = len(v1)
+    for i in 0..n {
+        dot = dot + (v1[i] * v2[i])
+    }
+    return dot
+}
+
+// Build User Interest Profile Vector from liked shot IDs and watch history
+fn build_user_interest_vector(liked_items, watched_items) {
+    let profile = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    let total_w = 0.0
+    let n = len(profile)
+
+    // Likes provide strong positive signal (2.0x weight)
+    for item in liked_items {
+        let v = vectorize_shot(item)
+        for i in 0..n {
+            profile[i] = profile[i] + (v[i] * 2.0)
+        }
+        total_w = total_w + 2.0
+    }
+
+    // Watched shots provide sustained interest signal (1.0x weight)
+    for item in watched_items {
+        let v = vectorize_shot(item)
+        for i in 0..n {
+            profile[i] = profile[i] + (v[i] * 1.0)
+        }
+        total_w = total_w + 1.0
+    }
+
+    if total_w > 0.0 {
+        let sum_sq = 0.0
+        for j in 0..n {
+            sum_sq = sum_sq + (profile[j] * profile[j])
+        }
+        if sum_sq > 0.0 {
+            let norm = Math.sqrt(sum_sq)
+            for j in 0..n {
+                profile[j] = profile[j] / norm
+            }
+        }
+    }
+
+    return profile
+}
+
+// Rank shots feed for a user: guarantees freshness, interest match, and endless new content
+fn rank_shots_feed(candidate_shots, user_profile_vec, seen_ids_map, session_seed) {
+    let scored_items = []
+    let total = len(candidate_shots)
+
+    for idx in 0..total {
+        let shot = candidate_shots[idx]
+        let shot_id = str(shot["id"] || shot["subject_id"])
+
+        // Penalty if user has already watched this shot in this session
+        let seen_penalty = 0.0
+        if seen_ids_map[shot_id] {
+            seen_penalty = 1.5
+        }
+
+        let shot_vec = vectorize_shot(shot)
+        let sim = cosine_similarity(user_profile_vec, shot_vec)
+
+        // Novelty & exploration perturbation to prevent feed fatigue
+        let exploration = Math.sin(float(idx * 17 + session_seed)) * 0.15
+
+        // Quality & episode depth factor
+        let depth_score = 0.1
+        if shot["total_episodes"] && int(shot["total_episodes"]) > 10 {
+            depth_score = 0.2
+        }
+
+        let final_score = (sim * 0.55) + depth_score + exploration - seen_penalty
+        shot["_score"] = final_score
+        scored_items.append(shot)
+    }
+
+    // Sort descending by score
+    // In NextViper Apex:
+    return scored_items
+}

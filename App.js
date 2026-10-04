@@ -83,6 +83,7 @@ import {
 import { LOCAL_POSTERS } from './assets/posters';
 import { getImdbData } from './imdbService';
 import { getContentBasedRecommendations, getPersonalizedRecommendations } from './recommendationService';
+import { rankShotsFeed, buildUserInterestVector } from './shotsAlgorithmService';
 import WelcomeScreen from './WelcomeScreen';
 import AuthScreen from './AuthScreen';
 import CustomSplashScreen from './CustomSplashScreen';
@@ -1115,8 +1116,8 @@ const INITIAL_SHOTS = [
     rating: "7.9",
     total_episodes: 37,
     author: "@DramaBox",
-    likes: 42430,
-    shares: 7551,
+    likes: 0,
+    shares: 0,
     se: 1,
     ep: 1,
   },
@@ -1129,8 +1130,8 @@ const INITIAL_SHOTS = [
     rating: "7.2",
     total_episodes: 28,
     author: "@NetShort",
-    likes: 47582,
-    shares: 3782,
+    likes: 0,
+    shares: 0,
     se: 1,
     ep: 1,
   },
@@ -1143,8 +1144,8 @@ const INITIAL_SHOTS = [
     rating: "7.8",
     total_episodes: 24,
     author: "@DramaBox",
-    likes: 23473,
-    shares: 3201,
+    likes: 0,
+    shares: 0,
     se: 1,
     ep: 1,
   },
@@ -1157,8 +1158,8 @@ const INITIAL_SHOTS = [
     rating: "7.9",
     total_episodes: 30,
     author: "@ShortMax",
-    likes: 26148,
-    shares: 5676,
+    likes: 0,
+    shares: 0,
     se: 1,
     ep: 1,
   },
@@ -1171,8 +1172,8 @@ const INITIAL_SHOTS = [
     rating: "7.1",
     total_episodes: 18,
     author: "@ReelShort",
-    likes: 43305,
-    shares: 5837,
+    likes: 0,
+    shares: 0,
     se: 1,
     ep: 1,
   },
@@ -1185,8 +1186,8 @@ const INITIAL_SHOTS = [
     rating: "7.6",
     total_episodes: 32,
     author: "@DramaBox",
-    likes: 32274,
-    shares: 6097,
+    likes: 0,
+    shares: 0,
     se: 1,
     ep: 1,
   },
@@ -1199,8 +1200,8 @@ const INITIAL_SHOTS = [
     rating: "7.7",
     total_episodes: 20,
     author: "@NetShort",
-    likes: 40962,
-    shares: 1735,
+    likes: 0,
+    shares: 0,
     se: 1,
     ep: 1,
   },
@@ -1213,8 +1214,8 @@ const INITIAL_SHOTS = [
     rating: "7.0",
     total_episodes: 16,
     author: "@GoodShort",
-    likes: 47795,
-    shares: 8244,
+    likes: 0,
+    shares: 0,
     se: 1,
     ep: 1,
   },
@@ -1227,8 +1228,8 @@ const INITIAL_SHOTS = [
     rating: "7.1",
     total_episodes: 25,
     author: "@ReelShort",
-    likes: 26778,
-    shares: 5717,
+    likes: 0,
+    shares: 0,
     se: 1,
     ep: 1,
   },
@@ -1241,8 +1242,8 @@ const INITIAL_SHOTS = [
     rating: "7.7",
     total_episodes: 22,
     author: "@ShortMax",
-    likes: 33548,
-    shares: 2847,
+    likes: 0,
+    shares: 0,
     se: 1,
     ep: 1,
   }
@@ -1255,6 +1256,16 @@ function formatShotCount(num) {
   return String(num);
 }
 
+function selectShotStreamQuality(sources, quality) {
+  if (!Array.isArray(sources) || sources.length === 0) return null;
+  if (!quality || quality === 'Auto') {
+    return sources.find((s) => (s.resolution || '').includes('720')) || sources[0];
+  }
+  const qStr = String(quality).toLowerCase();
+  const match = sources.find((s) => (s.resolution || '').toLowerCase().includes(qStr));
+  return match || sources[0];
+}
+
 function ShotItem({
   item,
   index,
@@ -1263,10 +1274,10 @@ function ShotItem({
   isMuted,
   onToggleMute,
   isLiked,
+  realLikesCount = 0,
   onToggleLike,
-  isSaved,
-  onToggleSave,
   onShare,
+  videoQuality = '720p',
   containerHeight,
   containerWidth,
   showToast,
@@ -1282,6 +1293,7 @@ function ShotItem({
   const [showEpModal, setShowEpModal] = useState(false);
   const [playbackProgress, setPlaybackProgress] = useState(0);
   const epStreamsCache = useRef({});
+  const epSourcesCache = useRef({});
 
   // Floating heart animation (Instagram double tap)
   const heartScale = useRef(new Animated.Value(0)).current;
@@ -1334,13 +1346,16 @@ function ShotItem({
     }
   }, [isActive, item.slug]);
 
-  // Resolve stream URL whenever active or current episode changes
+  // Resolve stream URL whenever active, episode, or quality changes
   useEffect(() => {
     if (!isActive) return;
 
-    if (epStreamsCache.current[currentEp]) {
-      setVideoStreamUrl(epStreamsCache.current[currentEp]);
-      return;
+    if (epSourcesCache.current[currentEp]) {
+      const chosen = selectShotStreamQuality(epSourcesCache.current[currentEp], videoQuality);
+      if (chosen?.url) {
+        setVideoStreamUrl(chosen.url);
+        return;
+      }
     }
 
     let isCurrent = true;
@@ -1354,18 +1369,23 @@ function ShotItem({
       .then((res) => res.json())
       .then((data) => {
         if (!isCurrent) return;
-        if (data?.sources?.[0]?.url) {
-          const streamUrl = data.sources[0].url;
-          epStreamsCache.current[epToFetch] = streamUrl;
-          setVideoStreamUrl(streamUrl);
+        const sources = data?.sources || [];
+        epSourcesCache.current[epToFetch] = sources;
+        const chosen = selectShotStreamQuality(sources, videoQuality);
+        if (chosen?.url) {
+          epStreamsCache.current[epToFetch] = chosen.url;
+          setVideoStreamUrl(chosen.url);
         } else {
           // Fallback to ep 1 or se 0
           apiFetch(`${API_BASE}/api/content?endpoint=stream&id=${encodeURIComponent(subjectId)}&detail_path=${encodeURIComponent(detailPath)}&se=1&ep=1`)
             .then((r) => r.json())
             .then((fb) => {
               if (!isCurrent) return;
-              if (fb?.sources?.[0]?.url) {
-                setVideoStreamUrl(fb.sources[0].url);
+              const fbSources = fb?.sources || [];
+              epSourcesCache.current[1] = fbSources;
+              const fbChosen = selectShotStreamQuality(fbSources, videoQuality);
+              if (fbChosen?.url) {
+                setVideoStreamUrl(fbChosen.url);
               }
             })
             .catch(() => {});
@@ -1379,7 +1399,18 @@ function ShotItem({
     return () => {
       isCurrent = false;
     };
-  }, [isActive, currentEp, item]);
+  }, [isActive, currentEp, item, videoQuality]);
+
+  // Respond instantly to quality changes when sources are cached
+  useEffect(() => {
+    const cachedSources = epSourcesCache.current[currentEp];
+    if (Array.isArray(cachedSources) && cachedSources.length > 0) {
+      const chosen = selectShotStreamQuality(cachedSources, videoQuality);
+      if (chosen?.url && chosen.url !== videoStreamUrl) {
+        setVideoStreamUrl(chosen.url);
+      }
+    }
+  }, [videoQuality, currentEp]);
 
   // Video player via expo-video
   const videoSource = useMemo(() => {
@@ -1399,22 +1430,28 @@ function ShotItem({
     }
   });
 
-  // Synchronously update player when videoStreamUrl changes (guarded to avoid redundant replace calls)
+  // Asynchronously update player when videoStreamUrl changes (guarded to avoid redundant replace calls)
   const currentStreamUrlRef = useRef(videoStreamUrl);
   useEffect(() => {
     if (!player || !videoStreamUrl) return;
     if (currentStreamUrlRef.current === videoStreamUrl) return;
     currentStreamUrlRef.current = videoStreamUrl;
-    try {
-      if (typeof player.replace === 'function') {
-        player.replace(buildVideoSource(videoStreamUrl));
+    const doReplace = async () => {
+      try {
+        const src = buildVideoSource(videoStreamUrl);
+        if (typeof player.replaceAsync === 'function') {
+          await player.replaceAsync(src);
+        } else if (typeof player.replace === 'function') {
+          player.replace(src);
+        }
+        if (isActive && isTabActive && !isPausedByUser) {
+          player.play();
+        }
+      } catch (e) {
+        console.warn('[Shots] player.replaceAsync note:', e);
       }
-      if (isActive && isTabActive && !isPausedByUser) {
-        player.play();
-      }
-    } catch (e) {
-      console.warn('[Shots] player.replace note:', e);
-    }
+    };
+    doReplace();
   }, [player, videoStreamUrl]);
 
   // Keep playback state synchronized
@@ -1713,7 +1750,7 @@ function ShotItem({
             </View>
           </View>
 
-          {/* Like / Heart Button */}
+          {/* Like / Heart Button (Real Authentic Count from Neon) */}
           <TouchableOpacity
             style={styles.shotsActionBtn}
             onPress={() => {
@@ -1726,42 +1763,11 @@ function ShotItem({
               <Feather name="heart" size={26} color={isLiked ? "#e50914" : "#FFFFFF"} />
             </View>
             <Text style={styles.shotsActionCount}>
-              {formatShotCount(isLiked ? item.likes + 1 : item.likes)}
+              {formatShotCount(realLikesCount)}
             </Text>
           </TouchableOpacity>
 
-          {/* Comment Button */}
-          <TouchableOpacity
-            style={styles.shotsActionBtn}
-            onPress={() => showToast?.("Comments coming soon! 💬")}
-            activeOpacity={0.7}
-          >
-            <View style={styles.shotsActionIconCircle}>
-              <Feather name="message-circle" size={24} color="#FFFFFF" />
-            </View>
-            <Text style={styles.shotsActionCount}>
-              {formatShotCount(item.shares ? Math.floor(item.shares / 3) : 840)}
-            </Text>
-          </TouchableOpacity>
-
-          {/* Bookmark / Save Button */}
-          <TouchableOpacity
-            style={styles.shotsActionBtn}
-            onPress={() => {
-              triggerHaptic?.('selection');
-              onToggleSave();
-            }}
-            activeOpacity={0.7}
-          >
-            <View style={[styles.shotsActionIconCircle, isSaved && { backgroundColor: 'rgba(245, 158, 11, 0.25)' }]}>
-              <Feather name="bookmark" size={24} color={isSaved ? "#f59e0b" : "#FFFFFF"} />
-            </View>
-            <Text style={styles.shotsActionCount}>
-              {isSaved ? "Saved" : "Save"}
-            </Text>
-          </TouchableOpacity>
-
-          {/* Share Button */}
+          {/* Share Button (Clean with Share Text, No Mock Counts) */}
           <TouchableOpacity
             style={styles.shotsActionBtn}
             onPress={onShare}
@@ -1771,7 +1777,7 @@ function ShotItem({
               <Feather name="send" size={23} color="#FFFFFF" />
             </View>
             <Text style={styles.shotsActionCount}>
-              {formatShotCount(item.shares || 1200)}
+              Share
             </Text>
           </TouchableOpacity>
 
@@ -1949,22 +1955,35 @@ function ShotsFeedView({
   isTabActive,
   showToast,
   triggerHaptic,
+  onBack,
+  authUser,
+  authAccessToken,
+  openAuthModal,
+  targetShortId,
 }) {
-  const [shots, setShots] = useState(INITIAL_SHOTS);
+  const seenIdsRef = useRef(new Set());
+  const sessionSeedRef = useRef(Date.now() % 100000);
+  const userProfileRef = useRef(null);
+  const likedItemsRef = useRef([]);
+
+  // Chunk loading: start with a ranked initial chunk to avoid freezes
+  const [shots, setShots] = useState(() => rankShotsFeed(INITIAL_SHOTS, null, seenIdsRef.current, sessionSeedRef.current));
   const [activeShotIndex, setActiveShotIndex] = useState(0);
   const [isMuted, setIsMuted] = useState(Platform.OS === 'web');
+  const [shotsQuality, setShotsQuality] = useState('720p');
+  const [showQualityModal, setShowQualityModal] = useState(false);
+  const [shotLikesCounts, setShotLikesCounts] = useState({});
   const [likedShotIds, setLikedShotIds] = useState(() => new Set());
-  const [savedShotIds, setSavedShotIds] = useState(() => new Set());
-  const [shotsCategory, setShotsCategory] = useState('For You');
   const [page, setPage] = useState(1);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
 
+  const QUALITY_OPTIONS = ['Auto', '1080p', '720p', '480p'];
   const { width: winWidth, height: winHeight } = useWindowDimensions();
   const containerHeight = winHeight;
   const containerWidth = winWidth;
 
-  // Fetch more shots from live API
+  // Chunk loading: fetch page 1 from live API and rank with NextViper algo
   useEffect(() => {
     let isMounted = true;
     apiFetch(`${API_BASE}/api/content?endpoint=shots&page=1`)
@@ -1972,9 +1991,10 @@ function ShotsFeedView({
       .then((data) => {
         if (!isMounted) return;
         if (Array.isArray(data?.items) && data.items.length > 0) {
+          const ranked = rankShotsFeed(data.items, userProfileRef.current, seenIdsRef.current, sessionSeedRef.current);
           setShots((prev) => {
-            const existingIds = new Set(prev.map((s) => s.id || s.subject_id));
-            const newItems = data.items.filter((s) => !existingIds.has(s.id || s.subject_id));
+            const existingIds = new Set(prev.map((s) => String(s.subject_id || s.id)));
+            const newItems = ranked.filter((s) => !existingIds.has(String(s.subject_id || s.id)));
             return [...prev, ...newItems];
           });
         }
@@ -1985,7 +2005,17 @@ function ShotsFeedView({
     };
   }, []);
 
-  // Infinite scroll loader
+  // Jump to targeted short if deep-linked via /short/:id
+  useEffect(() => {
+    if (targetShortId && shots.length > 0) {
+      const idx = shots.findIndex((s) => String(s.subject_id || s.id) === String(targetShortId) || s.slug === targetShortId);
+      if (idx >= 0 && idx !== activeShotIndex) {
+        setActiveShotIndex(idx);
+      }
+    }
+  }, [targetShortId, shots]);
+
+  // Lazy Chunk Loader: Only fetches one page at a time to prevent UI freezes
   const loadMoreShots = useCallback(() => {
     if (isLoadingMore || !hasMore) return;
     setIsLoadingMore(true);
@@ -1994,35 +2024,22 @@ function ShotsFeedView({
       .then((res) => res.json())
       .then((data) => {
         if (Array.isArray(data?.items) && data.items.length > 0) {
+          const ranked = rankShotsFeed(data.items, userProfileRef.current, seenIdsRef.current, sessionSeedRef.current + nextPage);
           setShots((prev) => {
-            const existingIds = new Set(prev.map((s) => s.id || s.subject_id));
-            const newItems = data.items.filter((s) => !existingIds.has(s.id || s.subject_id));
-            if (newItems.length === 0) {
-              const looped = data.items.map((it, idx) => ({
-                ...it,
-                id: `shot-${it.subject_id || idx}-p${nextPage}-${idx}`,
-              }));
-              return [...prev, ...looped];
-            }
+            const existingIds = new Set(prev.map((s) => String(s.subject_id || s.id)));
+            const newItems = ranked.filter((s) => !existingIds.has(String(s.subject_id || s.id)));
             return [...prev, ...newItems];
           });
           setPage(nextPage);
         } else {
-          // Endless wrap around
-          setShots((prev) => {
-            const looped = INITIAL_SHOTS.map((it, idx) => ({
-              ...it,
-              id: `${it.id}-loop-${nextPage}-${idx}`,
-            }));
-            return [...prev, ...looped];
-          });
-          setPage(nextPage);
+          setHasMore(false);
         }
       })
       .catch((e) => console.warn('[Shots] loadMoreShots error:', e))
       .finally(() => setIsLoadingMore(false));
   }, [isLoadingMore, hasMore, page]);
 
+  // Track active visible item
   const onViewableItemsChanged = useRef(({ viewableItems }) => {
     if (viewableItems && viewableItems.length > 0) {
       const first = viewableItems[0];
@@ -2036,37 +2053,101 @@ function ShotsFeedView({
     itemVisiblePercentThreshold: 65,
   }).current;
 
-  const toggleLike = (shotId) => {
+  // Sync browser URL to /short/:id and mark as seen in NextViper entropy engine
+  useEffect(() => {
+    const cur = shots[activeShotIndex];
+    if (cur) {
+      const curId = String(cur.subject_id || cur.id);
+      seenIdsRef.current.add(curId);
+      if (Platform.OS === 'web' && typeof window !== 'undefined' && window.history?.replaceState) {
+        const targetPath = `/short/${curId}`;
+        if (window.location.pathname !== targetPath && !window.location.pathname.startsWith('/auth')) {
+          window.history.replaceState({ shotId: curId }, '', targetPath);
+        }
+      }
+    }
+  }, [activeShotIndex, shots]);
+
+  // Fetch authentic real-time likes count from Neon database for active shot
+  useEffect(() => {
+    const cur = shots[activeShotIndex];
+    if (!cur) return;
+    const curId = String(cur.subject_id || cur.id);
+    const headers = authAccessToken ? { Authorization: `Bearer ${authAccessToken}` } : {};
+    apiFetch(`${API_BASE}/api/auth?action=get-shot-likes&shot_id=${encodeURIComponent(curId)}`, { headers })
+      .then((r) => r.json())
+      .then((res) => {
+        if (res?.status === 'success') {
+          if (typeof res.likes_count === 'number') {
+            setShotLikesCounts((prev) => ({ ...prev, [curId]: res.likes_count }));
+          }
+          if (res.user_liked) {
+            setLikedShotIds((prev) => new Set([...prev, curId]));
+          }
+        }
+      })
+      .catch(() => {});
+  }, [activeShotIndex, authAccessToken, shots]);
+
+  // Only logged-in users can like; records to Neon PostgreSQL
+  const handleToggleLike = async (item) => {
+    if (!authUser || !authAccessToken) {
+      triggerHaptic?.('notificationWarning');
+      showToast?.('Please sign in to like this shot! ❤️');
+      openAuthModal?.();
+      return;
+    }
+
+    triggerHaptic?.('selection');
+    const shotId = String(item.subject_id || item.id);
+    const currentlyLiked = likedShotIds.has(shotId);
+
+    // Optimistic UI update
     setLikedShotIds((prev) => {
       const next = new Set(prev);
-      if (next.has(shotId)) {
-        next.delete(shotId);
-        showToast?.("Unliked");
-      } else {
-        next.add(shotId);
-        showToast?.("Liked Shot ❤️");
-      }
+      if (currentlyLiked) next.delete(shotId);
+      else next.add(shotId);
       return next;
     });
-  };
+    setShotLikesCounts((prev) => ({
+      ...prev,
+      [shotId]: Math.max(0, (prev[shotId] || 0) + (currentlyLiked ? -1 : 1)),
+    }));
 
-  const toggleSave = (shotId) => {
-    setSavedShotIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(shotId)) {
-        next.delete(shotId);
-        showToast?.("Removed from Saved");
-      } else {
-        next.add(shotId);
-        showToast?.("Saved to Bookmarks 🔖");
+    // Update NextViper user interest vector dynamically
+    if (!currentlyLiked) {
+      likedItemsRef.current.push(item);
+      userProfileRef.current = buildUserInterestVector(likedItemsRef.current, []);
+    }
+
+    try {
+      const res = await apiFetch(`${API_BASE}/api/auth`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${authAccessToken}`,
+        },
+        body: JSON.stringify({
+          action: currentlyLiked ? 'unlike-shot' : 'like-shot',
+          shot_id: shotId,
+        }),
+      });
+      const data = await res.json();
+      if (data?.status === 'success') {
+        if (typeof data.likes_count === 'number') {
+          setShotLikesCounts((prev) => ({ ...prev, [shotId]: data.likes_count }));
+        }
+        showToast?.(currentlyLiked ? 'Unliked' : 'Liked Shot ❤️');
       }
-      return next;
-    });
+    } catch (e) {
+      console.warn('[Shots] Like action note:', e);
+    }
   };
 
   const handleShare = async (item) => {
     triggerHaptic?.('selection');
-    const shareUrl = `https://movieflix-pi-six.vercel.app/shots/${item.slug || item.subject_id}`;
+    const shotId = item.subject_id || item.id;
+    const shareUrl = `https://movieflix-pi-six.vercel.app/short/${shotId}`;
     if (Platform.OS !== 'web') {
       try {
         await Share.share({
@@ -2090,68 +2171,85 @@ function ShotsFeedView({
 
   return (
     <View style={{ flex: 1, backgroundColor: '#000000', position: 'relative' }}>
-      {/* Instagram-Style Top Header Bar */}
+      {/* Top Header: Back Button + Shots Title + Quality Selector + Mute */}
       <View style={[styles.shotsTopHeader, { paddingTop: insets.top + 8 }]} pointerEvents="box-none">
-        <View style={styles.shotsBrandRow}>
-          <Feather name="film" size={20} color="#e50914" style={{ marginRight: 6 }} />
-          <Text style={styles.shotsBrandText}>Shots</Text>
-          <View style={styles.shotsLiveDot} />
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <TouchableOpacity
+            style={styles.shotsHeaderBackBtn}
+            onPress={() => {
+              triggerHaptic?.('selection');
+              onBack?.();
+            }}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            activeOpacity={0.7}
+          >
+            <Feather name="arrow-left" size={22} color="#FFFFFF" />
+          </TouchableOpacity>
+
+          <View style={styles.shotsBrandRow}>
+            <Feather name="film" size={20} color="#e50914" style={{ marginRight: 6 }} />
+            <Text style={styles.shotsBrandText}>Shots</Text>
+            <View style={styles.shotsLiveDot} />
+          </View>
         </View>
 
-        <View style={styles.shotsFilterTabsRow}>
-          {['For You', 'Trending', 'Dramas'].map((tab) => {
-            const isActive = shotsCategory === tab;
-            return (
-              <TouchableOpacity
-                key={`shots-tab-${tab}`}
-                onPress={() => {
-                  triggerHaptic?.('selection');
-                  setShotsCategory(tab);
-                }}
-                style={styles.shotsFilterTabBtn}
-                activeOpacity={0.8}
-              >
-                <Text style={[styles.shotsFilterTabText, isActive && styles.shotsFilterTabTextActive]}>
-                  {tab}
-                </Text>
-                {isActive && <View style={styles.shotsFilterTabUnderline} />}
-              </TouchableOpacity>
-            );
-          })}
-        </View>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          {/* Video Quality Selector */}
+          <TouchableOpacity
+            style={styles.shotsQualityBtn}
+            onPress={() => {
+              triggerHaptic?.('selection');
+              setShowQualityModal(true);
+            }}
+            activeOpacity={0.8}
+          >
+            <Feather name="sliders" size={13} color="#FFFFFF" style={{ marginRight: 5 }} />
+            <Text style={styles.shotsQualityBtnText}>{shotsQuality}</Text>
+            <Feather name="chevron-down" size={12} color="rgba(255, 255, 255, 0.7)" style={{ marginLeft: 3 }} />
+          </TouchableOpacity>
 
-        <TouchableOpacity
-          onPress={() => showToast?.("Swipe ↔ to change episodes, ↕ for next drama")}
-          style={styles.shotsHelpBtn}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-        >
-          <Feather name="info" size={19} color="rgba(255,255,255,0.7)" />
-        </TouchableOpacity>
+          {/* Sound Toggle */}
+          <TouchableOpacity
+            style={styles.shotsHeaderIconBtn}
+            onPress={() => {
+              triggerHaptic?.('selection');
+              setIsMuted((prev) => !prev);
+            }}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            activeOpacity={0.7}
+          >
+            <Feather name={isMuted ? "volume-x" : "volume-2"} size={18} color="#FFFFFF" />
+          </TouchableOpacity>
+        </View>
       </View>
 
-      {/* 9:16 Vertical Snap Scroll Feed */}
+      {/* 9:16 Vertical Snap Scroll Feed (Chunk loaded) */}
       <FlatList
         data={shots}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item, index }) => (
-          <ShotItem
-            item={item}
-            index={index}
-            isActive={index === activeShotIndex}
-            isTabActive={isTabActive}
-            isMuted={isMuted}
-            onToggleMute={() => setIsMuted((prev) => !prev)}
-            isLiked={likedShotIds.has(item.id)}
-            onToggleLike={() => toggleLike(item.id)}
-            isSaved={savedShotIds.has(item.id)}
-            onToggleSave={() => toggleSave(item.id)}
-            onShare={() => handleShare(item)}
-            containerHeight={containerHeight}
-            containerWidth={containerWidth}
-            showToast={showToast}
-            triggerHaptic={triggerHaptic}
-          />
-        )}
+        keyExtractor={(item) => String(item.id || item.subject_id)}
+        renderItem={({ item, index }) => {
+          const sId = String(item.subject_id || item.id);
+          const realLikes = typeof shotLikesCounts[sId] === 'number' ? shotLikesCounts[sId] : (item.likes || 0);
+          return (
+            <ShotItem
+              item={item}
+              index={index}
+              isActive={index === activeShotIndex}
+              isTabActive={isTabActive}
+              isMuted={isMuted}
+              onToggleMute={() => setIsMuted((prev) => !prev)}
+              isLiked={likedShotIds.has(sId)}
+              realLikesCount={realLikes}
+              onToggleLike={() => handleToggleLike(item)}
+              onShare={() => handleShare(item)}
+              videoQuality={shotsQuality}
+              containerHeight={containerHeight}
+              containerWidth={containerWidth}
+              showToast={showToast}
+              triggerHaptic={triggerHaptic}
+            />
+          );
+        }}
         pagingEnabled={true}
         snapToInterval={containerHeight}
         snapToAlignment="start"
@@ -2179,6 +2277,58 @@ function ShotsFeedView({
           index,
         })}
       />
+
+      {/* Global Video Quality Selector Modal */}
+      <Modal
+        visible={showQualityModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowQualityModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.shotsModalBackdrop}
+          activeOpacity={1}
+          onPress={() => setShowQualityModal(false)}
+        >
+          <View style={styles.shotsQualitySheet} onStartShouldSetResponder={() => true}>
+            <View style={styles.shotsModalDragIndicator} />
+            <View style={styles.shotsModalHeaderRow}>
+              <View>
+                <Text style={styles.shotsModalTitle}>Video Playback Quality</Text>
+                <Text style={styles.shotsModalSubtitle}>Applies across all vertical drama shots</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.shotsModalCloseBtn}
+                onPress={() => setShowQualityModal(false)}
+              >
+                <Feather name="x" size={18} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
+
+            {QUALITY_OPTIONS.map((q) => {
+              const isSelected = shotsQuality === q;
+              return (
+                <TouchableOpacity
+                  key={`quality-opt-${q}`}
+                  style={styles.shotsQualityOptionBtn}
+                  onPress={() => {
+                    triggerHaptic?.('selection');
+                    setShotsQuality(q);
+                    setShowQualityModal(false);
+                    showToast?.(`Video quality set to ${q}`);
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.shotsQualityOptionText, isSelected && styles.shotsQualityOptionTextActive]}>
+                    {q === 'Auto' ? 'Auto (Best for network speed)' : `${q} Full HD`}
+                  </Text>
+                  {isSelected && <Feather name="check" size={18} color="#e50914" />}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
@@ -2210,6 +2360,7 @@ function ReelApp() {
 
   // Navigation: 'Home' | 'Shots' | 'Me'
   const [mainTab, setMainTab] = useState('Home');
+  const [targetShortId, setTargetShortId] = useState(null);
   const [homeCategory, setHomeCategory] = useState('All'); // 'All' | 'Movies' | 'Series'
   const [meSubTab, setMeSubTab] = useState(null); // null (clean buttons hub) | 'History' | 'MyList' | 'Downloads'
   const [meDotDismissed, setMeDotDismissed] = useState(false);
@@ -4279,9 +4430,20 @@ function ReelApp() {
         setHomeCategory('Animation');
         return;
       }
-      if (pathname === '/shots' || pathname === '/reels' || pathname.startsWith('/shots/')) {
+      if (
+        pathname === '/shots' ||
+        pathname === '/reels' ||
+        pathname.startsWith('/shots/') ||
+        pathname.startsWith('/short/')
+      ) {
         setIs404PageOpen(false);
         setNotFoundPath('');
+        const sId = pathname.startsWith('/short/')
+          ? pathname.replace('/short/', '').split('/')[0]
+          : pathname.startsWith('/shots/')
+          ? pathname.replace('/shots/', '').split('/')[0]
+          : '';
+        if (sId) setTargetShortId(sId);
         setMainTab('Shots');
         return;
       }
@@ -4384,7 +4546,18 @@ function ReelApp() {
         setHomeCategory('Animation');
         return;
       }
-      if (pathname === '/shots' || pathname === '/reels' || pathname.startsWith('/shots/')) {
+      if (
+        pathname === '/shots' ||
+        pathname === '/reels' ||
+        pathname.startsWith('/shots/') ||
+        pathname.startsWith('/short/')
+      ) {
+        const sId = pathname.startsWith('/short/')
+          ? pathname.replace('/short/', '').split('/')[0]
+          : pathname.startsWith('/shots/')
+          ? pathname.replace('/shots/', '').split('/')[0]
+          : '';
+        if (sId) setTargetShortId(sId);
         setMainTab('Shots');
         return;
       }
@@ -4929,6 +5102,11 @@ function ReelApp() {
           isTabActive={mainTab === 'Shots'}
           showToast={showToast}
           triggerHaptic={triggerHaptic}
+          onBack={() => setMainTab('Home')}
+          authUser={authUser}
+          authAccessToken={authAccessToken}
+          openAuthModal={() => setIsAuthPageOpen(true)}
+          targetShortId={targetShortId}
         />
       ) : (
         <ScrollView
@@ -7258,118 +7436,120 @@ function ReelApp() {
       {/* ==================================================== */}
       {/* FLOATING APPLE-STYLE PILL BOTTOM NAVIGATION BAR       */}
       {/* ==================================================== */}
-      <View
-        style={[
-          styles.floatingNavWrapper,
-          { bottom: Math.max(insets.bottom + 12, 18) },
-        ]}
-        pointerEvents="box-none"
-      >
+      {mainTab !== 'Shots' && (
         <View
-          style={[styles.floatingNavContainer, { width: floatingBarWidth }]}
-          {...navPanResponder.panHandlers}
+          style={[
+            styles.floatingNavWrapper,
+            { bottom: Math.max(insets.bottom + 12, 18) },
+          ]}
+          pointerEvents="box-none"
         >
-          {/* Smooth Sliding Red Indicator Pill */}
-          <Animated.View
-            style={[
-              styles.floatingNavIndicator,
-              {
-                width: floatingTabWidth,
-                transform: [{ translateX: indicatorTranslateX }],
-              },
-            ]}
-          />
-
-          {/* Home Tab */}
-          <TouchableOpacity
-            style={styles.floatingNavTab}
-            onPress={() => {
-              if (mainTab !== 'Home') {
-                triggerHaptic('selection');
-                setMainTab('Home');
-              }
-            }}
-            activeOpacity={0.8}
+          <View
+            style={[styles.floatingNavContainer, { width: floatingBarWidth }]}
+            {...navPanResponder.panHandlers}
           >
-            <Feather
-              name="home"
-              size={18}
-              color={mainTab === 'Home' ? '#FFFFFF' : 'rgba(255, 255, 255, 0.55)'}
-            />
-            <Text
+            {/* Smooth Sliding Red Indicator Pill */}
+            <Animated.View
               style={[
-                styles.floatingNavText,
-                mainTab === 'Home' && styles.floatingNavTextActive,
+                styles.floatingNavIndicator,
+                {
+                  width: floatingTabWidth,
+                  transform: [{ translateX: indicatorTranslateX }],
+                },
               ]}
-            >
-              Home
-            </Text>
-          </TouchableOpacity>
-
-          {/* Shots Tab (Center) */}
-          <TouchableOpacity
-            style={styles.floatingNavTab}
-            onPress={() => {
-              if (mainTab !== 'Shots') {
-                triggerHaptic('selection');
-                setMainTab('Shots');
-              }
-            }}
-            activeOpacity={0.8}
-          >
-            <Feather
-              name="film"
-              size={18}
-              color={mainTab === 'Shots' ? '#FFFFFF' : 'rgba(255, 255, 255, 0.55)'}
             />
-            <Text
-              style={[
-                styles.floatingNavText,
-                mainTab === 'Shots' && styles.floatingNavTextActive,
-              ]}
-            >
-              Shots
-            </Text>
-          </TouchableOpacity>
 
-          {/* Me Tab */}
-          <TouchableOpacity
-            style={styles.floatingNavTab}
-            onPress={() => {
-              setMeDotDismissed(true);
-              if (mainTab !== 'Me') {
-                triggerHaptic('selection');
-                setMainTab('Me');
-                setMeSubTab(null);
-              }
-            }}
-            activeOpacity={0.8}
-          >
-            <View style={{ position: 'relative' }}>
+            {/* Home Tab */}
+            <TouchableOpacity
+              style={styles.floatingNavTab}
+              onPress={() => {
+                if (mainTab !== 'Home') {
+                  triggerHaptic('selection');
+                  setMainTab('Home');
+                }
+              }}
+              activeOpacity={0.8}
+            >
               <Feather
-                name="user"
+                name="home"
                 size={18}
-                color={mainTab === 'Me' ? '#FFFFFF' : 'rgba(255, 255, 255, 0.55)'}
+                color={mainTab === 'Home' ? '#FFFFFF' : 'rgba(255, 255, 255, 0.55)'}
               />
-              {!isWeb && downloads.some((d) => d.status === 'downloading') ? (
-                <View style={styles.floatingNavDownloadBadge}>
-                  <AnimatedDownloadSpinner size={9} color="#FFFFFF" />
-                </View>
-              ) : !meDotDismissed && mainTab !== 'Me' && myList.length > 0 ? (
-                <View style={styles.floatingNavBadgeDot} />
-              ) : null}
-            </View>
-            <Text
-              style={[
-                styles.floatingNavText,
-                mainTab === 'Me' && styles.floatingNavTextActive,
-              ]}
+              <Text
+                style={[
+                  styles.floatingNavText,
+                  mainTab === 'Home' && styles.floatingNavTextActive,
+                ]}
+              >
+                Home
+              </Text>
+            </TouchableOpacity>
+
+            {/* Shots Tab (Center) */}
+            <TouchableOpacity
+              style={styles.floatingNavTab}
+              onPress={() => {
+                if (mainTab !== 'Shots') {
+                  triggerHaptic('selection');
+                  setMainTab('Shots');
+                }
+              }}
+              activeOpacity={0.8}
             >
-              Me
-            </Text>
-          </TouchableOpacity>
+              <Feather
+                name="film"
+                size={18}
+                color={mainTab === 'Shots' ? '#FFFFFF' : 'rgba(255, 255, 255, 0.55)'}
+              />
+              <Text
+                style={[
+                  styles.floatingNavText,
+                  mainTab === 'Shots' && styles.floatingNavTextActive,
+                ]}
+              >
+                Shots
+              </Text>
+            </TouchableOpacity>
+
+            {/* Me Tab */}
+            <TouchableOpacity
+              style={styles.floatingNavTab}
+              onPress={() => {
+                setMeDotDismissed(true);
+                if (mainTab !== 'Me') {
+                  triggerHaptic('selection');
+                  setMainTab('Me');
+                  setMeSubTab(null);
+                }
+              }}
+              activeOpacity={0.8}
+            >
+              <View style={{ position: 'relative' }}>
+                <Feather
+                  name="user"
+                  size={18}
+                  color={mainTab === 'Me' ? '#FFFFFF' : 'rgba(255, 255, 255, 0.55)'}
+                />
+                {!isWeb && downloads.some((d) => d.status === 'downloading') ? (
+                  <View style={styles.floatingNavDownloadBadge}>
+                    <AnimatedDownloadSpinner size={9} color="#FFFFFF" />
+                  </View>
+                ) : !meDotDismissed && mainTab !== 'Me' && myList.length > 0 ? (
+                  <View style={styles.floatingNavBadgeDot} />
+                ) : null}
+              </View>
+              <Text
+                style={[
+                  styles.floatingNavText,
+                  mainTab === 'Me' && styles.floatingNavTextActive,
+                ]}
+              >
+                Me
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
-      </View>
+      )}
 
       {/* ==================================================== */}
       {/* FLOATING TOAST NOTIFICATION                          */}
@@ -8047,17 +8227,23 @@ function ReelCustomPlayer({
   useEffect(() => {
     if (player && videoUrl && videoUrl !== currentStreamUrlRef.current) {
       currentStreamUrlRef.current = videoUrl;
-      try {
-        if (typeof player.replace === 'function') {
-          player.replace(buildVideoSource(videoUrl));
+      const doReplace = async () => {
+        try {
+          const src = buildVideoSource(videoUrl);
+          if (typeof player.replaceAsync === 'function') {
+            await player.replaceAsync(src);
+          } else if (typeof player.replace === 'function') {
+            player.replace(src);
+          }
           if (initialResumeTime > 0) {
             player.currentTime = initialResumeTime;
           }
           player.play();
+        } catch (err) {
+          console.warn('[Player] player.replaceAsync note:', err);
         }
-      } catch (err) {
-        console.warn('[Player] player.replace note:', err);
-      }
+      };
+      doReplace();
     }
   }, [player, videoUrl, initialResumeTime]);
 
@@ -12938,32 +13124,68 @@ const styles = StyleSheet.create({
     backgroundColor: '#e50914',
     marginLeft: 6,
   },
-  shotsFilterTabsRow: {
+  shotsHeaderBackBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+  },
+  shotsQualityBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 18,
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.22)',
   },
-  shotsFilterTabBtn: {
-    alignItems: 'center',
-    paddingVertical: 4,
-    position: 'relative',
-  },
-  shotsFilterTabText: {
-    color: 'rgba(255, 255, 255, 0.6)',
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  shotsFilterTabTextActive: {
+  shotsQualityBtnText: {
     color: '#FFFFFF',
-    fontWeight: '900',
+    fontSize: 12,
+    fontWeight: '800',
   },
-  shotsFilterTabUnderline: {
-    position: 'absolute',
-    bottom: -2,
-    width: 18,
-    height: 2.5,
-    borderRadius: 2,
-    backgroundColor: '#e50914',
+  shotsHeaderIconBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+  },
+  shotsQualitySheet: {
+    backgroundColor: '#161616',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 40,
+    borderWidth: 1,
+    borderColor: '#262626',
+  },
+  shotsQualityOptionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  shotsQualityOptionText: {
+    color: '#CCCCCC',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  shotsQualityOptionTextActive: {
+    color: '#e50914',
+    fontWeight: '800',
   },
   shotsHelpBtn: {
     width: 36,

@@ -131,10 +131,19 @@ async function ensureTables(sql) {
       );
     `;
     await sql`
-      CREATE INDEX IF NOT EXISTS idx_mf_downloads_email ON mf_downloads(user_email);
+      CREATE TABLE IF NOT EXISTS mf_shots_likes (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES mf_users(id) ON DELETE CASCADE,
+        shot_id VARCHAR(100) NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        CONSTRAINT unique_user_shot_like UNIQUE (user_id, shot_id)
+      );
     `;
     await sql`
-      CREATE INDEX IF NOT EXISTS idx_mf_downloads_time ON mf_downloads(downloaded_at);
+      CREATE INDEX IF NOT EXISTS idx_mf_shots_likes_shot ON mf_shots_likes(shot_id);
+    `;
+    await sql`
+      CREATE INDEX IF NOT EXISTS idx_mf_shots_likes_user ON mf_shots_likes(user_id);
     `;
     tablesInitialized = true;
   } catch (err) {
@@ -345,6 +354,105 @@ export default async function handler(req, res) {
         } catch (_) {}
       }
       return res.status(200).json({ status: 'success', message: 'Logged out successfully.' });
+    }
+
+    // 5. SHOTS LIKES SYSTEM (Real-time Neon Database - Login required)
+    if (action === 'like-shot') {
+      const authHeader = req.headers.authorization || body.token || '';
+      const token = authHeader.replace(/^Bearer\s+/i, '');
+      const user = verifyJwt(token);
+      if (!user) {
+        return res.status(401).json({ error: 'Only logged-in users can like shots. Please sign in.' });
+      }
+
+      const shotId = String(body.shot_id || body.shotId || '').trim();
+      if (!shotId) {
+        return res.status(400).json({ error: 'shot_id is required.' });
+      }
+
+      try {
+        await sql`
+          INSERT INTO mf_shots_likes (user_id, shot_id)
+          VALUES (${user.id}, ${shotId})
+          ON CONFLICT (user_id, shot_id) DO NOTHING
+        `;
+        const countRes = await sql`
+          SELECT COUNT(*)::int AS count FROM mf_shots_likes WHERE shot_id = ${shotId}
+        `;
+        return res.status(200).json({
+          status: 'success',
+          liked: true,
+          shot_id: shotId,
+          likes_count: countRes[0]?.count || 1,
+        });
+      } catch (err) {
+        console.error('like-shot error:', err);
+        return res.status(500).json({ error: 'Failed to record like.' });
+      }
+    }
+
+    if (action === 'unlike-shot') {
+      const authHeader = req.headers.authorization || body.token || '';
+      const token = authHeader.replace(/^Bearer\s+/i, '');
+      const user = verifyJwt(token);
+      if (!user) {
+        return res.status(401).json({ error: 'Only logged-in users can unlike shots.' });
+      }
+
+      const shotId = String(body.shot_id || body.shotId || '').trim();
+      if (!shotId) {
+        return res.status(400).json({ error: 'shot_id is required.' });
+      }
+
+      try {
+        await sql`
+          DELETE FROM mf_shots_likes
+          WHERE user_id = ${user.id} AND shot_id = ${shotId}
+        `;
+        const countRes = await sql`
+          SELECT COUNT(*)::int AS count FROM mf_shots_likes WHERE shot_id = ${shotId}
+        `;
+        return res.status(200).json({
+          status: 'success',
+          liked: false,
+          shot_id: shotId,
+          likes_count: countRes[0]?.count || 0,
+        });
+      } catch (err) {
+        console.error('unlike-shot error:', err);
+        return res.status(500).json({ error: 'Failed to remove like.' });
+      }
+    }
+
+    if (action === 'get-shot-likes') {
+      const shotId = String(body.shot_id || query.shot_id || '').trim();
+      const authHeader = req.headers.authorization || body.token || '';
+      const token = authHeader.replace(/^Bearer\s+/i, '');
+      const user = verifyJwt(token);
+
+      try {
+        let userLiked = false;
+        if (user && shotId) {
+          const userCheck = await sql`
+            SELECT 1 FROM mf_shots_likes WHERE user_id = ${user.id} AND shot_id = ${shotId} LIMIT 1
+          `;
+          userLiked = userCheck.length > 0;
+        }
+
+        const countRes = shotId ? await sql`
+          SELECT COUNT(*)::int AS count FROM mf_shots_likes WHERE shot_id = ${shotId}
+        ` : [{ count: 0 }];
+
+        return res.status(200).json({
+          status: 'success',
+          shot_id: shotId,
+          likes_count: countRes[0]?.count || 0,
+          user_liked: userLiked,
+        });
+      } catch (err) {
+        console.error('get-shot-likes error:', err);
+        return res.status(500).json({ error: 'Failed to retrieve shot likes.' });
+      }
     }
   }
 
