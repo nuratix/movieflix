@@ -1292,8 +1292,34 @@ function ShotItem({
   const [showHeartAnim, setShowHeartAnim] = useState(false);
   const [showEpModal, setShowEpModal] = useState(false);
   const [playbackProgress, setPlaybackProgress] = useState(0);
+  const [isScrubbing, setIsScrubbing] = useState(false);
+  const [is2xActive, setIs2xActive] = useState(false);
+  const isScrubbingRef = useRef(false);
+  const isHolding2x = useRef(false);
   const epStreamsCache = useRef({});
   const epSourcesCache = useRef({});
+
+  // Compute real dynamic video quality label
+  const activeQualityLabel = useMemo(() => {
+    const cachedSources = epSourcesCache.current[currentEp];
+    if (Array.isArray(cachedSources) && videoStreamUrl) {
+      const match = cachedSources.find((s) => s.url === videoStreamUrl);
+      if (match?.resolution) {
+        const r = String(match.resolution).toUpperCase();
+        return r.includes('P') ? r : `${r}P`;
+      }
+    }
+    if (videoStreamUrl) {
+      if (videoStreamUrl.includes('1080')) return '1080P FHD';
+      if (videoStreamUrl.includes('720')) return '720P HD';
+      if (videoStreamUrl.includes('480')) return '480P SD';
+      if (videoStreamUrl.includes('360')) return '360P';
+    }
+    if (videoQuality && videoQuality !== 'Auto') {
+      return `${videoQuality.toUpperCase()}`;
+    }
+    return '720P HD';
+  }, [videoStreamUrl, currentEp, videoQuality]);
 
   // Floating heart animation (Instagram double tap)
   const heartScale = useRef(new Animated.Value(0)).current;
@@ -1480,12 +1506,102 @@ function ShotItem({
   useEffect(() => {
     if (!player) return;
     const sub = player.addListener?.('timeUpdate', ({ currentTime }) => {
+      if (isScrubbingRef.current) return;
       if (typeof player.duration === 'number' && player.duration > 0) {
         setPlaybackProgress(Math.min(1, Math.max(0, currentTime / player.duration)));
       }
     });
     return () => sub?.remove?.();
   }, [player]);
+
+  // Reset 2x speed when item becomes inactive
+  useEffect(() => {
+    if (!isActive && player) {
+      try {
+        player.playbackRate = 1.0;
+      } catch (_) {}
+      setIs2xActive(false);
+      isHolding2x.current = false;
+    }
+  }, [isActive, player]);
+
+  // Long press 2X fast-forward handlers
+  const handleLongPress = () => {
+    if (!isActive || !isTabActive) return;
+    isHolding2x.current = true;
+    setIs2xActive(true);
+    triggerHaptic?.('impactMedium');
+    try {
+      if (player) {
+        player.playbackRate = 2.0;
+      }
+    } catch (e) {
+      console.warn('[Shots] 2x speed error:', e);
+    }
+  };
+
+  const handlePressOut = () => {
+    if (isHolding2x.current) {
+      isHolding2x.current = false;
+      setIs2xActive(false);
+      try {
+        if (player) {
+          player.playbackRate = 1.0;
+        }
+      } catch (_) {}
+    }
+  };
+
+  // Interactive scrubber pan responder for seeking/moving video forward and backward
+  const scrubberPanResponder = useMemo(() => {
+    const seekWithEvent = (evt) => {
+      const pageX = evt.nativeEvent.pageX;
+      const curVideoWidth = Math.min(containerWidth, Math.max(320, Math.floor(containerHeight * (9 / 16))));
+      const videoLeft = Math.max(0, (containerWidth - curVideoWidth) / 2);
+      const relativeX = pageX - videoLeft;
+      const ratio = Math.max(0, Math.min(1, relativeX / curVideoWidth));
+      setPlaybackProgress(ratio);
+
+      if (player) {
+        const dur = typeof player.duration === 'number' && player.duration > 0 ? player.duration : 0;
+        if (dur > 0) {
+          const targetTime = ratio * dur;
+          try {
+            player.currentTime = targetTime;
+          } catch (_) {
+            try {
+              player.seekBy?.(targetTime - (player.currentTime || 0));
+            } catch (__) {}
+          }
+        }
+      }
+    };
+
+    return PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onStartShouldSetPanResponderCapture: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponderCapture: () => true,
+      onPanResponderGrant: (evt) => {
+        isScrubbingRef.current = true;
+        setIsScrubbing(true);
+        triggerHaptic?.('selection');
+        seekWithEvent(evt);
+      },
+      onPanResponderMove: (evt) => {
+        seekWithEvent(evt);
+      },
+      onPanResponderRelease: (evt) => {
+        seekWithEvent(evt);
+        isScrubbingRef.current = false;
+        setIsScrubbing(false);
+      },
+      onPanResponderTerminate: () => {
+        isScrubbingRef.current = false;
+        setIsScrubbing(false);
+      },
+    });
+  }, [player, containerWidth, containerHeight, triggerHaptic]);
 
   const handleSwipeEpisode = (direction) => {
     if (direction === 'next') {
@@ -1537,6 +1653,7 @@ function ShotItem({
   // Double tap to like handling
   const lastTapRef = useRef(0);
   const handleScreenPress = () => {
+    if (isHolding2x.current) return;
     const now = Date.now();
     if (now - lastTapRef.current < 280) {
       // Double tap detected!
@@ -1651,26 +1768,37 @@ function ShotItem({
           <SafeImage
             uri={item.poster_url}
             style={StyleSheet.absoluteFillObject}
-            resizeMode="cover"
+            resizeMode="contain"
           />
 
-          {/* Video Player Stream */}
+          {/* Video Player Stream - full picture with no cutoff */}
           {videoStreamUrl && isActive && (
             <VideoView
               player={player}
               style={StyleSheet.absoluteFillObject}
-              contentFit="cover"
+              contentFit="contain"
               nativeControls={false}
               pointerEvents="none"
             />
           )}
 
-          {/* Tap area to pause/play (single tap) and double-tap to like */}
+          {/* Tap area to pause/play (single tap), double-tap to like, and long-press for 2X speed */}
           <TouchableOpacity
             activeOpacity={1}
             onPress={handleScreenPress}
+            onLongPress={handleLongPress}
+            onPressOut={handlePressOut}
+            delayLongPress={220}
             style={StyleSheet.absoluteFillObject}
           />
+
+          {/* Long Press 2X Speed HUD Indicator */}
+          {is2xActive && (
+            <View style={styles.shots2xHUD} pointerEvents="none">
+              <Feather name="fast-forward" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+              <Text style={styles.shots2xHUDText}>2X Speed</Text>
+            </View>
+          )}
 
           {/* Ambient Dark Gradient for UI Readability */}
           <LinearGradient
@@ -1813,7 +1941,7 @@ function ShotItem({
               <Feather name="check" size={10} color="#FFFFFF" />
             </View>
             <View style={styles.shotsEpisodeBadge}>
-              <Text style={styles.shotsEpisodeText}>9:16 HD</Text>
+              <Text style={styles.shotsEpisodeText}>{activeQualityLabel}</Text>
             </View>
           </View>
 
@@ -1874,9 +2002,22 @@ function ShotItem({
           </View>
         </View>
 
-        {/* ── Bottom Red Progress Bar ── */}
-        <View style={styles.shotsProgressTrack}>
-          <View style={[styles.shotsProgressFill, { width: `${playbackProgress * 100}%` }]} />
+        {/* ── Interactive Seek Scrubber / Player Line ── */}
+        <View
+          style={[styles.shotsScrubberHitArea, isScrubbing && styles.shotsScrubberHitAreaActive]}
+          {...scrubberPanResponder.panHandlers}
+        >
+          <View style={[styles.shotsProgressTrack, isScrubbing && styles.shotsProgressTrackActive]}>
+            <View style={[styles.shotsProgressFill, { width: `${playbackProgress * 100}%` }]} />
+            {isScrubbing && (
+              <View
+                style={[
+                  styles.shotsProgressScrubberThumb,
+                  { left: `${Math.min(99, Math.max(1, playbackProgress * 100))}%` },
+                ]}
+              />
+            )}
+          </View>
         </View>
       </View>
 
@@ -13269,10 +13410,35 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: 'rgba(255, 255, 255, 0.2)',
   },
+  shots2xHUD: {
+    position: 'absolute',
+    top: 70,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.78)',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.28)',
+    zIndex: 95,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.45,
+    shadowRadius: 6,
+    elevation: 8,
+  },
+  shots2xHUDText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
   shotsRightColumn: {
     position: 'absolute',
     right: 12,
-    bottom: 96,
+    bottom: 24,
     alignItems: 'center',
     gap: 16,
     zIndex: 20,
@@ -13347,7 +13513,7 @@ const styles = StyleSheet.create({
   shotsBottomOverlay: {
     position: 'absolute',
     left: 14,
-    bottom: 96,
+    bottom: 24,
     right: 80,
     zIndex: 20,
   },
@@ -13580,18 +13746,46 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
   },
-  shotsProgressTrack: {
+  shotsScrubberHitArea: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    height: 2.5,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    zIndex: 50,
+    height: 28,
+    justifyContent: 'flex-end',
+    zIndex: 100,
+  },
+  shotsScrubberHitAreaActive: {
+    height: 44,
+  },
+  shotsProgressTrack: {
+    width: '100%',
+    height: 3,
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+  },
+  shotsProgressTrackActive: {
+    height: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.4)',
   },
   shotsProgressFill: {
     height: '100%',
     backgroundColor: '#e50914',
+  },
+  shotsProgressScrubberThumb: {
+    position: 'absolute',
+    top: -4,
+    marginLeft: -7,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 2,
+    borderColor: '#e50914',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.6,
+    shadowRadius: 3,
+    elevation: 4,
   },
 });
 
