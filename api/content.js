@@ -156,6 +156,24 @@ export default async function handler(req, res) {
       cacheKey = `detail:${slug}`;
       break;
     }
+    case 'dubs': {
+      const slug = (query.slug || '').replace(/[^a-zA-Z0-9_\-\.]/g, '').slice(0, 150).trim();
+      if (!slug) {
+        return res.status(400).json({ error: 'Missing or invalid "slug" parameter.' });
+      }
+      targetUrl = `${UPSTREAM_BASE}/dubs/${encodeURIComponent(slug)}`;
+      cacheKey = `dubs:${slug}`;
+      break;
+    }
+    case 'metadata': {
+      const slug = (query.slug || '').replace(/[^a-zA-Z0-9_\-\.]/g, '').slice(0, 150).trim();
+      if (!slug) {
+        return res.status(400).json({ error: 'Missing or invalid "slug" parameter.' });
+      }
+      targetUrl = `${UPSTREAM_BASE}/metadata/${encodeURIComponent(slug)}`;
+      cacheKey = `metadata:${slug}`;
+      break;
+    }
     case 'stream': {
       const id = (query.id || '').replace(/[^a-zA-Z0-9_\-]/g, '').slice(0, 50).trim();
       if (!id) {
@@ -181,7 +199,7 @@ export default async function handler(req, res) {
     }
     default: {
       return res.status(400).json({
-        error: 'Invalid or unsupported endpoint. Supported endpoints: home, movies, tv-series, animation, search, detail, stream, captions.',
+        error: 'Invalid or unsupported endpoint. Supported endpoints: home, movies, tv-series, animation, search, detail, dubs, metadata, stream, captions.',
       });
     }
   }

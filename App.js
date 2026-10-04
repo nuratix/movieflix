@@ -2316,6 +2316,36 @@ function ReelApp() {
       const resource = data?.data?.resource || null;
       const seasons = resource?.seasons || [];
 
+      // Extract and parse available audio dubs and sibling languages
+      const rawDubs = data?.dubs || subject?.dubs || [];
+      const parsedDubs = Array.isArray(rawDubs) ? rawDubs.map((d) => {
+        const subId = String(d.subjectId || d.subject_id || d.id || '');
+        const slug = String(d.detailPath || d.detail_path || d.slug || '');
+        const rawLan = String(d.lanName || d.language || d.title || 'Audio Dub');
+        const type = typeof d.type === 'number' ? d.type : 0;
+        let label = d.label || '';
+        if (!label) {
+          const lLower = rawLan.toLowerCase();
+          if (lLower.includes('original')) label = 'Original Audio';
+          else if (lLower.includes('esla')) label = 'Spanish (Latin America) Dub';
+          else if (lLower.includes('ptbr')) label = 'Portuguese (Brazil) Dub';
+          else {
+            const clean = rawLan.replace(/\s*(dub|sub)\b/gi, '').trim();
+            label = type === 1 ? `${clean} (Sub Release)` : `${clean} Dub`;
+          }
+        }
+        return {
+          subject_id: subId,
+          slug,
+          detail_path: slug,
+          language: rawLan,
+          label,
+          type,
+          name: `${movie.name || 'Title'} (${label})`,
+          isCurrent: (subId && subId === String(movie.subject_id)) || (slug && slug === String(movie.slug)),
+        };
+      }) : [];
+
       // A title is strictly a series if subjectType == 2 OR it has multiple seasons/episodes
       const isRealSeries = (subject?.subjectType === 2) ||
         (seasons.length > 1) ||
@@ -2327,6 +2357,7 @@ function ReelApp() {
         ...subject,
         resource,
         seasons,
+        dubs: parsedDubs,
         isSeries: Boolean(isRealSeries),
       };
       setDetailData(mergedData);
@@ -2335,8 +2366,8 @@ function ReelApp() {
         seriesSeasonsMovieIdRef.current = movie.subject_id;
       }
 
-      // Merge newly resolved fields back into detailMovie so title/poster/etc. are fully loaded
-      setDetailMovie((prev) => normalizeMovie({ ...(prev || {}), ...subject, ...mergedData, slug: movie.slug }));
+      // Merge newly resolved fields back into detailMovie so title/poster/dubs/etc. are fully loaded
+      setDetailMovie((prev) => normalizeMovie({ ...(prev || {}), ...subject, ...mergedData, dubs: parsedDubs, slug: movie.slug }));
 
       // Update URL with confirmed prefix if series vs movie was determined
       if (syncHistory && Platform.OS === 'web') {
@@ -2542,77 +2573,93 @@ function ReelApp() {
             }
           }
 
-          // Clean name/slug to find franchise siblings across languages
-          const cleanName = (movie.name || '').replace(/\[.*?\]/g, '').replace(/S\d+(-S\d+)?/gi, '').trim();
-          const cleanSlug = (movie.slug || '').replace(/-(english|hindi|french|spanish|dubbed|dub|tamil|telugu)[^a-zA-Z0-9].*/i, '').replace(/-/g, ' ').trim();
-          const searchQuery = cleanName || cleanSlug;
+          // 2. Extract real audio dub variants directly from MovieBox detail
+          let rawDubs = (Array.isArray(movie.dubs) && movie.dubs.length > 0)
+            ? movie.dubs
+            : (detailData?.slug === movie.slug && Array.isArray(detailData?.dubs) && detailData.dubs.length > 0)
+              ? detailData.dubs
+              : null;
 
-          if (searchQuery) {
+          if (!rawDubs || rawDubs.length === 0) {
             try {
-              const sRes = await apiFetch(`${API_BASE}/api/content?endpoint=search&q=${encodeURIComponent(searchQuery)}`);
-              const sData = await sRes.json();
-              const items = sData?.items || [];
-
-              // Detect audio dub variants
-              const detectedVariants = [];
-              const seenDubLabels = new Set();
-
-              for (const itm of items.slice(0, 8)) {
-                const nm = itm.name || '';
-                const slg = itm.slug || '';
-                let label = null;
-                if (nm.includes('[Hindi]') || slg.includes('-hindi-')) label = 'Hindi Dub';
-                else if (nm.includes('[English]') || slg.includes('-english-')) label = 'English Dub';
-                else if (nm.includes('[French]') || slg.includes('-french-')) label = 'French Dub';
-                else if (nm.includes('[Spanish]') || slg.includes('-spanish-')) label = 'Spanish Dub';
-                else if (nm.includes('[Tamil]') || slg.includes('-tamil-')) label = 'Tamil Dub';
-                else if (nm.includes('[Telugu]') || slg.includes('-telugu-')) label = 'Telugu Dub';
-                else if (!/\[(Hindi|English|French|Spanish|Tamil|Telugu)\]/i.test(nm)) label = 'Original Audio';
-
-                if (label && !seenDubLabels.has(label)) {
-                  seenDubLabels.add(label);
-                  detectedVariants.push({
-                    label,
-                    name: nm,
-                    subject_id: itm.subject_id,
-                    slug: slg,
-                    isCurrent: itm.subject_id === movie.subject_id || slg === movie.slug,
-                  });
-                }
-
-                // Sibling subtitle collection if we don't have all languages yet
-                if (allCaptions.length <= 4 && itm.subject_id !== movie.subject_id) {
-                  try {
-                    const sibCapUrl = `${API_BASE}/api/content?endpoint=captions&id=${encodeURIComponent(itm.subject_id)}&detail_path=${encodeURIComponent(itm.slug)}&se=${se}&ep=${ep}`;
-                    const sibRes = await apiFetch(sibCapUrl);
-                    const sibData = await sibRes.json();
-                    if (sibData && Array.isArray(sibData.captions)) {
-                      for (const sc of sibData.captions) {
-                        const key = sc.lanName || sc.lan;
-                        if (key && !seenLans.has(key)) {
-                          seenLans.add(key);
-                          allCaptions.push(sc);
-                        }
-                      }
-                    }
-                  } catch (se) {}
-                }
-              }
-
-              if (!detectedVariants.some(v => v.isCurrent)) {
-                detectedVariants.unshift({
-                  label: 'Original Audio (Default)',
-                  name: movie.name || 'Current Stream',
-                  subject_id: movie.subject_id,
-                  slug: movie.slug,
-                  isCurrent: true,
-                });
-              }
-              setAvailableAudioVariants(detectedVariants);
-            } catch (se) {
-              console.log("Audio variants/sibling subs lookup:", se);
+              const dRes = await apiFetch(`${API_BASE}/api/content?endpoint=detail&slug=${encodeURIComponent(movie.slug || movie.subject_id)}`);
+              const dData = await dRes.json();
+              rawDubs = dData?.dubs || dData?.data?.subject?.dubs || [];
+            } catch (de) {
+              console.log("Audio dubs fetch note:", de);
             }
           }
+
+          const detectedVariants = [];
+          const seenDubKeys = new Set();
+
+          if (Array.isArray(rawDubs) && rawDubs.length > 0) {
+            for (const d of rawDubs) {
+              const subId = String(d.subject_id || d.subjectId || d.id || '');
+              const slg = String(d.slug || d.detail_path || d.detailPath || '');
+              const rawLan = String(d.language || d.lanName || d.title || 'Audio Dub');
+              const dType = typeof d.type === 'number' ? d.type : 0;
+
+              // Only include audio dubs (type 0) in the audio selector
+              if (dType === 1) {
+                // If this is a subtitle release, add its language to captions if missing
+                const subLan = rawLan.replace(/\s*sub\b/gi, '').trim();
+                if (subLan && !seenLans.has(subLan)) {
+                  seenLans.add(subLan);
+                  allCaptions.push({
+                    lan: subLan.toLowerCase().slice(0, 3),
+                    lanName: `${subLan} (Release)`,
+                    subject_id: subId,
+                    detailPath: slg,
+                  });
+                }
+                continue;
+              }
+
+              let label = d.label || '';
+              if (!label) {
+                const lLower = rawLan.toLowerCase();
+                if (lLower.includes('original')) label = 'Original Audio';
+                else if (lLower.includes('esla')) label = 'Spanish (Latin America) Dub';
+                else if (lLower.includes('ptbr')) label = 'Portuguese (Brazil) Dub';
+                else {
+                  const clean = rawLan.replace(/\s*(dub|sub)\b/gi, '').trim();
+                  label = `${clean} Dub`;
+                }
+              }
+
+              const isCurrent = (subId && subId === String(movie.subject_id)) || (slg && slg === String(movie.slug));
+              const key = label || slg || subId;
+              if (key && !seenDubKeys.has(key)) {
+                seenDubKeys.add(key);
+                detectedVariants.push({
+                  label,
+                  name: `${movie.name || 'Title'} (${label})`,
+                  subject_id: subId || movie.subject_id,
+                  slug: slg || movie.slug,
+                  isCurrent,
+                });
+              }
+            }
+          }
+
+          // If current stream not yet marked, find original audio or prepend default
+          if (!detectedVariants.some(v => v.isCurrent)) {
+            const orig = detectedVariants.find(v => v.label.toLowerCase().includes('original'));
+            if (orig) {
+              orig.isCurrent = true;
+            } else {
+              detectedVariants.unshift({
+                label: 'Original Audio (Default)',
+                name: movie.name || 'Current Stream',
+                subject_id: movie.subject_id,
+                slug: movie.slug,
+                isCurrent: true,
+              });
+            }
+          }
+
+          setAvailableAudioVariants(detectedVariants);
 
           setAvailableCaptions(allCaptions);
         } catch (ce) {
@@ -5189,6 +5236,49 @@ function ReelApp() {
                           <Text style={styles.genrePillText}>{g.trim()}</Text>
                         </View>
                       ))}
+                    </View>
+                  )}
+
+                  {/* Available Audio Dubs (Hindi, French, Spanish, Tamil, Telugu, etc.) */}
+                  {Array.isArray(detailData?.dubs) && detailData.dubs.filter(d => d.type === 0).length > 1 && (
+                    <View style={styles.detailDubsSection}>
+                      <View style={styles.detailDubsHeaderRow}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                          <Feather name="volume-2" size={13} color="#e50914" style={{ marginRight: 6 }} />
+                          <Text style={styles.detailDubsHeading}>Available Audio Dubs</Text>
+                        </View>
+                        <Text style={styles.detailDubsCountBadge}>
+                          {detailData.dubs.filter(d => d.type === 0).length} Languages
+                        </Text>
+                      </View>
+                      <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={styles.detailDubsScroll}
+                      >
+                        {detailData.dubs.filter(d => d.type === 0).map((dub, dIdx) => (
+                          <TouchableOpacity
+                            key={`detail-dub-${dub.subject_id || dub.slug || dIdx}`}
+                            style={styles.detailDubPill}
+                            onPress={() => {
+                              const isSeries = Boolean(detailData?.isSeries);
+                              const se = isSeries ? (detailData?.seasons?.[selectedSeasonIdx]?.se || 1) : 0;
+                              const ep = isSeries ? 1 : 0;
+                              launchPlayer({
+                                ...detailMovie,
+                                subject_id: dub.subject_id,
+                                slug: dub.slug || dub.detail_path,
+                                name: `${detailMovie?.name || 'Title'} (${dub.label})`,
+                                dubs: detailData.dubs,
+                              }, se, ep, isSeries);
+                            }}
+                            activeOpacity={0.8}
+                          >
+                            <Feather name="volume-2" size={11} color="#FFFFFF" style={{ marginRight: 5 }} />
+                            <Text style={styles.detailDubPillText}>{dub.label}</Text>
+                          </TouchableOpacity>
+                        ))}
+                      </ScrollView>
                     </View>
                   )}
 
@@ -8644,6 +8734,51 @@ const styles = StyleSheet.create({
   genrePillText: {
     color: '#a3a3a3',
     fontSize: 12,
+  },
+  detailDubsSection: {
+    marginTop: 14,
+    marginBottom: 6,
+  },
+  detailDubsHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  detailDubsHeading: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#f5f5f1',
+    letterSpacing: 0.3,
+  },
+  detailDubsCountBadge: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#e50914',
+    backgroundColor: 'rgba(229, 9, 20, 0.14)',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  detailDubsScroll: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingVertical: 2,
+  },
+  detailDubPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.16)',
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+    borderRadius: 14,
+  },
+  detailDubPillText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
   imdbRatingBadge: {
     flexDirection: 'row',
