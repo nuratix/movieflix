@@ -1,7 +1,19 @@
+import { neon } from '@neondatabase/serverless';
+
 // ─── Server-Side Content API Proxy for Movieflix ────────────────────────────
 // Securely proxies requests to the upstream movie catalog and stream provider.
 // Upstream provider API credentials exist ONLY in server environment variables
 // (MOVIE_PROVIDER_API_KEY) and are NEVER exposed to the client or mobile APK.
+
+function getDb() {
+  const dbUrl =
+    process.env.DATABASE_URL ||
+    process.env.POSTGRES_URL ||
+    process.env.POSTGRES_PRISMA_URL ||
+    process.env.DATABASE_URL_UNPOOLED;
+  if (!dbUrl) return null;
+  return neon(dbUrl);
+}
 
 const UPSTREAM_BASE = (
   process.env.MOVIE_PROVIDER_URL ||
@@ -280,15 +292,36 @@ export default async function handler(req, res) {
           rawItems = tvData?.items ? [...tvData.items] : [];
         }
 
+        // Retrieve real likes from database for these shot IDs
+        let dbLikesMap = {};
+        const sql = getDb();
+        if (sql && rawItems.length > 0) {
+          try {
+            const shotIds = rawItems.map((it) => String(it.subject_id || '')).filter(Boolean);
+            if (shotIds.length > 0) {
+              const rows = await sql`
+                SELECT shot_id, COUNT(*)::int AS count
+                FROM (
+                  SELECT shot_id FROM mf_shots_likes WHERE shot_id = ANY(${shotIds})
+                  UNION ALL
+                  SELECT shot_id FROM mf_shots_guest_likes WHERE shot_id = ANY(${shotIds})
+                ) combined
+                GROUP BY shot_id
+              `;
+              for (const r of rows) {
+                dbLikesMap[r.shot_id] = r.count;
+              }
+            }
+          } catch (dbErr) {
+            console.warn('Real likes lookup in content API error:', dbErr?.message);
+          }
+        }
+
         const authors = ['@DramaBox', '@ShortMax', '@ReelShort', '@NetShort', '@GoodShort', '@MiniTV', '@BillionaireTV'];
         const shots = rawItems.map((item, idx) => {
           const author = authors[(idx + (page * 3)) % authors.length];
           const totalEps = item.total_episodes || item.episodes_count || (12 + ((idx * 7) % 28));
-          const sId = String(item.subject_id || idx);
-          let hashVal = 0;
-          for (let c = 0; c < sId.length; c++) hashVal = ((hashVal << 5) - hashVal) + sId.charCodeAt(c);
-          const baseLikes = 450 + (Math.abs(hashVal) % 4500);
-          const baseShares = Math.floor(baseLikes / 7);
+          const realLikes = dbLikesMap[String(item.subject_id)] || 0;
 
           return {
             id: `shot-${item.subject_id || idx}-p${page}`,
@@ -298,8 +331,8 @@ export default async function handler(req, res) {
             poster_url: item.poster_url,
             rating: item.rating || '7.8',
             author,
-            likes: baseLikes,
-            shares: baseShares,
+            likes: realLikes,
+            shares: 0,
             total_episodes: totalEps,
             se: 1,
             ep: 1,
@@ -307,7 +340,7 @@ export default async function handler(req, res) {
         });
 
         const responseData = { status: 'success', page, count: shots.length, items: shots, has_more: true };
-        cacheMap.set(cacheKey, { data: responseData, expiresAt: Date.now() + 10 * 60 * 1000 });
+        cacheMap.set(cacheKey, { data: responseData, expiresAt: Date.now() + 15 * 1000 });
         return res.status(200).json(responseData);
       } catch (err) {
         console.error('Failed to fetch shots:', err);

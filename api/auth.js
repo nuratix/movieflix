@@ -20,6 +20,28 @@ const authRateLimitMap = new Map();
 const AUTH_RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
 const MAX_AUTH_ATTEMPTS_PER_WINDOW = 10;
 
+// In-memory resilient store for shots likes (JavaScript backend)
+const memoryLikes = new Map(); // shot_id -> Set of identifiers
+
+function getMemoryLikesCount(shotId) {
+  return memoryLikes.has(shotId) ? memoryLikes.get(shotId).size : 0;
+}
+function hasMemoryLiked(shotId, identifier) {
+  return memoryLikes.has(shotId) ? memoryLikes.get(shotId).has(identifier) : false;
+}
+function addMemoryLike(shotId, identifier) {
+  if (!memoryLikes.has(shotId)) memoryLikes.set(shotId, new Set());
+  memoryLikes.get(shotId).add(identifier);
+  return memoryLikes.get(shotId).size;
+}
+function removeMemoryLike(shotId, identifier) {
+  if (memoryLikes.has(shotId)) {
+    memoryLikes.get(shotId).delete(identifier);
+    return memoryLikes.get(shotId).size;
+  }
+  return 0;
+}
+
 function getClientIp(req) {
   const realIp = req.headers['x-real-ip'];
   if (realIp && typeof realIp === 'string') {
@@ -279,15 +301,12 @@ export default async function handler(req, res) {
     return res.status(200).end();
   }
 
-  let sql;
+  let sql = null;
   try {
     sql = getDb();
     await ensureTables(sql);
   } catch (dbErr) {
-    console.error('Database connection failed:', dbErr);
-    return res.status(503).json({
-      error: 'Database connection failed. Please try again later.',
-    });
+    console.warn('Database connection notice:', dbErr?.message);
   }
 
   // Parse body safely (supports parsed JSON or raw string)
@@ -299,6 +318,14 @@ export default async function handler(req, res) {
   }
   const query = req.query || {};
   const action = (body.action || query.action || '').toLowerCase();
+
+  // If this action requires persistent database and DB is down, return 503
+  const isShotLikeAction = ['batch-shot-likes', 'like-shot', 'unlike-shot', 'get-shot-likes'].includes(action);
+  if (!sql && !isShotLikeAction) {
+    return res.status(503).json({
+      error: 'Database connection failed. Please try again later.',
+    });
+  }
 
   // 1. GET: Validate token & return user info (ONLY when action is 'me' or empty action on GET)
   if (action === 'me' || (req.method === 'GET' && !action)) {
@@ -363,37 +390,54 @@ export default async function handler(req, res) {
       let userLikedSet = [];
 
       if (shotIds.length > 0) {
-        let rows = [];
-        try {
-          rows = await sql`
-            SELECT shot_id, COUNT(*)::int AS count
-            FROM (
-              SELECT shot_id FROM mf_shots_likes WHERE shot_id = ANY(${shotIds})
-              UNION ALL
-              SELECT shot_id FROM mf_shots_guest_likes WHERE shot_id = ANY(${shotIds})
-            ) combined
-            GROUP BY shot_id
-          `;
-        } catch (_) {
-          rows = await sql`
-            SELECT shot_id, COUNT(*)::int AS count
-            FROM mf_shots_likes
-            WHERE shot_id = ANY(${shotIds})
-            GROUP BY shot_id
-          `;
-        }
-        for (const r of rows) {
-          countsMap[r.shot_id] = r.count;
+        if (sql) {
+          try {
+            const rows = await sql`
+              SELECT shot_id, COUNT(*)::int AS count
+              FROM (
+                SELECT shot_id FROM mf_shots_likes WHERE shot_id = ANY(${shotIds})
+                UNION ALL
+                SELECT shot_id FROM mf_shots_guest_likes WHERE shot_id = ANY(${shotIds})
+              ) combined
+              GROUP BY shot_id
+            `;
+            for (const r of rows) {
+              countsMap[r.shot_id] = r.count;
+            }
+          } catch (_) {
+            try {
+              const rows = await sql`
+                SELECT shot_id, COUNT(*)::int AS count
+                FROM mf_shots_likes
+                WHERE shot_id = ANY(${shotIds})
+                GROUP BY shot_id
+              `;
+              for (const r of rows) {
+                countsMap[r.shot_id] = r.count;
+              }
+            } catch (_) {}
+          }
         }
 
-        if (user) {
-          const userRows = await sql`
-            SELECT shot_id
-            FROM mf_shots_likes
-            WHERE user_id = ${user.id} AND shot_id = ANY(${shotIds})
-          `;
-          userLikedSet = userRows.map((r) => r.shot_id);
-        } else if (guestId) {
+        // Merge any in-memory store likes
+        for (const sId of shotIds) {
+          const memCount = getMemoryLikesCount(sId);
+          if (memCount > 0) {
+            countsMap[sId] = Math.max(countsMap[sId] || 0, memCount);
+          }
+        }
+
+        const identifier = user ? `user:${user.id}` : (guestId ? `guest:${guestId}` : '');
+        if (sql && user) {
+          try {
+            const userRows = await sql`
+              SELECT shot_id
+              FROM mf_shots_likes
+              WHERE user_id = ${user.id} AND shot_id = ANY(${shotIds})
+            `;
+            userLikedSet = userRows.map((r) => r.shot_id);
+          } catch (_) {}
+        } else if (sql && guestId) {
           try {
             const guestRows = await sql`
               SELECT shot_id
@@ -402,6 +446,14 @@ export default async function handler(req, res) {
             `;
             userLikedSet = guestRows.map((r) => r.shot_id);
           } catch (_) {}
+        }
+
+        if (identifier) {
+          for (const sId of shotIds) {
+            if (hasMemoryLiked(sId, identifier) && !userLikedSet.includes(sId)) {
+              userLikedSet.push(sId);
+            }
+          }
         }
       }
 
@@ -591,7 +643,7 @@ export default async function handler(req, res) {
       return res.status(200).json({ status: 'success', message: 'Logged out successfully.' });
     }
 
-    // 5. SHOTS LIKES SYSTEM (Real-time Neon Database - Authenticated or Guest)
+    // 5. SHOTS LIKES SYSTEM (JavaScript Backend: Real-time Neon Database + In-Memory Fallback)
     if (action === 'like-shot') {
       const authHeader = req.headers.authorization || body.token || '';
       const token = authHeader.replace(/^Bearer\s+/i, '');
@@ -604,43 +656,47 @@ export default async function handler(req, res) {
       }
 
       try {
-        if (user) {
-          await sql`
-            INSERT INTO mf_shots_likes (user_id, shot_id)
-            VALUES (${user.id}, ${shotId})
-            ON CONFLICT (user_id, shot_id) DO NOTHING
-          `;
-        } else if (guestId) {
-          try {
-            await sql`
-              INSERT INTO mf_shots_guest_likes (guest_id, shot_id)
-              VALUES (${guestId}, ${shotId})
-              ON CONFLICT (guest_id, shot_id) DO NOTHING
-            `;
-          } catch (_) {}
+        const identifier = user ? `user:${user.id}` : (guestId ? `guest:${guestId}` : '');
+        let currentCount = 1;
+        if (identifier) {
+          currentCount = addMemoryLike(shotId, identifier);
         }
 
-        let countRes = [{ count: 1 }];
-        try {
-          countRes = await sql`
-            SELECT COUNT(*)::int AS count
-            FROM (
-              SELECT shot_id FROM mf_shots_likes WHERE shot_id = ${shotId}
-              UNION ALL
-              SELECT shot_id FROM mf_shots_guest_likes WHERE shot_id = ${shotId}
-            ) combined
-          `;
-        } catch (_) {
-          countRes = await sql`
-            SELECT COUNT(*)::int AS count FROM mf_shots_likes WHERE shot_id = ${shotId}
-          `;
+        if (sql) {
+          try {
+            if (user) {
+              await sql`
+                INSERT INTO mf_shots_likes (user_id, shot_id)
+                VALUES (${user.id}, ${shotId})
+                ON CONFLICT (user_id, shot_id) DO NOTHING
+              `;
+            } else if (guestId) {
+              await sql`
+                INSERT INTO mf_shots_guest_likes (guest_id, shot_id)
+                VALUES (${guestId}, ${shotId})
+                ON CONFLICT (guest_id, shot_id) DO NOTHING
+              `;
+            }
+
+            const countRes = await sql`
+              SELECT COUNT(*)::int AS count
+              FROM (
+                SELECT shot_id FROM mf_shots_likes WHERE shot_id = ${shotId}
+                UNION ALL
+                SELECT shot_id FROM mf_shots_guest_likes WHERE shot_id = ${shotId}
+              ) combined
+            `;
+            if (countRes && countRes[0]?.count) {
+              currentCount = Math.max(currentCount, countRes[0].count);
+            }
+          } catch (_) {}
         }
 
         return res.status(200).json({
           status: 'success',
           liked: true,
           shot_id: shotId,
-          likes_count: countRes[0]?.count || 1,
+          likes_count: currentCount,
         });
       } catch (err) {
         console.error('like-shot error:', err);
@@ -660,41 +716,45 @@ export default async function handler(req, res) {
       }
 
       try {
-        if (user) {
-          await sql`
-            DELETE FROM mf_shots_likes
-            WHERE user_id = ${user.id} AND shot_id = ${shotId}
-          `;
-        } else if (guestId) {
-          try {
-            await sql`
-              DELETE FROM mf_shots_guest_likes
-              WHERE guest_id = ${guestId} AND shot_id = ${shotId}
-            `;
-          } catch (_) {}
+        const identifier = user ? `user:${user.id}` : (guestId ? `guest:${guestId}` : '');
+        let currentCount = 0;
+        if (identifier) {
+          currentCount = removeMemoryLike(shotId, identifier);
         }
 
-        let countRes = [{ count: 0 }];
-        try {
-          countRes = await sql`
-            SELECT COUNT(*)::int AS count
-            FROM (
-              SELECT shot_id FROM mf_shots_likes WHERE shot_id = ${shotId}
-              UNION ALL
-              SELECT shot_id FROM mf_shots_guest_likes WHERE shot_id = ${shotId}
-            ) combined
-          `;
-        } catch (_) {
-          countRes = await sql`
-            SELECT COUNT(*)::int AS count FROM mf_shots_likes WHERE shot_id = ${shotId}
-          `;
+        if (sql) {
+          try {
+            if (user) {
+              await sql`
+                DELETE FROM mf_shots_likes
+                WHERE user_id = ${user.id} AND shot_id = ${shotId}
+              `;
+            } else if (guestId) {
+              await sql`
+                DELETE FROM mf_shots_guest_likes
+                WHERE guest_id = ${guestId} AND shot_id = ${shotId}
+              `;
+            }
+
+            const countRes = await sql`
+              SELECT COUNT(*)::int AS count
+              FROM (
+                SELECT shot_id FROM mf_shots_likes WHERE shot_id = ${shotId}
+                UNION ALL
+                SELECT shot_id FROM mf_shots_guest_likes WHERE shot_id = ${shotId}
+              ) combined
+            `;
+            if (countRes && countRes[0]?.count !== undefined) {
+              currentCount = countRes[0].count;
+            }
+          } catch (_) {}
         }
 
         return res.status(200).json({
           status: 'success',
           liked: false,
           shot_id: shotId,
-          likes_count: countRes[0]?.count || 0,
+          likes_count: currentCount,
         });
       } catch (err) {
         console.error('unlike-shot error:', err);

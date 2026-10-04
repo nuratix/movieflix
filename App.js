@@ -1117,8 +1117,8 @@ const INITIAL_SHOTS = [
     rating: "7.9",
     total_episodes: 37,
     author: "@DramaBox",
-    likes: 1420,
-    shares: 210,
+    likes: 0,
+    shares: 0,
     se: 1,
     ep: 1,
   },
@@ -1131,8 +1131,8 @@ const INITIAL_SHOTS = [
     rating: "7.2",
     total_episodes: 28,
     author: "@NetShort",
-    likes: 2850,
-    shares: 390,
+    likes: 0,
+    shares: 0,
     se: 1,
     ep: 1,
   },
@@ -1145,8 +1145,8 @@ const INITIAL_SHOTS = [
     rating: "7.8",
     total_episodes: 24,
     author: "@DramaBox",
-    likes: 3410,
-    shares: 520,
+    likes: 0,
+    shares: 0,
     se: 1,
     ep: 1,
   },
@@ -1159,8 +1159,8 @@ const INITIAL_SHOTS = [
     rating: "7.9",
     total_episodes: 30,
     author: "@ShortMax",
-    likes: 980,
-    shares: 140,
+    likes: 0,
+    shares: 0,
     se: 1,
     ep: 1,
   },
@@ -1173,8 +1173,8 @@ const INITIAL_SHOTS = [
     rating: "7.1",
     total_episodes: 18,
     author: "@ReelShort",
-    likes: 1760,
-    shares: 260,
+    likes: 0,
+    shares: 0,
     se: 1,
     ep: 1,
   },
@@ -1187,8 +1187,8 @@ const INITIAL_SHOTS = [
     rating: "7.6",
     total_episodes: 32,
     author: "@DramaBox",
-    likes: 4210,
-    shares: 680,
+    likes: 0,
+    shares: 0,
     se: 1,
     ep: 1,
   },
@@ -1201,8 +1201,8 @@ const INITIAL_SHOTS = [
     rating: "7.7",
     total_episodes: 20,
     author: "@NetShort",
-    likes: 890,
-    shares: 130,
+    likes: 0,
+    shares: 0,
     se: 1,
     ep: 1,
   },
@@ -1215,8 +1215,8 @@ const INITIAL_SHOTS = [
     rating: "7.0",
     total_episodes: 16,
     author: "@GoodShort",
-    likes: 2150,
-    shares: 310,
+    likes: 0,
+    shares: 0,
     se: 1,
     ep: 1,
   },
@@ -1229,8 +1229,8 @@ const INITIAL_SHOTS = [
     rating: "7.1",
     total_episodes: 25,
     author: "@ReelShort",
-    likes: 1640,
-    shares: 240,
+    likes: 0,
+    shares: 0,
     se: 1,
     ep: 1,
   },
@@ -1243,8 +1243,8 @@ const INITIAL_SHOTS = [
     rating: "7.7",
     total_episodes: 22,
     author: "@ShortMax",
-    likes: 3120,
-    shares: 480,
+    likes: 0,
+    shares: 0,
     se: 1,
     ep: 1,
   }
@@ -1257,10 +1257,11 @@ function formatShotCount(num) {
   return String(num);
 }
 
-function buildPureHtmlShotsPage({ initialShots, apiBase, isMuted, targetShortId }) {
+function buildPureHtmlShotsPage({ initialShots, apiBase, isMuted, targetShortId, authToken }) {
   const safeShotsJson = JSON.stringify(initialShots || []);
   const safeTargetId = JSON.stringify(targetShortId || '');
   const safeApiBase = JSON.stringify(apiBase || '');
+  const safeAuthToken = JSON.stringify(authToken || '');
   const safeIsMuted = isMuted ? 'true' : 'false';
 
   return `<!DOCTYPE html>
@@ -1689,6 +1690,7 @@ function buildPureHtmlShotsPage({ initialShots, apiBase, isMuted, targetShortId 
       var initialShots = ${safeShotsJson};
       var targetShortId = ${safeTargetId};
       var isMuted = ${safeIsMuted};
+      var authToken = ${safeAuthToken};
       var currentActiveIdx = -1;
       var streamCache = {};
       var shots = initialShots.slice();
@@ -1759,7 +1761,13 @@ function buildPureHtmlShotsPage({ initialShots, apiBase, isMuted, targetShortId 
         if (!shotList || shotList.length === 0) return;
         var ids = shotList.map(function(s) { return String(s.subject_id || s.id); });
         try {
-          var res = await fetch(API_BASE + '/api/auth?action=batch-shot-likes&device_id=' + encodeURIComponent(deviceId) + '&shot_ids=' + encodeURIComponent(ids.join(',')));
+          var headers = {};
+          if (authToken) {
+            headers['Authorization'] = 'Bearer ' + authToken;
+          }
+          var res = await fetch(API_BASE + '/api/auth?action=batch-shot-likes&device_id=' + encodeURIComponent(deviceId) + '&shot_ids=' + encodeURIComponent(ids.join(',')), {
+            headers: headers
+          });
           var data = await res.json();
           if (data && data.status === 'success') {
             var counts = data.counts || {};
@@ -1769,7 +1777,9 @@ function buildPureHtmlShotsPage({ initialShots, apiBase, isMuted, targetShortId 
               var s = shots[i];
               var sId = String(s.subject_id || s.id);
               if (counts[sId] !== undefined) {
-                s.likesCount = (s.likes || 450) + counts[sId];
+                s.likesCount = Number(counts[sId]);
+              } else if (ids.indexOf(sId) !== -1) {
+                s.likesCount = Number(s.likes || 0);
               }
               if (userLiked.has(sId) || Boolean(localLikedIds[sId])) {
                 s.liked = true;
@@ -1796,7 +1806,7 @@ function buildPureHtmlShotsPage({ initialShots, apiBase, isMuted, targetShortId 
       function createSlideElement(item, idx) {
         item.currentEp = item.ep || 1;
         item.total_episodes = item.total_episodes || 12;
-        item.likesCount = item.likes || 450;
+        item.likesCount = Number(item.likes || 0);
         item.liked = Boolean(localLikedIds[String(item.subject_id || item.id)]);
 
         var slide = document.createElement('div');
@@ -1835,7 +1845,6 @@ function buildPureHtmlShotsPage({ initialShots, apiBase, isMuted, targetShortId 
                 '<div class="action-icon-circle">' +
                   '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>' +
                 '</div>' +
-                '<span class="action-label">Share</span>' +
               '</button>' +
             '</div>' +
             '<div class="bottom-info">' +
@@ -1923,9 +1932,13 @@ function buildPureHtmlShotsPage({ initialShots, apiBase, isMuted, targetShortId 
           });
 
           // Sync to backend API (supports registered users & guests)
+          var postHeaders = { 'Content-Type': 'application/json' };
+          if (authToken) {
+            postHeaders['Authorization'] = 'Bearer ' + authToken;
+          }
           fetch(API_BASE + '/api/auth', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: postHeaders,
             body: JSON.stringify({
               action: item.liked ? 'like-shot' : 'unlike-shot',
               shot_id: sId,
@@ -1933,7 +1946,7 @@ function buildPureHtmlShotsPage({ initialShots, apiBase, isMuted, targetShortId 
             })
           }).then(function(r) { return r.json(); }).then(function(data) {
             if (data && data.status === 'success' && typeof data.likes_count === 'number') {
-              item.likesCount = (item.likes || 450) + data.likes_count;
+              item.likesCount = Number(data.likes_count);
               likeCountEl.textContent = formatCount(item.likesCount);
             }
           }).catch(function(e) {
@@ -1948,7 +1961,9 @@ function buildPureHtmlShotsPage({ initialShots, apiBase, isMuted, targetShortId 
 
         shareBtn.addEventListener('click', function(e) {
           e.stopPropagation();
-          postToNative({ type: 'share', item: item });
+          var activeSlug = item.slug || item.subject_id || item.id;
+          var shareUrl = 'https://movieflix-pi-six.vercel.app/short/' + encodeURIComponent(activeSlug);
+          postToNative({ type: 'share', item: item, url: shareUrl, slug: activeSlug });
         });
 
         function changeEp(delta) {
@@ -2209,6 +2224,18 @@ function buildPureHtmlShotsPage({ initialShots, apiBase, isMuted, targetShortId 
           }
         }
 
+        var activeSlug = item.slug || item.subject_id || item.id;
+        if (activeSlug && typeof window !== 'undefined' && window.history && window.history.replaceState) {
+          try {
+            window.history.replaceState(null, '', '/short/' + encodeURIComponent(activeSlug));
+          } catch (_) {}
+        }
+        postToNative({
+          type: 'active-short',
+          slug: activeSlug,
+          shotId: String(item.subject_id || item.id)
+        });
+
         if (idx + 1 < shots.length) {
           fetchStreamUrl(shots[idx + 1]);
         }
@@ -2250,8 +2277,19 @@ function buildPureHtmlShotsPage({ initialShots, apiBase, isMuted, targetShortId 
 
       var startIdx = 0;
       if (targetShortId) {
+        var cleanTarget = String(targetShortId).trim().toLowerCase();
         for (var t = 0; t < shots.length; t++) {
-          if (String(shots[t].subject_id || shots[t].id) === String(targetShortId) || shots[t].slug === targetShortId) {
+          var currShot = shots[t];
+          var currId = String(currShot.subject_id || currShot.id || '').toLowerCase();
+          var currSlug = String(currShot.slug || '').toLowerCase();
+          if (
+            currId === cleanTarget ||
+            currSlug === cleanTarget ||
+            currId.startsWith(cleanTarget) ||
+            currSlug.startsWith(cleanTarget) ||
+            cleanTarget.startsWith(currId) ||
+            cleanTarget.startsWith(currSlug)
+          ) {
             startIdx = t;
             if (feed.children[t]) feed.children[t].scrollIntoView();
             break;
@@ -2319,9 +2357,10 @@ function ShotsFeedView({
       apiBase,
       isMuted: Platform.OS === 'web',
       targetShortId,
+      authToken: authAccessToken || '',
     });
     setShotsHtml(html);
-  }, [targetShortId]);
+  }, [targetShortId, authAccessToken]);
 
   // Tab switching: pause video when moving away from Shots, resume when returning
   useEffect(() => {
@@ -2355,6 +2394,12 @@ function ShotsFeedView({
       showToast?.(data.message);
     } else if (data.type === 'haptic') {
       triggerHaptic?.(data.style || 'selection');
+    } else if (data.type === 'active-short') {
+      if (Platform.OS === 'web' && typeof window !== 'undefined' && window.history?.replaceState && data.slug) {
+        try {
+          window.history.replaceState(null, '', `/short/${encodeURIComponent(data.slug)}`);
+        } catch (_) {}
+      }
     } else if (data.type === 'like') {
       triggerHaptic?.('selection');
       if (authUser && authAccessToken && data.shotId) {
@@ -2372,8 +2417,8 @@ function ShotsFeedView({
       }
     } else if (data.type === 'share' && data.item) {
       triggerHaptic?.('selection');
-      const sId = data.item.subject_id || data.item.id;
-      const shareUrl = `https://movieflix-pi-six.vercel.app/short/${sId}`;
+      const activeSlug = data.slug || data.item.slug || data.item.subject_id || data.item.id;
+      const shareUrl = data.url || `https://movieflix-pi-six.vercel.app/short/${encodeURIComponent(activeSlug)}`;
       Share.share({
         message: `Watch "${data.item.title || 'Movieflix Shorts'}" on Movieflix Shorts! 🎬🍿\n${shareUrl}`,
         url: shareUrl,
