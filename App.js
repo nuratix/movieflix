@@ -335,19 +335,19 @@ const buildVideoSource = (url) => {
   if (!url) return null;
   if (typeof url === 'number') return url;
   if (typeof url === 'object' && url.uri) return url;
-  if (typeof url === 'string' && (url.startsWith('file://') || url.startsWith('/'))) {
+  if (typeof url === 'string' && (url.startsWith('file://') || (url.startsWith('/') && !url.startsWith('/api/')))) {
     return { uri: url.startsWith('file://') ? url : `file://${url}` };
   }
-
-  // On Web: stream through our Vercel reverse proxy to bypass browser CORS & Forbidden Referer restrictions
-  if (Platform.OS === 'web' && typeof url === 'string' && (url.startsWith('http://') || url.startsWith('https://'))) {
-    return {
-      uri: `/api/proxy?url=${encodeURIComponent(url)}`,
-    };
+  if (typeof url === 'string' && url.includes('/api/proxy')) {
+    return { uri: url };
   }
 
+  // Route remote HTTP/HTTPS video streams through reverse proxy to bypass CDN anti-hotlink 429 restrictions
+  const proxyBase = Platform.OS === 'web' ? '' : API_BASE;
+  const proxiedUri = `${proxyBase}/api/proxy?url=${encodeURIComponent(url)}`;
+
   return {
-    uri: url,
+    uri: proxiedUri,
     headers: {
       'Referer': 'https://netfilm.world/',
       'Origin': 'https://netfilm.world',
@@ -1106,11 +1106,12 @@ const INITIAL_SHOTS = [
     slug: "im-pregnant-its-not-yours-iLdEdERDgE",
     poster_url: "https://pbcdnw.aoneroom.com/image/2026/08/19/c0a1ea39fb7a40fd3d0ec44fa6684a39.jpg",
     rating: "7.9",
-    video_url: "https://bcdnxw.hakunaymatata.com/dramabox/1dec3ee273238342f33befdeab24006e.mp4?sign=3acca8a5ac90f140367c0590a3e7ecae&t=1791093507",
-    duration: 137,
+    total_episodes: 37,
     author: "@DramaBox",
     likes: 42430,
     shares: 7551,
+    se: 1,
+    ep: 1,
   },
   {
     id: "8514694265598101032-ep1",
@@ -1119,11 +1120,12 @@ const INITIAL_SHOTS = [
     slug: "beneath-her-gown-the-masters-claimed-wolf-pet-k8xuNqboZ8a",
     poster_url: "https://pbcdnw.aoneroom.com/image/2026/08/11/50e2c2fc118aaacb56bf6e892743d5ff.jpg",
     rating: "7.2",
-    video_url: "https://bcdnxw.hakunaymatata.com/netshort/156142bbcb4b08e6aeab4a2ec8b66f6e.mp4?sign=3f7e91c1310b989d1cac063f590a8e2d&t=1791093553",
-    duration: 157,
+    total_episodes: 28,
     author: "@NetShort",
     likes: 47582,
     shares: 3782,
+    se: 1,
+    ep: 1,
   },
   {
     id: "3453846752107844528-ep1",
@@ -1132,11 +1134,12 @@ const INITIAL_SHOTS = [
     slug: "disciplined-by-my-mafia-master-IOUVnVAE874",
     poster_url: "https://pbcdnw.aoneroom.com/image/2026/08/12/eba98a15ea3a790581c975c58a80cf94.jpg",
     rating: "7.8",
-    video_url: "https://bcdnxw.hakunaymatata.com/dramabox/78b77c22753a097796eb3423da8b4f1f.mp4?sign=84e4de4bec3b651009d9daf4a427acc8&t=1791093554",
-    duration: 143,
+    total_episodes: 24,
     author: "@DramaBox",
     likes: 23473,
     shares: 3201,
+    se: 1,
+    ep: 1,
   },
   {
     id: "8656852975811445184-ep1",
@@ -1145,11 +1148,12 @@ const INITIAL_SHOTS = [
     slug: "the-hidden-dragon-rider-returns-for-justice-KTqXdfFtuja",
     poster_url: "https://pbcdnw.aoneroom.com/image/2026/08/24/4be78c41bd06008edc758fed54b88750.jpg",
     rating: "7.9",
-    video_url: "https://bcdnxw.hakunaymatata.com/resource/8de4068b08b56d566abb845244948c66.mp4?sign=865e812b76a2ccda15305d86ff01075f&t=1791093509",
-    duration: 286,
+    total_episodes: 30,
     author: "@ShortMax",
     likes: 26148,
     shares: 5676,
+    se: 1,
+    ep: 1,
   },
   {
     id: "1893361129175368768-ep1",
@@ -1158,11 +1162,12 @@ const INITIAL_SHOTS = [
     slug: "the-gambling-god-vanished-until-the-final-hand-8sEaor4CRf2",
     poster_url: "https://pbcdnw.aoneroom.com/image/2026/08/24/1901755c3ec30ab5e338938d3c9f0064.jpg",
     rating: "7.1",
-    video_url: "https://bcdnxw.hakunaymatata.com/resource/d8ece1c6ea53db3a347cbe2d9558d519.mp4?sign=fdb1d6aed967cc2ae6dcce0e0a8e91fa&t=1791093556",
-    duration: 202,
+    total_episodes: 18,
     author: "@ReelShort",
     likes: 43305,
     shares: 5837,
+    se: 1,
+    ep: 1,
   },
   {
     id: "8569709395045678544-ep1",
@@ -1171,11 +1176,12 @@ const INITIAL_SHOTS = [
     slug: "omg-my-divorce-client-is-my-billionaire-husband-6Rd6xDjm3da",
     poster_url: "https://pbcdnw.aoneroom.com/image/2026/08/19/6b3f8c18a5311f8b344a19037c6f199b.jpg",
     rating: "7.6",
-    video_url: "https://bcdnxw.hakunaymatata.com/resource/ac8a896a5d270f0a719705d147b47054.mp4?sign=5caf1fbd0266753516a3b29c1687b8d8&t=1791093556",
-    duration: 202,
+    total_episodes: 32,
     author: "@DramaBox",
     likes: 32274,
     shares: 6097,
+    se: 1,
+    ep: 1,
   },
   {
     id: "9106721078893863608-ep1",
@@ -1184,11 +1190,12 @@ const INITIAL_SHOTS = [
     slug: "one-move-god-mode-2-uH6hEtvSIQa",
     poster_url: "https://pbcdnw.aoneroom.com/image/2026/08/12/0a07afddec873b23bf2b74073424a4a4.jpg",
     rating: "7.7",
-    video_url: "https://bcdnxw.hakunaymatata.com/netshort/d60f39f5d3e05105330d92edc602e4bb.mp4?sign=c3f4a1ce13abac499d74d7f25b8ba1b8&t=1791093512",
-    duration: 224,
+    total_episodes: 20,
     author: "@NetShort",
     likes: 40962,
     shares: 1735,
+    se: 1,
+    ep: 1,
   },
   {
     id: "8529996031482808168-ep1",
@@ -1197,11 +1204,12 @@ const INITIAL_SHOTS = [
     slug: "daddy-dons-forbidden-pet-QEduiBht7aa",
     poster_url: "https://pbcdnw.aoneroom.com/image/2026/08/25/f02290e1f49389c5a626cea31c20c3a0.jpg",
     rating: "7.0",
-    video_url: "https://bcdnxw.hakunaymatata.com/goodshort/e3efe9f0da6340af9ff9602c7e4c734d.mp4?sign=110e23608f7627ff9c8e801e4d9ec40c&t=1791093159",
-    duration: 152,
+    total_episodes: 16,
     author: "@GoodShort",
     likes: 47795,
     shares: 8244,
+    se: 1,
+    ep: 1,
   },
   {
     id: "6191020716834840472-ep1",
@@ -1210,11 +1218,12 @@ const INITIAL_SHOTS = [
     slug: "the-100th-divorce-was-final-ke4MZwjWkn7",
     poster_url: "https://pbcdnw.aoneroom.com/image/2026/08/18/5fbef86eb4e1a06e9708fe18412b2e60.jpg",
     rating: "7.1",
-    video_url: "https://bcdnxw.hakunaymatata.com/resource/d5d4a715d35a2b34742d8db2991d1600.mp4?sign=4b5b3c9b9c6de463e82611e4f4c68947&t=1791093559",
-    duration: 139,
+    total_episodes: 25,
     author: "@ReelShort",
     likes: 26778,
     shares: 5717,
+    se: 1,
+    ep: 1,
   },
   {
     id: "1980899104976688224-ep1",
@@ -1223,11 +1232,12 @@ const INITIAL_SHOTS = [
     slug: "from-xl-to-extra-love-EOfYUApxkm2",
     poster_url: "https://pbcdnw.aoneroom.com/image/2026/03/26/68269d6d0a6b02da95bd09cb04b42cce.jpg",
     rating: "7.7",
-    video_url: "https://bcdnxw.hakunaymatata.com/resource/a8423c123a978d208969481422fbe092.mp4?sign=b69550f73c14086513e20515139ffeea&t=1791093560",
-    duration: 189,
+    total_episodes: 22,
     author: "@ShortMax",
     likes: 33548,
     shares: 2847,
+    se: 1,
+    ep: 1,
   }
 ];
 
@@ -1255,12 +1265,15 @@ function ShotItem({
   showToast,
   triggerHaptic,
 }) {
-  const [videoStreamUrl, setVideoStreamUrl] = useState(item.video_url || null);
+  const [currentEp, setCurrentEp] = useState(item.ep || 1);
+  const [totalEpisodes, setTotalEpisodes] = useState(item.total_episodes || item.max_ep || 12);
+  const [videoStreamUrl, setVideoStreamUrl] = useState(null);
   const [isLoadingStream, setIsLoadingStream] = useState(false);
   const [isPausedByUser, setIsPausedByUser] = useState(false);
   const [showPlayPauseAnim, setShowPlayPauseAnim] = useState(false);
   const [showHeartAnim, setShowHeartAnim] = useState(false);
   const [playbackProgress, setPlaybackProgress] = useState(0);
+  const epStreamsCache = useRef({});
 
   // Floating heart animation (Instagram double tap)
   const heartScale = useRef(new Animated.Value(0)).current;
@@ -1297,23 +1310,68 @@ function ShotItem({
     outputRange: ['0deg', '360deg'],
   });
 
-  // Resolve stream URL if not already available
+  // Fetch episode count if not provided
   useEffect(() => {
-    if (!videoStreamUrl && isActive && !isLoadingStream) {
-      setIsLoadingStream(true);
-      const subjectId = item.subject_id;
-      const detailPath = item.slug || '';
-      apiFetch(`${API_BASE}/api/content?endpoint=stream&id=${encodeURIComponent(subjectId)}&detail_path=${encodeURIComponent(detailPath)}&se=${item.se || 1}&ep=${item.ep || 1}`)
+    if (isActive && item.slug && (!item.total_episodes || item.total_episodes <= 1)) {
+      apiFetch(`${API_BASE}/api/content?endpoint=detail&slug=${encodeURIComponent(item.slug)}`)
         .then((res) => res.json())
-        .then((data) => {
-          if (data?.sources?.[0]?.url) {
-            setVideoStreamUrl(data.sources[0].url);
+        .then((detail) => {
+          const seasons = detail?.data?.resource?.seasons || [];
+          const maxEp = seasons[0]?.maxEp;
+          if (typeof maxEp === 'number' && maxEp > 1) {
+            setTotalEpisodes(maxEp);
           }
         })
-        .catch((e) => console.warn('[Shots] Stream resolve note:', e))
-        .finally(() => setIsLoadingStream(false));
+        .catch(() => {});
     }
-  }, [isActive, videoStreamUrl, item, isLoadingStream]);
+  }, [isActive, item.slug]);
+
+  // Resolve stream URL whenever active or current episode changes
+  useEffect(() => {
+    if (!isActive) return;
+
+    if (epStreamsCache.current[currentEp]) {
+      setVideoStreamUrl(epStreamsCache.current[currentEp]);
+      return;
+    }
+
+    let isCurrent = true;
+    setIsLoadingStream(true);
+
+    const subjectId = item.subject_id;
+    const detailPath = item.slug || '';
+    const epToFetch = currentEp;
+
+    apiFetch(`${API_BASE}/api/content?endpoint=stream&id=${encodeURIComponent(subjectId)}&detail_path=${encodeURIComponent(detailPath)}&se=1&ep=${epToFetch}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (!isCurrent) return;
+        if (data?.sources?.[0]?.url) {
+          const streamUrl = data.sources[0].url;
+          epStreamsCache.current[epToFetch] = streamUrl;
+          setVideoStreamUrl(streamUrl);
+        } else {
+          // Fallback to ep 1 or se 0
+          apiFetch(`${API_BASE}/api/content?endpoint=stream&id=${encodeURIComponent(subjectId)}&detail_path=${encodeURIComponent(detailPath)}&se=1&ep=1`)
+            .then((r) => r.json())
+            .then((fb) => {
+              if (!isCurrent) return;
+              if (fb?.sources?.[0]?.url) {
+                setVideoStreamUrl(fb.sources[0].url);
+              }
+            })
+            .catch(() => {});
+        }
+      })
+      .catch((e) => console.warn('[Shots] Stream resolve note:', e))
+      .finally(() => {
+        if (isCurrent) setIsLoadingStream(false);
+      });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [isActive, currentEp, item]);
 
   // Video player via expo-video
   const videoSource = useMemo(() => {
@@ -1332,6 +1390,23 @@ function ShotItem({
       console.warn('[Shots] Player setup note:', e);
     }
   });
+
+  // Synchronously update player when videoStreamUrl arrives
+  useEffect(() => {
+    if (player && videoStreamUrl) {
+      try {
+        const src = buildVideoSource(videoStreamUrl);
+        if (typeof player.replace === 'function') {
+          player.replace(src);
+        }
+        if (isActive && isTabActive && !isPausedByUser) {
+          player.play();
+        }
+      } catch (e) {
+        console.warn('[Shots] player.replace note:', e);
+      }
+    }
+  }, [player, videoStreamUrl, isActive, isTabActive, isPausedByUser]);
 
   // Keep playback state synchronized
   useEffect(() => {
@@ -1365,6 +1440,66 @@ function ShotItem({
     });
     return () => sub?.remove?.();
   }, [player]);
+
+  const handleSwipeEpisode = (direction) => {
+    if (direction === 'next') {
+      if (currentEp < totalEpisodes) {
+        const next = currentEp + 1;
+        setCurrentEp(next);
+        triggerHaptic?.('selection');
+        showToast?.(`Playing Episode ${next} of ${totalEpisodes}`);
+      } else {
+        showToast?.(`Last episode reached (${totalEpisodes})`);
+      }
+    } else if (direction === 'prev') {
+      if (currentEp > 1) {
+        const prev = currentEp - 1;
+        setCurrentEp(prev);
+        triggerHaptic?.('selection');
+        showToast?.(`Playing Episode ${prev} of ${totalEpisodes}`);
+      } else {
+        showToast?.(`First episode reached`);
+      }
+    }
+  };
+
+  // Touch tracking for swipe gestures & tap interactions
+  const touchStartX = useRef(0);
+  const touchStartY = useRef(0);
+  const touchStartTime = useRef(0);
+
+  const handleTouchStart = (e) => {
+    const t = e.nativeEvent;
+    touchStartX.current = t.pageX || t.clientX || 0;
+    touchStartY.current = t.pageY || t.clientY || 0;
+    touchStartTime.current = Date.now();
+  };
+
+  const handleTouchEnd = (e) => {
+    const t = e.nativeEvent;
+    const endX = t.pageX || t.clientX || 0;
+    const endY = t.pageY || t.clientY || 0;
+    const dx = endX - touchStartX.current;
+    const dy = endY - touchStartY.current;
+    const dt = Date.now() - touchStartTime.current;
+
+    // Detect horizontal swipe across episodes: |dx| > 38 and horizontal dominance
+    if (Math.abs(dx) > 38 && Math.abs(dx) > Math.abs(dy) * 1.25 && dt < 700) {
+      if (dx < 0) {
+        // Swiped Left -> Next Episode
+        handleSwipeEpisode('next');
+      } else {
+        // Swiped Right -> Previous Episode (or user can swipe right to see episodes)
+        handleSwipeEpisode('prev');
+      }
+      return;
+    }
+
+    // Tap detected
+    if (Math.abs(dx) < 15 && Math.abs(dy) < 15) {
+      handleScreenPress();
+    }
+  };
 
   // Double tap to like handling
   const lastTapRef = useRef(0);
@@ -1421,6 +1556,42 @@ function ShotItem({
     });
   };
 
+  // Render bottom episode navigation dots
+  const renderEpisodeDots = () => {
+    const maxVisibleDots = 7;
+    let startEp = 1;
+    let endEp = totalEpisodes;
+
+    if (totalEpisodes > maxVisibleDots) {
+      const half = Math.floor(maxVisibleDots / 2);
+      startEp = Math.max(1, currentEp - half);
+      endEp = Math.min(totalEpisodes, startEp + maxVisibleDots - 1);
+      if (endEp - startEp + 1 < maxVisibleDots) {
+        startEp = Math.max(1, endEp - maxVisibleDots + 1);
+      }
+    }
+
+    const dots = [];
+    for (let ep = startEp; ep <= endEp; ep++) {
+      const isCur = ep === currentEp;
+      dots.push(
+        <TouchableOpacity
+          key={`shot-ep-dot-${ep}`}
+          onPress={() => {
+            if (ep !== currentEp) {
+              setCurrentEp(ep);
+              triggerHaptic?.('selection');
+              showToast?.(`Playing Episode ${ep} of ${totalEpisodes}`);
+            }
+          }}
+          hitSlop={{ top: 8, bottom: 8, left: 3, right: 3 }}
+          style={[styles.shotsEpDot, isCur && styles.shotsEpDotActive]}
+        />
+      );
+    }
+    return dots;
+  };
+
   const videoWidth = Math.min(containerWidth, Math.max(320, Math.floor(containerHeight * (9 / 16))));
   const isLetterboxed = containerWidth > videoWidth;
 
@@ -1439,204 +1610,255 @@ function ShotItem({
       {/* 9:16 Vertical Video Frame (Full screen on mobile, centered 9:16 on desktop) */}
       <View style={{ width: videoWidth, height: containerHeight, backgroundColor: '#050505', position: 'relative', overflow: 'hidden' }}>
         {/* 9:16 Video Player or High-Res Poster */}
-        <TouchableOpacity
+        <View
           style={StyleSheet.absoluteFillObject}
-          activeOpacity={1}
-          onPress={handleScreenPress}
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
         >
-        {videoStreamUrl && isActive ? (
-          <VideoView
-            player={player}
-            style={StyleSheet.absoluteFillObject}
-            contentFit="cover"
-            nativeControls={false}
-          />
-        ) : (
-          <SafeImage
-            uri={item.poster_url}
-            style={StyleSheet.absoluteFillObject}
-            resizeMode="cover"
-          />
-        )}
-
-        {/* Ambient Dark Gradient for UI Readability */}
-        <LinearGradient
-          colors={['rgba(0,0,0,0.35)', 'transparent', 'rgba(0,0,0,0.4)', 'rgba(0,0,0,0.88)']}
-          locations={[0, 0.25, 0.65, 1]}
-          style={StyleSheet.absoluteFillObject}
-          pointerEvents="none"
-        />
-
-        {/* Loading Spinner while buffering */}
-        {isLoadingStream && (
-          <View style={styles.shotsBufferingOverlay} pointerEvents="none">
-            <ActivityIndicator size="large" color="#e50914" />
-          </View>
-        )}
-
-        {/* Double-Tap Floating Heart Animation */}
-        {showHeartAnim && (
-          <Animated.View
-            style={[
-              styles.shotsHeartBurst,
-              {
-                opacity: heartOpacity,
-                transform: [{ scale: heartScale }],
-              },
-            ]}
-            pointerEvents="none"
-          >
-            <Feather name="heart" size={90} color="#e50914" />
-          </Animated.View>
-        )}
-
-        {/* Single-Tap Play/Pause Indicator Flash */}
-        {showPlayPauseAnim && (
-          <Animated.View
-            style={[
-              styles.shotsPlayPauseIndicator,
-              { opacity: playPauseAnim },
-            ]}
-            pointerEvents="none"
-          >
-            <Feather
-              name={isPausedByUser ? "pause" : "play"}
-              size={36}
-              color="#FFFFFF"
-              style={{ marginLeft: isPausedByUser ? 0 : 3 }}
+          {videoStreamUrl && isActive ? (
+            <VideoView
+              player={player}
+              style={StyleSheet.absoluteFillObject}
+              contentFit="cover"
+              nativeControls={false}
             />
-          </Animated.View>
-        )}
-      </TouchableOpacity>
+          ) : (
+            <SafeImage
+              uri={item.poster_url}
+              style={StyleSheet.absoluteFillObject}
+              resizeMode="cover"
+            />
+          )}
 
-      {/* ── Instagram Right Column Floating Actions ── */}
-      <View style={styles.shotsRightColumn}>
-        {/* Creator Avatar with follow plus badge */}
-        <View style={styles.shotsAvatarContainer}>
-          <SafeImage uri={item.poster_url} style={styles.shotsAvatarImg} resizeMode="cover" />
-          <View style={styles.shotsAvatarBadge}>
-            <Feather name="plus" size={10} color="#fff" />
-          </View>
+          {/* Ambient Dark Gradient for UI Readability */}
+          <LinearGradient
+            colors={['rgba(0,0,0,0.35)', 'transparent', 'rgba(0,0,0,0.4)', 'rgba(0,0,0,0.88)']}
+            locations={[0, 0.25, 0.65, 1]}
+            style={StyleSheet.absoluteFillObject}
+            pointerEvents="none"
+          />
+
+          {/* Loading Spinner while buffering or switching episodes */}
+          {isLoadingStream && (
+            <View style={styles.shotsBufferingOverlay} pointerEvents="none">
+              <ActivityIndicator size="large" color="#e50914" />
+              <Text style={styles.shotsBufferingText}>
+                Loading Ep {currentEp}...
+              </Text>
+            </View>
+          )}
+
+          {/* Double-Tap Floating Heart Animation */}
+          {showHeartAnim && (
+            <Animated.View
+              style={[
+                styles.shotsHeartBurst,
+                {
+                  opacity: heartOpacity,
+                  transform: [{ scale: heartScale }],
+                },
+              ]}
+              pointerEvents="none"
+            >
+              <Feather name="heart" size={90} color="#e50914" />
+            </Animated.View>
+          )}
+
+          {/* Single-Tap Play/Pause Indicator Flash */}
+          {showPlayPauseAnim && (
+            <Animated.View
+              style={[
+                styles.shotsPlayPauseIndicator,
+                { opacity: playPauseAnim },
+              ]}
+              pointerEvents="none"
+            >
+              <Feather
+                name={isPausedByUser ? "pause" : "play"}
+                size={36}
+                color="#FFFFFF"
+                style={{ marginLeft: isPausedByUser ? 0 : 3 }}
+              />
+            </Animated.View>
+          )}
+
+          {/* Tap to Unmute Badge if muted on Web */}
+          {isMuted && isActive && (
+            <TouchableOpacity
+              style={styles.shotsUnmuteBadge}
+              onPress={() => {
+                onToggleMute();
+                showToast?.("Sound unmuted 🔊");
+              }}
+              activeOpacity={0.8}
+            >
+              <Feather name="volume-x" size={13} color="#FFFFFF" style={{ marginRight: 5 }} />
+              <Text style={styles.shotsUnmuteText}>Tap for sound</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
-        {/* Like / Heart Button */}
-        <TouchableOpacity
-          style={styles.shotsActionBtn}
-          onPress={() => {
-            triggerHaptic?.('selection');
-            onToggleLike();
-          }}
-          activeOpacity={0.7}
-        >
-          <View style={[styles.shotsActionIconCircle, isLiked && { backgroundColor: 'rgba(229, 9, 20, 0.25)' }]}>
-            <Feather name="heart" size={26} color={isLiked ? "#e50914" : "#FFFFFF"} />
-          </View>
-          <Text style={styles.shotsActionCount}>
-            {formatShotCount(isLiked ? item.likes + 1 : item.likes)}
-          </Text>
-        </TouchableOpacity>
-
-        {/* Comment Button */}
-        <TouchableOpacity
-          style={styles.shotsActionBtn}
-          onPress={() => showToast?.("Comments coming soon! 💬")}
-          activeOpacity={0.7}
-        >
-          <View style={styles.shotsActionIconCircle}>
-            <Feather name="message-circle" size={24} color="#FFFFFF" />
-          </View>
-          <Text style={styles.shotsActionCount}>
-            {formatShotCount(item.shares ? Math.floor(item.shares / 3) : 840)}
-          </Text>
-        </TouchableOpacity>
-
-        {/* Bookmark / Save Button */}
-        <TouchableOpacity
-          style={styles.shotsActionBtn}
-          onPress={() => {
-            triggerHaptic?.('selection');
-            onToggleSave();
-          }}
-          activeOpacity={0.7}
-        >
-          <View style={[styles.shotsActionIconCircle, isSaved && { backgroundColor: 'rgba(245, 158, 11, 0.25)' }]}>
-            <Feather name="bookmark" size={24} color={isSaved ? "#f59e0b" : "#FFFFFF"} />
-          </View>
-          <Text style={styles.shotsActionCount}>
-            {isSaved ? "Saved" : "Save"}
-          </Text>
-        </TouchableOpacity>
-
-        {/* Share Button */}
-        <TouchableOpacity
-          style={styles.shotsActionBtn}
-          onPress={onShare}
-          activeOpacity={0.7}
-        >
-          <View style={styles.shotsActionIconCircle}>
-            <Feather name="send" size={23} color="#FFFFFF" />
-          </View>
-          <Text style={styles.shotsActionCount}>
-            {formatShotCount(item.shares || 1200)}
-          </Text>
-        </TouchableOpacity>
-
-        {/* Mute / Unmute Button */}
-        <TouchableOpacity
-          style={styles.shotsActionBtn}
-          onPress={() => {
-            triggerHaptic?.('selection');
-            onToggleMute();
-          }}
-          activeOpacity={0.7}
-        >
-          <View style={styles.shotsActionIconCircle}>
-            <Feather name={isMuted ? "volume-x" : "volume-2"} size={22} color="#FFFFFF" />
-          </View>
-        </TouchableOpacity>
-
-        {/* Spinning Vinyl Audio Disc (Instagram Signature) */}
-        <Animated.View style={[styles.shotsVinylContainer, { transform: [{ rotate: spin }] }]}>
-          <View style={styles.shotsVinylRing}>
-            <View style={styles.shotsVinylCenter}>
-              <Feather name="music" size={11} color="#FFFFFF" />
+        {/* ── Instagram Right Column Floating Actions ── */}
+        <View style={styles.shotsRightColumn}>
+          {/* Creator Avatar with follow plus badge */}
+          <View style={styles.shotsAvatarContainer}>
+            <SafeImage uri={item.poster_url} style={styles.shotsAvatarImg} resizeMode="cover" />
+            <View style={styles.shotsAvatarBadge}>
+              <Feather name="plus" size={10} color="#fff" />
             </View>
           </View>
-        </Animated.View>
-      </View>
 
-      {/* ── Bottom-Left Caption & Creator Overlay ── */}
-      <View style={styles.shotsBottomOverlay} pointerEvents="box-none">
-        <View style={styles.shotsAuthorRow}>
-          <Text style={styles.shotsAuthorText}>{item.author || '@DramaBox'}</Text>
-          <View style={styles.shotsVerifiedBadge}>
-            <Feather name="check" size={10} color="#FFFFFF" />
-          </View>
-          <View style={styles.shotsEpisodeBadge}>
-            <Text style={styles.shotsEpisodeText}>9:16 HD</Text>
-          </View>
+          {/* Like / Heart Button */}
+          <TouchableOpacity
+            style={styles.shotsActionBtn}
+            onPress={() => {
+              triggerHaptic?.('selection');
+              onToggleLike();
+            }}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.shotsActionIconCircle, isLiked && { backgroundColor: 'rgba(229, 9, 20, 0.25)' }]}>
+              <Feather name="heart" size={26} color={isLiked ? "#e50914" : "#FFFFFF"} />
+            </View>
+            <Text style={styles.shotsActionCount}>
+              {formatShotCount(isLiked ? item.likes + 1 : item.likes)}
+            </Text>
+          </TouchableOpacity>
+
+          {/* Comment Button */}
+          <TouchableOpacity
+            style={styles.shotsActionBtn}
+            onPress={() => showToast?.("Comments coming soon! 💬")}
+            activeOpacity={0.7}
+          >
+            <View style={styles.shotsActionIconCircle}>
+              <Feather name="message-circle" size={24} color="#FFFFFF" />
+            </View>
+            <Text style={styles.shotsActionCount}>
+              {formatShotCount(item.shares ? Math.floor(item.shares / 3) : 840)}
+            </Text>
+          </TouchableOpacity>
+
+          {/* Bookmark / Save Button */}
+          <TouchableOpacity
+            style={styles.shotsActionBtn}
+            onPress={() => {
+              triggerHaptic?.('selection');
+              onToggleSave();
+            }}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.shotsActionIconCircle, isSaved && { backgroundColor: 'rgba(245, 158, 11, 0.25)' }]}>
+              <Feather name="bookmark" size={24} color={isSaved ? "#f59e0b" : "#FFFFFF"} />
+            </View>
+            <Text style={styles.shotsActionCount}>
+              {isSaved ? "Saved" : "Save"}
+            </Text>
+          </TouchableOpacity>
+
+          {/* Share Button */}
+          <TouchableOpacity
+            style={styles.shotsActionBtn}
+            onPress={onShare}
+            activeOpacity={0.7}
+          >
+            <View style={styles.shotsActionIconCircle}>
+              <Feather name="send" size={23} color="#FFFFFF" />
+            </View>
+            <Text style={styles.shotsActionCount}>
+              {formatShotCount(item.shares || 1200)}
+            </Text>
+          </TouchableOpacity>
+
+          {/* Mute / Unmute Button */}
+          <TouchableOpacity
+            style={styles.shotsActionBtn}
+            onPress={() => {
+              triggerHaptic?.('selection');
+              onToggleMute();
+            }}
+            activeOpacity={0.7}
+          >
+            <View style={styles.shotsActionIconCircle}>
+              <Feather name={isMuted ? "volume-x" : "volume-2"} size={22} color="#FFFFFF" />
+            </View>
+          </TouchableOpacity>
+
+          {/* Spinning Vinyl Audio Disc (Instagram Signature) */}
+          <Animated.View style={[styles.shotsVinylContainer, { transform: [{ rotate: spin }] }]}>
+            <View style={styles.shotsVinylRing}>
+              <View style={styles.shotsVinylCenter}>
+                <Feather name="music" size={11} color="#FFFFFF" />
+              </View>
+            </View>
+          </Animated.View>
         </View>
 
-        <Text style={styles.shotsTitleText} numberOfLines={2}>
-          {item.title}
-        </Text>
+        {/* ── Bottom-Left Caption & Creator Overlay ── */}
+        <View style={styles.shotsBottomOverlay} pointerEvents="box-none">
+          <View style={styles.shotsAuthorRow}>
+            <Text style={styles.shotsAuthorText}>{item.author || '@DramaBox'}</Text>
+            <View style={styles.shotsVerifiedBadge}>
+              <Feather name="check" size={10} color="#FFFFFF" />
+            </View>
+            <View style={styles.shotsEpisodeBadge}>
+              <Text style={styles.shotsEpisodeText}>9:16 HD</Text>
+            </View>
+          </View>
 
-        <Text style={styles.shotsTagsText}>
-          #shots #reels #dramabox #vertical916 #trending
-        </Text>
-
-        <View style={styles.shotsAudioTickerRow}>
-          <Feather name="music" size={12} color="rgba(255,255,255,0.7)" style={{ marginRight: 6 }} />
-          <Text style={styles.shotsAudioTickerText} numberOfLines={1}>
-            Original Sound • {item.author || 'DramaBox'} Studios
+          <Text style={styles.shotsTitleText} numberOfLines={2}>
+            {item.title}
           </Text>
-        </View>
-      </View>
 
-      {/* ── Bottom Red Progress Bar ── */}
-      <View style={styles.shotsProgressTrack}>
-        <View style={[styles.shotsProgressFill, { width: `${playbackProgress * 100}%` }]} />
-      </View>
+          <Text style={styles.shotsTagsText}>
+            #shots #reels #dramabox #vertical916 #trending
+          </Text>
+
+          <View style={styles.shotsAudioTickerRow}>
+            <Feather name="music" size={12} color="rgba(255,255,255,0.7)" style={{ marginRight: 6 }} />
+            <Text style={styles.shotsAudioTickerText} numberOfLines={1}>
+              Original Sound • {item.author || 'DramaBox'} Studios
+            </Text>
+          </View>
+        </View>
+
+        {/* ── Episode Selector & Dot Indicators (If Short has Multiple Episodes) ── */}
+        {totalEpisodes > 1 && (
+          <View style={styles.shotsEpisodeBar} pointerEvents="box-none">
+            <TouchableOpacity
+              style={[styles.shotsEpArrowBtn, currentEp <= 1 && styles.shotsEpArrowDisabled]}
+              onPress={() => handleSwipeEpisode('prev')}
+              disabled={currentEp <= 1}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Feather name="chevron-left" size={14} color={currentEp <= 1 ? "rgba(255,255,255,0.25)" : "#FFFFFF"} />
+            </TouchableOpacity>
+
+            <View style={styles.shotsEpDotsRow}>
+              {renderEpisodeDots()}
+            </View>
+
+            <TouchableOpacity
+              style={[styles.shotsEpArrowBtn, currentEp >= totalEpisodes && styles.shotsEpArrowDisabled]}
+              onPress={() => handleSwipeEpisode('next')}
+              disabled={currentEp >= totalEpisodes}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Feather name="chevron-right" size={14} color={currentEp >= totalEpisodes ? "rgba(255,255,255,0.25)" : "#FFFFFF"} />
+            </TouchableOpacity>
+
+            <View style={styles.shotsEpBadgePill}>
+              <Text style={styles.shotsEpBadgeText}>EP {currentEp}/{totalEpisodes}</Text>
+            </View>
+
+            <Text style={styles.shotsEpSwipeHint}>Swipe ↔</Text>
+          </View>
+        )}
+
+        {/* ── Bottom Red Progress Bar ── */}
+        <View style={styles.shotsProgressTrack}>
+          <View style={[styles.shotsProgressFill, { width: `${playbackProgress * 100}%` }]} />
+        </View>
       </View>
     </View>
   );
@@ -1650,10 +1872,13 @@ function ShotsFeedView({
 }) {
   const [shots, setShots] = useState(INITIAL_SHOTS);
   const [activeShotIndex, setActiveShotIndex] = useState(0);
-  const [isMuted, setIsMuted] = useState(false);
+  const [isMuted, setIsMuted] = useState(Platform.OS === 'web');
   const [likedShotIds, setLikedShotIds] = useState(() => new Set());
   const [savedShotIds, setSavedShotIds] = useState(() => new Set());
   const [shotsCategory, setShotsCategory] = useState('For You');
+  const [page, setPage] = useState(1);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
 
   const { width: winWidth, height: winHeight } = useWindowDimensions();
   const containerHeight = winHeight;
@@ -1662,7 +1887,7 @@ function ShotsFeedView({
   // Fetch more shots from live API
   useEffect(() => {
     let isMounted = true;
-    apiFetch(`${API_BASE}/api/content?endpoint=shots`)
+    apiFetch(`${API_BASE}/api/content?endpoint=shots&page=1`)
       .then((res) => res.json())
       .then((data) => {
         if (!isMounted) return;
@@ -1679,6 +1904,44 @@ function ShotsFeedView({
       isMounted = false;
     };
   }, []);
+
+  // Infinite scroll loader
+  const loadMoreShots = useCallback(() => {
+    if (isLoadingMore || !hasMore) return;
+    setIsLoadingMore(true);
+    const nextPage = page + 1;
+    apiFetch(`${API_BASE}/api/content?endpoint=shots&page=${nextPage}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data?.items) && data.items.length > 0) {
+          setShots((prev) => {
+            const existingIds = new Set(prev.map((s) => s.id || s.subject_id));
+            const newItems = data.items.filter((s) => !existingIds.has(s.id || s.subject_id));
+            if (newItems.length === 0) {
+              const looped = data.items.map((it, idx) => ({
+                ...it,
+                id: `shot-${it.subject_id || idx}-p${nextPage}-${idx}`,
+              }));
+              return [...prev, ...looped];
+            }
+            return [...prev, ...newItems];
+          });
+          setPage(nextPage);
+        } else {
+          // Endless wrap around
+          setShots((prev) => {
+            const looped = INITIAL_SHOTS.map((it, idx) => ({
+              ...it,
+              id: `${it.id}-loop-${nextPage}-${idx}`,
+            }));
+            return [...prev, ...looped];
+          });
+          setPage(nextPage);
+        }
+      })
+      .catch((e) => console.warn('[Shots] loadMoreShots error:', e))
+      .finally(() => setIsLoadingMore(false));
+  }, [isLoadingMore, hasMore, page]);
 
   const onViewableItemsChanged = useRef(({ viewableItems }) => {
     if (viewableItems && viewableItems.length > 0) {
@@ -1778,7 +2041,7 @@ function ShotsFeedView({
         </View>
 
         <TouchableOpacity
-          onPress={() => showToast?.("Swipe up for next 9:16 video ⬆️")}
+          onPress={() => showToast?.("Swipe ↔ to change episodes, ↕ for next drama")}
           style={styles.shotsHelpBtn}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
@@ -1819,6 +2082,16 @@ function ShotsFeedView({
         initialNumToRender={2}
         maxToRenderPerBatch={2}
         windowSize={3}
+        onEndReached={loadMoreShots}
+        onEndReachedThreshold={0.5}
+        ListFooterComponent={
+          isLoadingMore ? (
+            <View style={styles.shotsFooterLoader}>
+              <ActivityIndicator size="small" color="#e50914" />
+              <Text style={styles.shotsFooterText}>Loading more Shots...</Text>
+            </View>
+          ) : null
+        }
         removeClippedSubviews={Platform.OS !== 'web'}
         getItemLayout={(_, index) => ({
           length: containerHeight,
@@ -12797,6 +13070,100 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '500',
     flex: 1,
+  },
+  shotsBufferingText: {
+    color: 'rgba(255, 255, 255, 0.85)',
+    fontSize: 13,
+    fontWeight: '600',
+    marginTop: 8,
+  },
+  shotsUnmuteBadge: {
+    position: 'absolute',
+    top: 56,
+    right: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    zIndex: 90,
+  },
+  shotsUnmuteText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  shotsEpisodeBar: {
+    position: 'absolute',
+    bottom: 74,
+    left: 16,
+    right: 76,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    paddingVertical: 5,
+    paddingHorizontal: 8,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+    zIndex: 80,
+  },
+  shotsEpArrowBtn: {
+    padding: 3,
+  },
+  shotsEpArrowDisabled: {
+    opacity: 0.3,
+  },
+  shotsEpDotsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 4,
+    gap: 4,
+  },
+  shotsEpDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(255, 255, 255, 0.35)',
+  },
+  shotsEpDotActive: {
+    width: 16,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#e50914',
+  },
+  shotsEpBadgePill: {
+    backgroundColor: 'rgba(229, 9, 20, 0.35)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+    marginLeft: 4,
+  },
+  shotsEpBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  shotsEpSwipeHint: {
+    color: 'rgba(255, 255, 255, 0.55)',
+    fontSize: 9,
+    fontWeight: '600',
+    marginLeft: 5,
+  },
+  shotsFooterLoader: {
+    height: 90,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  shotsFooterText: {
+    color: 'rgba(255, 255, 255, 0.7)',
+    fontSize: 13,
+    fontWeight: '600',
   },
   shotsProgressTrack: {
     position: 'absolute',

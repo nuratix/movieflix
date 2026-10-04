@@ -218,38 +218,72 @@ export default async function handler(req, res) {
     }
     case 'shots':
     case 'reels': {
-      cacheKey = 'catalog:shots:feed';
+      const page = Math.max(1, parseInt(query.page, 10) || 1);
+      cacheKey = `catalog:shots:feed:p${page}`;
       const cached = cacheMap.get(cacheKey);
       if (cached && Date.now() < cached.expiresAt) {
         res.setHeader('X-Cache', 'HIT');
         return res.status(200).json(cached.data);
       }
       try {
-        const homeRes = await fetch(`${UPSTREAM_BASE}/home`, {
-          headers: {
-            'Accept': 'application/json',
-            'X-App-Key': providerKey,
-            'User-Agent': 'Movieflix-Proxy/1.1.4',
-          },
+        let rawItems = [];
+        if (page === 1) {
+          const homeRes = await fetch(`${UPSTREAM_BASE}/home`, {
+            headers: {
+              'Accept': 'application/json',
+              'X-App-Key': providerKey,
+              'User-Agent': 'Movieflix-Proxy/1.1.4',
+            },
+          });
+          const homeData = await homeRes.json();
+          const sections = homeData.sections || [];
+          const shortSection = sections.find((s) => s.section && s.section.toLowerCase().includes('short'));
+          rawItems = shortSection?.items ? [...shortSection.items] : [];
+
+          // Also merge popular short-format and romantic dramas from other sections
+          const dramaSections = sections.filter((s) => s.section && (s.section.includes('Drama') || s.section.includes('Romance') || s.section.includes('Teen')));
+          for (const ds of dramaSections) {
+            for (const item of (ds.items || [])) {
+              if (item.subject_id && !rawItems.some((r) => r.subject_id === item.subject_id)) {
+                rawItems.push(item);
+              }
+            }
+          }
+        } else {
+          // Page 2+: fetch from /tv-series?page=${page} for endless short drama / series content
+          const tvRes = await fetch(`${UPSTREAM_BASE}/tv-series?page=${page}`, {
+            headers: {
+              'Accept': 'application/json',
+              'X-App-Key': providerKey,
+              'User-Agent': 'Movieflix-Proxy/1.1.4',
+            },
+          });
+          const tvData = await tvRes.json();
+          rawItems = tvData?.items ? [...tvData.items] : [];
+        }
+
+        const authors = ['@DramaBox', '@ShortMax', '@ReelShort', '@NetShort', '@GoodShort', '@MiniTV', '@BillionaireTV'];
+        const shots = rawItems.map((item, idx) => {
+          const author = authors[(idx + (page * 3)) % authors.length];
+          const totalEps = item.total_episodes || item.episodes_count || (12 + ((idx * 7) % 28));
+          return {
+            id: `shot-${item.subject_id || idx}-p${page}`,
+            subject_id: item.subject_id,
+            title: item.name,
+            slug: item.slug,
+            poster_url: item.poster_url,
+            rating: item.rating || '7.8',
+            author,
+            likes: 18000 + (((idx + page) * 3141) % 65000),
+            shares: 1500 + (((idx + page) * 513) % 9000),
+            total_episodes: totalEps,
+            se: 1,
+            ep: 1,
+          };
         });
-        const homeData = await homeRes.json();
-        const shortSection = (homeData.sections || []).find((s) => s.section && s.section.toLowerCase().includes('short'));
-        const rawItems = shortSection?.items || [];
-        const shots = rawItems.map((item, idx) => ({
-          id: `${item.subject_id || idx}-ep1`,
-          subject_id: item.subject_id,
-          title: item.name,
-          slug: item.slug,
-          poster_url: item.poster_url,
-          rating: item.rating || '7.5',
-          author: '@DramaBox',
-          likes: 24000 + ((idx * 3141) % 45000),
-          shares: 2100 + ((idx * 513) % 8000),
-          se: 1,
-          ep: 1,
-        }));
-        const responseData = { status: 'success', count: shots.length, items: shots };
-        cacheMap.set(cacheKey, { data: responseData, expiresAt: Date.now() + 15 * 60 * 1000 });
+
+        const responseData = { status: 'success', page, count: shots.length, items: shots, has_more: true };
+        cacheMap.set(cacheKey, { data: responseData, expiresAt: Date.now() + 10 * 60 * 1000 });
         return res.status(200).json(responseData);
       } catch (err) {
         console.error('Failed to fetch shots:', err);
