@@ -33,6 +33,7 @@ import { Ionicons, MaterialIcons, Feather } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Haptics from 'expo-haptics';
 import { Asset } from 'expo-asset';
+import { WebView } from 'react-native-webview';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   initNotifications,
@@ -1266,6 +1267,110 @@ function selectShotStreamQuality(sources, quality) {
   return match || sources[0];
 }
 
+function buildHtmlShotPlayerSource(videoUrl, isMuted, shouldAutoPlay) {
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 100%;
+      height: 100%;
+      background: #050505;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    video {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      background: #050505;
+      display: block;
+    }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
+</head>
+<body>
+  <video id="vid" playsinline webkit-playsinline loop preload="auto"${isMuted ? ' muted' : ''}></video>
+  <script>
+    (function() {
+      var v = document.getElementById('vid');
+      var url = ${JSON.stringify(videoUrl || '')};
+      v.muted = ${isMuted ? 'true' : 'false'};
+
+      function notify(type, data) {
+        if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
+          window.ReactNativeWebView.postMessage(JSON.stringify(Object.assign({ type: type }, data || {})));
+        }
+      }
+
+      function loadUrl(src) {
+        if (!src) return;
+        if (window.hlsInstance) {
+          try { window.hlsInstance.destroy(); } catch(e){}
+          window.hlsInstance = null;
+        }
+        if (src.indexOf('.m3u8') !== -1 && !v.canPlayType('application/vnd.apple.mpegurl')) {
+          if (typeof Hls !== 'undefined' && Hls.isSupported()) {
+            var hls = new Hls({ enableWorker: false });
+            hls.loadSource(src);
+            hls.attachMedia(v);
+            window.hlsInstance = hls;
+          } else {
+            v.src = src;
+          }
+        } else {
+          v.src = src;
+        }
+      }
+
+      loadUrl(url);
+
+      v.addEventListener('timeupdate', function() {
+        notify('timeUpdate', { currentTime: v.currentTime, duration: v.duration || 0 });
+      });
+      v.addEventListener('playing', function() {
+        notify('statusChange', { status: 'playing', currentTime: v.currentTime, duration: v.duration || 0 });
+      });
+      v.addEventListener('loadeddata', function() {
+        notify('statusChange', { status: 'readyToPlay', duration: v.duration || 0 });
+      });
+      v.addEventListener('canplay', function() {
+        notify('statusChange', { status: 'readyToPlay', duration: v.duration || 0 });
+      });
+      v.addEventListener('error', function(e) {
+        notify('statusChange', { status: 'error' });
+      });
+
+      window.playVideo = function() {
+        v.play().catch(function() {});
+      };
+      window.pauseVideo = function() {
+        v.pause();
+      };
+      window.seekTo = function(t) {
+        if (typeof t === 'number' && !isNaN(t) && isFinite(t)) {
+          v.currentTime = t;
+        }
+      };
+      window.setPlaybackRate = function(r) {
+        v.playbackRate = r;
+      };
+      window.setMuted = function(m) {
+        v.muted = !!m;
+      };
+
+      ${shouldAutoPlay ? 'setTimeout(function(){ v.play().catch(function(){}); }, 50);' : ''}
+    })();
+  </script>
+</body>
+</html>`;
+}
+
 function ShotItem({
   item,
   index,
@@ -1439,104 +1544,114 @@ function ShotItem({
     }
   }, [videoQuality, currentEp]);
 
-  // Video player via expo-video
-  const videoSource = useMemo(() => {
-    return videoStreamUrl ? buildVideoSource(videoStreamUrl) : null;
+  // HTML5 Video Player references and state
+  const webViewRef = useRef(null);
+  const webVideoRef = useRef(null);
+  const videoDurationRef = useRef(0);
+  const currentTimeRef = useRef(0);
+
+  // Memoize HTML source for current stream
+  const htmlShotSource = useMemo(() => {
+    return buildHtmlShotPlayerSource(
+      videoStreamUrl,
+      isMuted,
+      isActive && isTabActive && !isPausedByUser
+    );
+  }, [videoStreamUrl, currentEp]);
+
+  // Handle messages from HTML5 player inside WebView
+  const handleWebViewMessage = useCallback((event) => {
+    try {
+      const data = JSON.parse(event.nativeEvent.data);
+      if (data.type === 'timeUpdate') {
+        if (typeof data.currentTime === 'number') {
+          currentTimeRef.current = data.currentTime;
+          if (data.currentTime > 0.05) {
+            setIsVideoReady(true);
+          }
+        }
+        if (typeof data.duration === 'number' && data.duration > 0) {
+          videoDurationRef.current = data.duration;
+        }
+        if (!isScrubbingRef.current && videoDurationRef.current > 0) {
+          setPlaybackProgress(Math.min(1, Math.max(0, currentTimeRef.current / videoDurationRef.current)));
+        }
+      } else if (data.type === 'statusChange') {
+        if (data.status === 'readyToPlay' || data.status === 'playing') {
+          setIsVideoReady(true);
+          if (typeof data.duration === 'number' && data.duration > 0) {
+            videoDurationRef.current = data.duration;
+          }
+        }
+      }
+    } catch (_) {}
+  }, []);
+
+  // Web platform Hls.js fallback if running in browser
+  useEffect(() => {
+    if (Platform.OS !== 'web' || !webVideoRef.current || !videoStreamUrl) return;
+    const v = webVideoRef.current;
+    const src = (typeof videoStreamUrl === 'string' && (videoStreamUrl.startsWith('http://') || videoStreamUrl.startsWith('https://')))
+      ? `/api/proxy?url=${encodeURIComponent(videoStreamUrl)}`
+      : videoStreamUrl;
+
+    if (src.includes('.m3u8') && !v.canPlayType('application/vnd.apple.mpegurl') && typeof window !== 'undefined' && window.Hls && window.Hls.isSupported()) {
+      const hls = new window.Hls();
+      hls.loadSource(src);
+      hls.attachMedia(v);
+      return () => {
+        try { hls.destroy(); } catch (_) {}
+      };
+    } else {
+      v.src = src;
+    }
   }, [videoStreamUrl]);
 
-  const player = useVideoPlayer(videoSource, (p) => {
-    try {
-      p.loop = true;
-      p.muted = isMuted;
-      p.timeUpdateEventInterval = 0.25;
-      if (isActive && isTabActive && !isPausedByUser) {
-        p.play();
-      }
-    } catch (e) {
-      console.warn('[Shots] Player setup note:', e);
-    }
-  });
-
-  // Asynchronously update player when videoStreamUrl changes (guarded to avoid redundant replace calls)
-  const currentStreamUrlRef = useRef(videoStreamUrl);
+  // Synchronize play / pause state
   useEffect(() => {
-    if (!player || !videoStreamUrl) return;
-    if (currentStreamUrlRef.current === videoStreamUrl) return;
-    currentStreamUrlRef.current = videoStreamUrl;
-    setIsVideoReady(false);
-    const doReplace = async () => {
-      try {
-        const src = buildVideoSource(videoStreamUrl);
-        if (typeof player.replaceAsync === 'function') {
-          await player.replaceAsync(src);
-        } else if (typeof player.replace === 'function') {
-          player.replace(src);
+    const shouldPlay = isActive && isTabActive && !isPausedByUser;
+    if (Platform.OS === 'web') {
+      if (webVideoRef.current) {
+        if (shouldPlay) {
+          webVideoRef.current.play?.().catch?.(() => {});
+        } else {
+          webVideoRef.current.pause?.();
         }
-        if (isActive && isTabActive && !isPausedByUser) {
-          player.play();
+      }
+    } else {
+      if (webViewRef.current) {
+        if (shouldPlay) {
+          webViewRef.current.injectJavaScript('window.playVideo && window.playVideo(); true;');
+        } else {
+          webViewRef.current.injectJavaScript('window.pauseVideo && window.pauseVideo(); true;');
         }
-      } catch (e) {
-        console.warn('[Shots] player.replaceAsync note:', e);
       }
-    };
-    doReplace();
-  }, [player, videoStreamUrl]);
-
-  // Keep playback state synchronized
-  useEffect(() => {
-    if (!player) return;
-    try {
-      if (isActive && isTabActive && !isPausedByUser) {
-        player.play();
-      } else {
-        player.pause();
-      }
-    } catch (e) {
-      console.warn('[Shots] play/pause note:', e);
     }
-  }, [player, isActive, isTabActive, isPausedByUser]);
+  }, [isActive, isTabActive, isPausedByUser]);
 
   // Synchronize mute state
   useEffect(() => {
-    if (!player) return;
-    try {
-      player.muted = isMuted;
-    } catch (_) {}
-  }, [player, isMuted]);
-
-  // Track playback time and active rendering state
-  useEffect(() => {
-    if (!player) return;
-    const sub = player.addListener?.('timeUpdate', ({ currentTime }) => {
-      if (currentTime > 0.05) {
-        setIsVideoReady(true);
+    if (Platform.OS === 'web') {
+      if (webVideoRef.current) {
+        webVideoRef.current.muted = isMuted;
       }
-      if (isScrubbingRef.current) return;
-      if (typeof player.duration === 'number' && player.duration > 0) {
-        setPlaybackProgress(Math.min(1, Math.max(0, currentTime / player.duration)));
-      }
-    });
-    const statusSub = player.addListener?.('statusChange', (payload) => {
-      if (payload?.status === 'readyToPlay') {
-        setIsVideoReady(true);
-      }
-    });
-    return () => {
-      sub?.remove?.();
-      statusSub?.remove?.();
-    };
-  }, [player]);
+    } else {
+      webViewRef.current?.injectJavaScript(`window.setMuted && window.setMuted(${isMuted ? 'true' : 'false'}); true;`);
+    }
+  }, [isMuted]);
 
   // Reset 2x speed when item becomes inactive
   useEffect(() => {
-    if (!isActive && player) {
-      try {
-        player.playbackRate = 1.0;
-      } catch (_) {}
+    if (!isActive) {
+      if (Platform.OS === 'web') {
+        if (webVideoRef.current) webVideoRef.current.playbackRate = 1.0;
+      } else {
+        webViewRef.current?.injectJavaScript('window.setPlaybackRate && window.setPlaybackRate(1.0); true;');
+      }
       setIs2xActive(false);
       isHolding2x.current = false;
     }
-  }, [isActive, player]);
+  }, [isActive]);
 
   // Long press 2X fast-forward handlers
   const handleLongPress = () => {
@@ -1544,12 +1659,10 @@ function ShotItem({
     isHolding2x.current = true;
     setIs2xActive(true);
     triggerHaptic?.('impactMedium');
-    try {
-      if (player) {
-        player.playbackRate = 2.0;
-      }
-    } catch (e) {
-      console.warn('[Shots] 2x speed error:', e);
+    if (Platform.OS === 'web') {
+      if (webVideoRef.current) webVideoRef.current.playbackRate = 2.0;
+    } else {
+      webViewRef.current?.injectJavaScript('window.setPlaybackRate && window.setPlaybackRate(2.0); true;');
     }
   };
 
@@ -1557,11 +1670,11 @@ function ShotItem({
     if (isHolding2x.current) {
       isHolding2x.current = false;
       setIs2xActive(false);
-      try {
-        if (player) {
-          player.playbackRate = 1.0;
-        }
-      } catch (_) {}
+      if (Platform.OS === 'web') {
+        if (webVideoRef.current) webVideoRef.current.playbackRate = 1.0;
+      } else {
+        webViewRef.current?.injectJavaScript('window.setPlaybackRate && window.setPlaybackRate(1.0); true;');
+      }
     }
   };
 
@@ -1575,17 +1688,14 @@ function ShotItem({
       const ratio = Math.max(0, Math.min(1, relativeX / curVideoWidth));
       setPlaybackProgress(ratio);
 
-      if (player) {
-        const dur = typeof player.duration === 'number' && player.duration > 0 ? player.duration : 0;
-        if (dur > 0) {
-          const targetTime = ratio * dur;
-          try {
-            player.currentTime = targetTime;
-          } catch (_) {
-            try {
-              player.seekBy?.(targetTime - (player.currentTime || 0));
-            } catch (__) {}
-          }
+      const dur = videoDurationRef.current || 0;
+      if (dur > 0) {
+        const targetTime = ratio * dur;
+        currentTimeRef.current = targetTime;
+        if (Platform.OS === 'web') {
+          if (webVideoRef.current) webVideoRef.current.currentTime = targetTime;
+        } else {
+          webViewRef.current?.injectJavaScript(`window.seekTo && window.seekTo(${targetTime}); true;`);
         }
       }
     };
@@ -1614,7 +1724,7 @@ function ShotItem({
         setIsScrubbing(false);
       },
     });
-  }, [player, containerWidth, containerHeight, triggerHaptic]);
+  }, [containerWidth, containerHeight, triggerHaptic]);
 
   const handleSwipeEpisode = (direction) => {
     if (direction === 'next') {
@@ -1786,17 +1896,60 @@ function ShotItem({
             />
           </View>
 
-          {/* Video Player Stream - full picture with TextureView on Android to prevent blank video */}
+          {/* HTML5 Video Player Stream (WebView on Native, <video> on Web) */}
           {videoStreamUrl && isActive && (
-            <VideoView
-              key={`shot-video-${currentEp}-${videoStreamUrl}`}
-              player={player}
-              style={StyleSheet.absoluteFillObject}
-              contentFit="contain"
-              surfaceType={Platform.OS === 'android' ? 'textureView' : 'surfaceView'}
-              useExoShutter={true}
-              nativeControls={false}
-            />
+            <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
+              {Platform.OS === 'web' ? (
+                <video
+                  ref={webVideoRef}
+                  style={{ width: '100%', height: '100%', objectFit: 'contain', backgroundColor: '#050505', display: 'block', pointerEvents: 'none' }}
+                  playsInline
+                  loop
+                  muted={isMuted}
+                  autoPlay={isActive && isTabActive && !isPausedByUser}
+                  onTimeUpdate={(e) => {
+                    const cur = e.target.currentTime;
+                    const dur = e.target.duration;
+                    if (cur > 0.05) setIsVideoReady(true);
+                    if (dur > 0) videoDurationRef.current = dur;
+                    if (!isScrubbingRef.current && dur > 0) {
+                      setPlaybackProgress(Math.min(1, Math.max(0, cur / dur)));
+                    }
+                  }}
+                  onLoadedData={(e) => {
+                    setIsVideoReady(true);
+                    if (e.target.duration > 0) videoDurationRef.current = e.target.duration;
+                  }}
+                  onCanPlay={(e) => {
+                    setIsVideoReady(true);
+                    if (e.target.duration > 0) videoDurationRef.current = e.target.duration;
+                  }}
+                />
+              ) : (
+                <WebView
+                  ref={webViewRef}
+                  key={`shot-wv-${currentEp}-${videoStreamUrl}`}
+                  source={{
+                    html: htmlShotSource,
+                    baseUrl: 'https://netfilm.world/',
+                  }}
+                  style={StyleSheet.absoluteFillObject}
+                  allowsInlineMediaPlayback={true}
+                  mediaPlaybackRequiresUserAction={false}
+                  javaScriptEnabled={true}
+                  domStorageEnabled={true}
+                  mixedContentMode="always"
+                  androidLayerType="hardware"
+                  allowsFullscreenVideo={false}
+                  originWhitelist={['*']}
+                  scrollEnabled={false}
+                  bounces={false}
+                  overScrollMode="never"
+                  pointerEvents="none"
+                  onMessage={handleWebViewMessage}
+                />
+              )}
+            </View>
           )}
 
           {/* Tap area to pause/play (single tap), double-tap to like, and long-press for 2X speed */}
@@ -3889,8 +4042,13 @@ function ReelApp() {
         .catch(() => {});
     }
 
-    setIsIntroLoading(false);
-    setIsPlayerOpen(true);
+    if (Platform.OS === 'web' || skipIntro) {
+      setIsIntroLoading(false);
+      setIsPlayerOpen(true);
+    } else {
+      setIsPlayerOpen(false);
+      setIsIntroLoading(true);
+    }
     setLoadingStream(!offlineVideoUrl);
     setStreamError(null);
     setAvailableStreams([]);
