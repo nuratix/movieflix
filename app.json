@@ -28,7 +28,7 @@
     "android": {
       "package": "com.movieflix.app",
       "versionCode": 7,
-      "usesCleartextTraffic": true,
+      "usesCleartextTraffic": false,
       "backgroundColor": "#000000",
       "splash": {
         "image": "./assets/splash-icon.png",
@@ -55,11 +55,7 @@
         "android.permission.FOREGROUND_SERVICE",
         "android.permission.FOREGROUND_SERVICE_DATA_SYNC",
         "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
-        "android.permission.POST_NOTIFICATIONS",
-        "android.permission.READ_EXTERNAL_STORAGE",
-        "android.permission.WRITE_EXTERNAL_STORAGE",
-        "android.permission.REQUEST_INSTALL_PACKAGES",
-        "android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"
+        "android.permission.POST_NOTIFICATIONS"
       ]
     },
     "web": {

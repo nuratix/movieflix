@@ -1,31 +1,92 @@
 import crypto from 'crypto';
 
-// ─── Build Server Security & Official Fingerprint Configuration ──────────────
+// ─── Build Server Security Configuration ──────────────────────────────────────
 const OFFICIAL_PACKAGE_NAME = 'com.movieflix.app';
 const OFFICIAL_ORIGIN_URL = 'https://movieflix-pi-six.vercel.app';
 const OFFICIAL_BUILD_VERSION = '1.1.6';
 const OFFICIAL_VERSION_CODE = 7;
 const OFFICIAL_BUILD_FINGERPRINT = 'mf_sec_sha256_b48f9d0c2e1a7b3c6e5a9d8f0b1c2e3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e';
-const INTEGRITY_SECRET = process.env.INTEGRITY_SECRET || 'mf_integrity_seal_key_2026_secure';
+
+function getIntegritySecret() {
+  const secret = process.env.INTEGRITY_SECRET;
+  if (!secret) {
+    if (process.env.NODE_ENV === 'production' || process.env.VERCEL) {
+      throw new Error('Server configuration error: INTEGRITY_SECRET environment variable is missing.');
+    }
+    return 'dev_integrity_secret_movieflix_2026';
+  }
+  return secret;
+}
 
 function createSeal(payload) {
+  const secret = getIntegritySecret();
   return crypto
-    .createHmac('sha256', INTEGRITY_SECRET)
+    .createHmac('sha256', secret)
     .update(JSON.stringify(payload))
     .digest('hex');
 }
 
-export default async function handler(req, res) {
-  // CORS Headers
-  res.setHeader('Access-Control-Allow-Origin', '*');
+// Sliding window rate limiting
+const rateLimitMap = new Map();
+const RATE_LIMIT_WINDOW_MS = 60 * 1000;
+const MAX_REQUESTS_PER_WINDOW = 20;
+
+function getClientIp(req) {
+  const realIp = req.headers['x-real-ip'];
+  if (realIp && typeof realIp === 'string') return realIp.trim();
+  const forwarded = req.headers['x-forwarded-for'];
+  if (forwarded && typeof forwarded === 'string') return forwarded.split(',')[0].trim();
+  return req.socket?.remoteAddress || '127.0.0.1';
+}
+
+function checkRateLimit(ip) {
+  const now = Date.now();
+  const record = rateLimitMap.get(ip);
+  if (!record || now > record.resetTime) {
+    rateLimitMap.set(ip, { count: 1, resetTime: now + RATE_LIMIT_WINDOW_MS });
+    return true;
+  }
+  if (record.count >= MAX_REQUESTS_PER_WINDOW) {
+    return false;
+  }
+  record.count += 1;
+  return true;
+}
+
+const ALLOWED_ORIGINS = [
+  'https://movieflix-pi-six.vercel.app',
+  'https://netfilm.world',
+  'http://localhost:3000',
+  'http://localhost:8081',
+  'http://localhost:19006',
+];
+
+function setCors(req, res) {
+  const origin = req.headers['origin'];
+  if (origin && (ALLOWED_ORIGINS.includes(origin) || origin.endsWith('.vercel.app'))) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  } else if (!origin) {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+  } else {
+    res.setHeader('Access-Control-Allow-Origin', 'https://movieflix-pi-six.vercel.app');
+  }
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Build-Fingerprint');
+}
+
+export default async function handler(req, res) {
+  setCors(req, res);
 
   if (req.method === 'OPTIONS') {
     return res.status(204).end();
   }
 
-  // GET: Public Build Security & Official Fingerprint Manifest
+  const clientIp = getClientIp(req);
+  if (!checkRateLimit(clientIp)) {
+    return res.status(429).json({ error: 'Too many requests. Please slow down.' });
+  }
+
+  // GET: Public Build Security Metadata (Does NOT expose server fingerprint secret)
   if (req.method === 'GET') {
     return res.status(200).json({
       success: true,
@@ -33,8 +94,6 @@ export default async function handler(req, res) {
       officialOrigin: OFFICIAL_ORIGIN_URL,
       buildVersion: OFFICIAL_BUILD_VERSION,
       versionCode: OFFICIAL_VERSION_CODE,
-      officialFingerprint: OFFICIAL_BUILD_FINGERPRINT,
-      securityCheckUrl: `${OFFICIAL_ORIGIN_URL}/api/integrity`,
       timestamp: Date.now(),
     });
   }
@@ -114,7 +173,6 @@ export default async function handler(req, res) {
         authentic: true,
         status: 'OFFICIAL_BUILD_VERIFIED',
         downloadOrigin: OFFICIAL_ORIGIN_URL,
-        fingerprint: OFFICIAL_BUILD_FINGERPRINT,
         seal,
         timestamp: Date.now(),
       });

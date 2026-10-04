@@ -1,9 +1,126 @@
-// Vercel Serverless Function & Edge Streaming Reverse Proxy for Video & Subtitle Streams
-// Bypasses browser Forbidden Header (Referer/Origin) and CORS restrictions
+// ─── Movieflix Edge & Serverless Media Streaming Proxy ───────────────────────────
+// Hardened against SSRF, unauthorized network access, and open proxy abuse.
+// Enforces strict domain allowlists and validates all redirect destinations.
 
 export const config = {
   runtime: 'edge',
 };
+
+// Approved media and metadata domains
+const ALLOWED_DOMAIN_PATTERNS = [
+  /(^|\.)aoneroom\.com$/i,
+  /(^|\.)hakunaymatata\.com$/i,
+  /(^|\.)netfilm\.world$/i,
+  /(^|\.)moviebo\.vercel\.app$/i,
+  /(^|\.)movieflix-pi-six\.vercel\.app$/i,
+  /(^|\.)media-imdb\.com$/i,
+  /(^|\.)imdb\.com$/i,
+  /(^|\.)tvmaze\.com$/i,
+  /(^|\.)themoviedb\.org$/i,
+  /(^|\.)tmdb\.org$/i,
+  /(^|\.)cloudfront\.net$/i,
+  /(^|\.)googleusercontent\.com$/i,
+  /(^|\.)gstatic\.com$/i,
+  /(^|\.)media-amazon\.com$/i,
+  /(^|\.)github\.com$/i,
+  /(^|\.)githubusercontent\.com$/i,
+  /^api\.mymemory\.translated\.net$/i,
+];
+
+export function isSafeUrl(urlStr) {
+  if (!urlStr || typeof urlStr !== 'string') return false;
+  let parsed;
+  try {
+    parsed = new URL(urlStr);
+  } catch (_) {
+    return false;
+  }
+
+  // Only HTTP and HTTPS
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
+
+  const hostname = parsed.hostname.toLowerCase();
+  if (!hostname) return false;
+
+  // Block localhost, local, metadata and private domains
+  if (
+    hostname === 'localhost' ||
+    hostname.endsWith('.localhost') ||
+    hostname.endsWith('.local') ||
+    hostname.endsWith('.internal') ||
+    hostname.endsWith('.lan') ||
+    hostname === 'metadata.google.internal'
+  ) {
+    return false;
+  }
+
+  // Block decimal / octal / hex encoded IPs
+  if (/^\d+$/.test(hostname) || /^0x[0-9a-f]+$/i.test(hostname)) {
+    return false;
+  }
+
+  // Block IPv4 private/reserved/link-local ranges
+  const ipv4Parts = hostname.split('.');
+  if (ipv4Parts.length === 4 && ipv4Parts.every((p) => /^\d+$/.test(p))) {
+    const [a, b, c, d] = ipv4Parts.map(Number);
+    if (a < 0 || a > 255 || b < 0 || b > 255 || c < 0 || c > 255 || d < 0 || d > 255) return false;
+    if (a === 127) return false; // Loopback (127.0.0.0/8)
+    if (a === 10) return false; // Private Class A (10.0.0.0/8)
+    if (a === 172 && b >= 16 && b <= 31) return false; // Private Class B (172.16.0.0/12)
+    if (a === 192 && b === 168) return false; // Private Class C (192.168.0.0/16)
+    if (a === 169 && b === 254) return false; // Link-local / Cloud metadata (169.254.0.0/16)
+    if (a === 0) return false; // 0.0.0.0/8
+    if (a === 100 && b >= 64 && b <= 127) return false; // Carrier-grade NAT (100.64.0.0/10)
+    return false; // Direct IP access disallowed; must use approved hostnames
+  }
+
+  // Block IPv6 loopback / unique local / link-local / unspecified
+  if (
+    hostname.includes(':') ||
+    hostname === '[::1]' ||
+    hostname === '::1' ||
+    hostname.startsWith('fc') ||
+    hostname.startsWith('fe80')
+  ) {
+    return false;
+  }
+
+  // Enforce approved hostnames allowlist
+  return ALLOWED_DOMAIN_PATTERNS.some((pattern) => pattern.test(hostname));
+}
+
+/**
+ * Fetch upstream with manual redirect following, validating each redirect hop against isSafeUrl
+ */
+async function fetchWithSafeRedirects(initialUrl, fetchOptions, maxRedirects = 3) {
+  let currentUrl = initialUrl;
+  let redirectsCount = 0;
+
+  while (redirectsCount <= maxRedirects) {
+    if (!isSafeUrl(currentUrl)) {
+      throw new Error(`SSRF blocked: Destination host "${currentUrl}" is not allowed.`);
+    }
+
+    const res = await fetch(currentUrl, {
+      ...fetchOptions,
+      redirect: 'manual',
+    });
+
+    if ([301, 302, 303, 307, 308].includes(res.status)) {
+      const location = res.headers.get('location');
+      if (!location) {
+        return res;
+      }
+      redirectsCount++;
+      currentUrl = new URL(location, currentUrl).toString();
+      continue;
+    }
+
+    return res;
+  }
+
+  throw new Error('Too many redirects');
+}
 
 export default async function handler(req, res) {
   // If invoked in Node.js environment (Connect / Express / Metro dev server)
@@ -14,34 +131,10 @@ export default async function handler(req, res) {
   return handleEdge(req);
 }
 
-function isSafeUrl(urlStr) {
-  if (!urlStr || typeof urlStr !== 'string') return false;
-  try {
-    const parsed = new URL(urlStr);
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
-    const hostname = parsed.hostname.toLowerCase();
-    if (
-      hostname === 'localhost' ||
-      hostname === '127.0.0.1' ||
-      hostname === '::1' ||
-      hostname === '169.254.169.254' ||
-      hostname.startsWith('10.') ||
-      hostname.startsWith('192.168.') ||
-      hostname.startsWith('172.16.')
-    ) {
-      return false;
-    }
-    return true;
-  } catch (_) {
-    return false;
-  }
-}
-
 // ----------------------------------------------------
 // Edge Runtime Handler (Vercel Production)
 // ----------------------------------------------------
 async function handleEdge(req) {
-  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response(null, {
       status: 204,
@@ -58,8 +151,8 @@ async function handleEdge(req) {
   const targetUrl = searchParams.get('url');
 
   if (!targetUrl || !isSafeUrl(targetUrl)) {
-    return new Response('Invalid or forbidden "url" parameter', {
-      status: 400,
+    return new Response('Access denied: target URL is not in the approved media allowlist.', {
+      status: 403,
       headers: { 'Access-Control-Allow-Origin': '*' },
     });
   }
@@ -79,10 +172,9 @@ async function handleEdge(req) {
       upstreamHeaders.set('Range', range);
     }
 
-    const upstreamRes = await fetch(targetUrl, {
+    const upstreamRes = await fetchWithSafeRedirects(targetUrl, {
       method: req.method,
       headers: upstreamHeaders,
-      redirect: 'follow',
     });
 
     const responseHeaders = new Headers();
@@ -102,9 +194,8 @@ async function handleEdge(req) {
       }
     }
 
-    // Force inline disposition so browser streams video instead of downloading
     responseHeaders.set('Content-Disposition', 'inline');
-    responseHeaders.set('Access-Control-Allow-Origin', '*');
+    responseHeaders.set('Access-Control-Allow-Origin', '*',);
     responseHeaders.set('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
     responseHeaders.set('Access-Control-Allow-Headers', '*');
     responseHeaders.set('Access-Control-Expose-Headers', 'Content-Range, Content-Length, Accept-Ranges');
@@ -141,8 +232,8 @@ async function handleNode(req, res) {
   const targetUrl = parsedUrl.searchParams.get('url');
 
   if (!targetUrl || !isSafeUrl(targetUrl)) {
-    res.statusCode = 400;
-    res.end('Invalid or forbidden "url" parameter');
+    res.statusCode = 403;
+    res.end('Access denied: target URL is not in the approved media allowlist.');
     return;
   }
 
@@ -159,10 +250,9 @@ async function handleNode(req, res) {
       upstreamHeaders['Range'] = req.headers.range;
     }
 
-    const upstreamRes = await fetch(targetUrl, {
+    const upstreamRes = await fetchWithSafeRedirects(targetUrl, {
       method: req.method,
       headers: upstreamHeaders,
-      redirect: 'follow',
     });
 
     const passthrough = [

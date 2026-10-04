@@ -19,8 +19,7 @@ function safeFetchUrl(url) {
   return url;
 }
 
-// Free public OMDB keys pool
-const OMDB_KEYS = ['trilogy', '2b21cd75', '852233f0'];
+const API_BASE = (process.env.EXPO_PUBLIC_API_BASE || (Platform.OS === 'web' ? '' : 'https://movieflix-pi-six.vercel.app')).trim().replace(/\/+$/, '');
 
 // Clean title for search (removes year, parentheticals, S1/E1, resolution tags)
 export function sanitizeTitle(rawTitle) {
@@ -147,55 +146,52 @@ export async function getImdbData(title, year = '') {
     // Continue to OMDB
   }
 
-  // 4. Query OMDB API (Real official IMDb ratings, votes, director, actors)
-  for (const apiKey of OMDB_KEYS) {
-    try {
-      let url = `https://www.omdbapi.com/?t=${encodeURIComponent(clean)}&apikey=${apiKey}`;
-      if (year && String(year).length === 4) {
-        url += `&y=${year}`;
-      }
+  // 4. Query Server-side OMDB API Proxy (Secure server-side keys with CDN caching)
+  try {
+    let url = `${API_BASE}/api/imdb?t=${encodeURIComponent(clean)}`;
+    if (year && String(year).length === 4) {
+      url += `&y=${year}`;
+    }
 
-      const res = await fetch(url);
-      if (res.ok) {
-        const data = await res.json();
-        if (data && data.Response === 'True') {
-          const rawActorNames = data.Actors && data.Actors !== 'N/A'
+    const res = await fetch(url);
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.Response === 'True') {
+        const rawActorNames =
+          data.Actors && data.Actors !== 'N/A'
             ? data.Actors.split(',').map((a) => a.trim()).filter(Boolean)
             : [];
 
-          const omdbRating = data.imdbRating && data.imdbRating !== 'N/A' ? data.imdbRating : null;
-          const omdbVotes = data.imdbVotes && data.imdbVotes !== 'N/A' ? data.imdbVotes : null;
-          const omdbDirector = data.Director && data.Director !== 'N/A' ? data.Director : null;
-          const omdbPlot = data.Plot && data.Plot !== 'N/A' ? data.Plot : null;
+        const omdbRating = data.imdbRating && data.imdbRating !== 'N/A' ? data.imdbRating : null;
+        const omdbVotes = data.imdbVotes && data.imdbVotes !== 'N/A' ? data.imdbVotes : null;
+        const omdbDirector = data.Director && data.Director !== 'N/A' ? data.Director : null;
+        const omdbPlot = data.Plot && data.Plot !== 'N/A' ? data.Plot : null;
 
-          // If TVMaze already provided full cast with photos, keep those; otherwise prepare actor objects
-          let castToUse = tvMazeCast && tvMazeCast.length > 0 ? tvMazeCast : null;
-          if (!castToUse && rawActorNames.length > 0) {
-            castToUse = rawActorNames.map((name) => ({
-              name,
-              character: '',
-              image: null,
-            }));
-          }
-
-          finalResult = {
-            rating: omdbRating || finalResult?.rating || null,
-            votes: omdbVotes || finalResult?.votes || null,
-            actors: castToUse || finalResult?.actors || [],
-            director: omdbDirector || finalResult?.director || null,
-            genre: (data.Genre && data.Genre !== 'N/A') ? data.Genre : (finalResult?.genre || null),
-            rated: (data.Rated && data.Rated !== 'N/A') ? data.Rated : (finalResult?.rated || null),
-            plot: omdbPlot || finalResult?.plot || null,
-            imdbId: data.imdbID || finalResult?.imdbId || null,
-            year: data.Year || finalResult?.year || null,
-            source: 'imdb',
-          };
-          break;
+        let castToUse = tvMazeCast && tvMazeCast.length > 0 ? tvMazeCast : null;
+        if (!castToUse && rawActorNames.length > 0) {
+          castToUse = rawActorNames.map((name) => ({
+            name,
+            character: '',
+            image: null,
+          }));
         }
+
+        finalResult = {
+          rating: omdbRating || finalResult?.rating || null,
+          votes: omdbVotes || finalResult?.votes || null,
+          actors: castToUse || finalResult?.actors || [],
+          director: omdbDirector || finalResult?.director || null,
+          genre: data.Genre && data.Genre !== 'N/A' ? data.Genre : finalResult?.genre || null,
+          rated: data.Rated && data.Rated !== 'N/A' ? data.Rated : finalResult?.rated || null,
+          plot: omdbPlot || finalResult?.plot || null,
+          imdbId: data.imdbID || finalResult?.imdbId || null,
+          year: data.Year || finalResult?.year || null,
+          source: 'imdb',
+        };
       }
-    } catch (err) {
-      // Try next OMDB key
     }
+  } catch (err) {
+    // Continue to fallback
   }
 
   // 5. Fallback: Official IMDb suggestion API (Public, free)

@@ -53,6 +53,33 @@ const DEFAULT_RELEASE_NOTES = `### 🎬 Movieflix v${TARGET_VERSION} Official Re
 * **In-App Updater Package Parsing Fix**: Hardened package integrity checks (>5MB) and direct CDN routing to ensure smooth updates without Android parsing errors.
 * **EAS Updates Always-Check Channel**: Instant OTA sync configured for future seamless hotfixes.`;
 
+// Rate limiting for update checks to prevent GitHub API rate limits
+const updateRateLimitMap = new Map();
+const UPDATE_RATE_LIMIT_WINDOW_MS = 60 * 1000;
+const MAX_UPDATE_CHECKS_PER_WINDOW = 60;
+
+function getClientIp(req) {
+  const realIp = req.headers['x-real-ip'];
+  if (realIp && typeof realIp === 'string') return realIp.trim();
+  const forwarded = req.headers['x-forwarded-for'];
+  if (forwarded && typeof forwarded === 'string') return forwarded.split(',')[0].trim();
+  return req.socket?.remoteAddress || '127.0.0.1';
+}
+
+function checkUpdateRateLimit(ip) {
+  const now = Date.now();
+  const record = updateRateLimitMap.get(ip);
+  if (!record || now > record.resetTime) {
+    updateRateLimitMap.set(ip, { count: 1, resetTime: now + UPDATE_RATE_LIMIT_WINDOW_MS });
+    return true;
+  }
+  if (record.count >= MAX_UPDATE_CHECKS_PER_WINDOW) {
+    return false;
+  }
+  record.count += 1;
+  return true;
+}
+
 export default async function handler(req, res) {
   // CORS Headers
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -67,6 +94,11 @@ export default async function handler(req, res) {
 
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed. Only GET is supported.' });
+  }
+
+  const clientIp = getClientIp(req);
+  if (!checkUpdateRateLimit(clientIp)) {
+    return res.status(429).json({ error: 'Too many update check requests. Please slow down.' });
   }
 
   const currentVersion = (req.query?.current || TARGET_VERSION).replace(/^v/i, '');

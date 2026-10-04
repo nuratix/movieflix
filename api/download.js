@@ -9,8 +9,46 @@ import crypto from 'crypto';
 const GITHUB_OWNER = 'nuratix';
 const GITHUB_REPO = 'movieflix';
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN ? process.env.GITHUB_TOKEN.trim() : '';
-const JWT_SECRET = process.env.JWT_SECRET || 'movieflix_neon_secret_2026_super_secure';
+
+function getJwtSecret() {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    if (process.env.NODE_ENV === 'production' || process.env.VERCEL) {
+      throw new Error('Server configuration error: JWT_SECRET environment variable is missing.');
+    }
+    return 'dev_secret_only_local_movieflix_2026';
+  }
+  return secret;
+}
+
 const TARGET_VERSION = '1.1.6';
+
+// Rate limiting for APK downloads to prevent flooding
+const downloadRateLimitMap = new Map();
+const DOWNLOAD_RATE_LIMIT_WINDOW_MS = 60 * 1000;
+const MAX_DOWNLOAD_ATTEMPTS_PER_WINDOW = 30;
+
+function getClientIp(req) {
+  const realIp = req.headers['x-real-ip'];
+  if (realIp && typeof realIp === 'string') return realIp.trim();
+  const forwarded = req.headers['x-forwarded-for'];
+  if (forwarded && typeof forwarded === 'string') return forwarded.split(',')[0].trim();
+  return req.socket?.remoteAddress || '127.0.0.1';
+}
+
+function checkDownloadRateLimit(ip) {
+  const now = Date.now();
+  const record = downloadRateLimitMap.get(ip);
+  if (!record || now > record.resetTime) {
+    downloadRateLimitMap.set(ip, { count: 1, resetTime: now + DOWNLOAD_RATE_LIMIT_WINDOW_MS });
+    return true;
+  }
+  if (record.count >= MAX_DOWNLOAD_ATTEMPTS_PER_WINDOW) {
+    return false;
+  }
+  record.count += 1;
+  return true;
+}
 
 function isNewerVersion(remoteVer, currentVer = TARGET_VERSION) {
   if (!remoteVer) return false;
@@ -91,8 +129,14 @@ function verifyJwt(token) {
   if (parts.length !== 3) return null;
 
   const [encodedHeader, encodedPayload, signature] = parts;
+  let secret;
+  try {
+    secret = getJwtSecret();
+  } catch (_) {
+    return null;
+  }
   const expectedSignature = crypto
-    .createHmac('sha256', JWT_SECRET)
+    .createHmac('sha256', secret)
     .update(`${encodedHeader}.${encodedPayload}`)
     .digest('base64')
     .replace(/=/g, '')
@@ -204,46 +248,29 @@ export default async function handler(req, res) {
     });
   }
 
-  // 2. AUTHENTICATION CHECK: Only signed-in users can download from web browser
-  const isAppUpdater =
-    req.query?.source === 'app_update' ||
-    req.headers['x-app-updater'] === 'true' ||
-    (typeof req.headers['user-agent'] === 'string' &&
-      req.headers['user-agent'].includes('Movieflix-App'));
-
-  let user = null;
-  if (!isAppUpdater) {
-    const authHeader = req.headers['authorization'] || '';
-    const tokenQuery = req.query?.token || req.body?.token || '';
-    const token = authHeader.replace(/^Bearer\s+/i, '').trim() || tokenQuery;
-
-    user = verifyJwt(token);
-    if (!user || !user.email) {
-      // If not authenticated:
-      const wantsJson = (req.headers['accept'] || '').includes('application/json') || req.query?.format === 'json';
-      if (wantsJson || req.method === 'POST') {
-        return res.status(401).json({
-          error: 'Authentication required. Please sign in to download MovieFlix APK.',
-          code: 'SIGNIN_REQUIRED',
-        });
-      }
-      // Browser direct navigation redirect to /download with auth required query
-      return res.redirect(302, '/download?auth=required');
-    }
+  // 2. RATE LIMITING TO PREVENT FLOODING / ABUSE
+  const clientIp = getClientIp(req);
+  if (!checkDownloadRateLimit(clientIp)) {
+    return res.status(429).json({
+      error: 'Too many download requests. Please try again later.',
+      code: 'RATE_LIMIT_EXCEEDED',
+    });
   }
 
-  // 3. RECORD DOWNLOAD IN NEON DATABASE
+  // 3. OPTIONAL AUTHENTICATION ATTRIBUTION (Public APK distribution with verified user tracking)
+  const authHeader = req.headers['authorization'] || '';
+  const tokenQuery = req.query?.token || req.body?.token || '';
+  const token = authHeader.replace(/^Bearer\s+/i, '').trim() || tokenQuery;
+  const user = token ? verifyJwt(token) : null;
+
+  // 4. RECORD DOWNLOAD IN NEON DATABASE
   if (sql) {
     try {
-      const ip =
-        req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
-        req.socket?.remoteAddress ||
-        '';
       const ua = req.headers['user-agent'] || '';
-      const email = user?.email || (isAppUpdater ? 'in_app_updater@movieflix.internal' : 'anonymous');
+      const email = user?.email || (req.query?.source ? `app_${String(req.query.source).slice(0, 30)}` : 'public_user');
       await sql`
         INSERT INTO mf_downloads (user_id, user_email, version, ip_address, user_agent)
-        VALUES (${user?.id || null}, ${email}, '1.1.6', ${ip.slice(0, 100)}, ${ua.slice(0, 500)})
+        VALUES (${user?.id || null}, ${email}, ${TARGET_VERSION}, ${clientIp.slice(0, 100)}, ${ua.slice(0, 500)})
       `;
     } catch (dbErr) {
       console.error('[Download API] Record download error:', dbErr.message);

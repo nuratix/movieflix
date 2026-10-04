@@ -18,12 +18,38 @@ const MAX_REQUESTS_PER_WINDOW = 150;
 const cacheMap = new Map();
 const CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes
 
+const ALLOWED_ORIGINS = [
+  'https://movieflix-pi-six.vercel.app',
+  'https://netfilm.world',
+  'http://localhost:3000',
+  'http://localhost:8081',
+  'http://localhost:19006',
+];
+
+function setCors(req, res) {
+  const origin = req.headers['origin'];
+  if (origin && (ALLOWED_ORIGINS.includes(origin) || origin.endsWith('.vercel.app'))) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  } else if (!origin) {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+  } else {
+    res.setHeader('Access-Control-Allow-Origin', 'https://movieflix-pi-six.vercel.app');
+  }
+  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS');
+  res.setHeader(
+    'Access-Control-Allow-Headers',
+    'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-Type, Date, Authorization'
+  );
+}
+
 function getClientIp(req) {
+  const realIp = req.headers['x-real-ip'];
+  if (realIp && typeof realIp === 'string') return realIp.trim();
   const forwarded = req.headers['x-forwarded-for'];
-  if (forwarded) {
+  if (forwarded && typeof forwarded === 'string') {
     return forwarded.split(',')[0].trim();
   }
-  return req.headers['x-real-ip'] || req.socket?.remoteAddress || '127.0.0.1';
+  return req.socket?.remoteAddress || '127.0.0.1';
 }
 
 function checkRateLimit(ip) {
@@ -58,13 +84,7 @@ if (cleanupInterval.unref) cleanupInterval.unref();
 
 export default async function handler(req, res) {
   // 1. Enforce CORS
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS');
-  res.setHeader(
-    'Access-Control-Allow-Headers',
-    'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-Type, Date, Authorization'
-  );
+  setCors(req, res);
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();

@@ -2,9 +2,49 @@ import { neon } from '@neondatabase/serverless';
 import crypto from 'crypto';
 
 // ─── Security & JWT Helpers ──────────────────────────────────────────────────
-const JWT_SECRET = process.env.JWT_SECRET || 'movieflix_neon_secret_2026_super_secure';
+function getJwtSecret() {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    if (process.env.NODE_ENV === 'production' || process.env.VERCEL) {
+      throw new Error('Server configuration error: JWT_SECRET environment variable is missing.');
+    }
+    return 'dev_secret_only_local_movieflix_2026';
+  }
+  return secret;
+}
 const ACCESS_TOKEN_HOURS = 2;
 const REFRESH_TOKEN_DAYS = 30;
+
+// Rate limiting for sensitive auth actions (login, register)
+const authRateLimitMap = new Map();
+const AUTH_RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
+const MAX_AUTH_ATTEMPTS_PER_WINDOW = 10;
+
+function getClientIp(req) {
+  const realIp = req.headers['x-real-ip'];
+  if (realIp && typeof realIp === 'string') {
+    return realIp.trim();
+  }
+  const forwarded = req.headers['x-forwarded-for'];
+  if (forwarded && typeof forwarded === 'string') {
+    return forwarded.split(',')[0].trim();
+  }
+  return req.socket?.remoteAddress || '127.0.0.1';
+}
+
+function checkAuthRateLimit(ip) {
+  const now = Date.now();
+  const record = authRateLimitMap.get(ip);
+  if (!record || now > record.resetTime) {
+    authRateLimitMap.set(ip, { count: 1, resetTime: now + AUTH_RATE_LIMIT_WINDOW_MS });
+    return true;
+  }
+  if (record.count >= MAX_AUTH_ATTEMPTS_PER_WINDOW) {
+    return false;
+  }
+  record.count += 1;
+  return true;
+}
 
 function base64UrlEncode(str) {
   return Buffer.from(str)
@@ -32,7 +72,7 @@ function createJwt(payload) {
   const signatureInput = `${encodedHeader}.${encodedPayload}`;
 
   const signature = crypto
-    .createHmac('sha256', JWT_SECRET)
+    .createHmac('sha256', getJwtSecret())
     .update(signatureInput)
     .digest('base64')
     .replace(/=/g, '')
@@ -48,8 +88,14 @@ function verifyJwt(token) {
   if (parts.length !== 3) return null;
 
   const [encodedHeader, encodedPayload, signature] = parts;
+  let secret;
+  try {
+    secret = getJwtSecret();
+  } catch (_) {
+    return null;
+  }
   const expectedSignature = crypto
-    .createHmac('sha256', JWT_SECRET)
+    .createHmac('sha256', secret)
     .update(`${encodedHeader}.${encodedPayload}`)
     .digest('base64')
     .replace(/=/g, '')
@@ -152,15 +198,33 @@ async function ensureTables(sql) {
 }
 
 // ─── Main API Handler ────────────────────────────────────────────────────────
-export default async function handler(req, res) {
-  // CORS Headers
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
-  res.setHeader('Access-Control-Allow-Origin', '*');
+function setCorsHeaders(req, res) {
+  const origin = req.headers.origin;
+  const allowedOrigins = [
+    'https://movieflix-pi-six.vercel.app',
+    'https://netfilm.world',
+    'http://localhost:8081',
+    'http://localhost:3000',
+    'http://localhost:19006',
+  ];
+  if (origin && (allowedOrigins.includes(origin) || origin.endsWith('.vercel.app') || origin.startsWith('http://localhost:'))) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  } else if (!origin) {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+  } else {
+    res.setHeader('Access-Control-Allow-Origin', allowedOrigins[0]);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  }
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
   res.setHeader(
     'Access-Control-Allow-Headers',
     'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization, X-App-Key'
   );
+}
+
+export default async function handler(req, res) {
+  setCorsHeaders(req, res);
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
@@ -282,8 +346,14 @@ export default async function handler(req, res) {
 
   // POST Handlers
   if (req.method === 'POST') {
+    const clientIp = getClientIp(req);
+
     // 1. REGISTER
     if (action === 'register') {
+      if (!checkAuthRateLimit(clientIp)) {
+        return res.status(429).json({ error: 'Too many registration attempts. Please try again shortly.' });
+      }
+
       const email = (body.email || '').trim().toLowerCase();
       const password = (body.password || '').trim();
 
@@ -333,6 +403,10 @@ export default async function handler(req, res) {
 
     // 2. LOGIN
     if (action === 'login') {
+      if (!checkAuthRateLimit(clientIp)) {
+        return res.status(429).json({ error: 'Too many login attempts. Please try again shortly.' });
+      }
+
       const email = (body.email || '').trim().toLowerCase();
       const password = (body.password || '').trim();
 

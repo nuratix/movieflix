@@ -184,23 +184,24 @@ export async function verifyAppSecurityAsync(apiBase = OFFICIAL_DOWNLOAD_ORIGIN)
       };
     }
   } catch (netErr) {
-    // If offline / network error: verify local signature fingerprint
+    // Offline or network unreachable: accurately report unverified due to network state
     return {
-      verified: true,
-      authentic: true,
+      verified: false,
+      authentic: false,
       isTampered: false,
       offline: true,
+      error: 'NETWORK_UNAVAILABLE',
+      message: 'Could not connect to integrity verification server.',
       buildOrigin: OFFICIAL_DOWNLOAD_ORIGIN,
-      fingerprint: OFFICIAL_BUILD_FINGERPRINT,
     };
   }
 
-  // Fallback valid
+  // Fallback return if server did not respond with 200/403
   return {
-    verified: true,
-    authentic: true,
+    verified: false,
+    authentic: false,
     isTampered: false,
+    error: 'VERIFICATION_INCONCLUSIVE',
     buildOrigin: OFFICIAL_DOWNLOAD_ORIGIN,
-    fingerprint: OFFICIAL_BUILD_FINGERPRINT,
   };
 }
