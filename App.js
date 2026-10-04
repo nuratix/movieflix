@@ -1257,1086 +1257,796 @@ function formatShotCount(num) {
   return String(num);
 }
 
-function selectShotStreamQuality(sources, quality) {
-  if (!Array.isArray(sources) || sources.length === 0) return null;
-  if (!quality || quality === 'Auto') {
-    return sources.find((s) => (s.resolution || '').includes('720')) || sources[0];
-  }
-  const qStr = String(quality).toLowerCase();
-  const match = sources.find((s) => (s.resolution || '').toLowerCase().includes(qStr));
-  return match || sources[0];
-}
+function buildPureHtmlShotsPage({ initialShots, apiBase, isMuted, targetShortId }) {
+  const safeShotsJson = JSON.stringify(initialShots || []);
+  const safeTargetId = JSON.stringify(targetShortId || '');
+  const safeApiBase = JSON.stringify(apiBase || '');
+  const safeIsMuted = isMuted ? 'true' : 'false';
 
-function buildHtmlShotPlayerSource(videoUrl, posterUrl, isMuted, shouldAutoPlay) {
   return `<!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Movieflix Shorts</title>
   <style>
     * {
       margin: 0;
       padding: 0;
       box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
       -webkit-touch-callout: none;
-      -webkit-user-select: none;
       user-select: none;
+      -webkit-user-select: none;
     }
     html, body {
       width: 100%;
       height: 100%;
       background: #000000;
       overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      color: #ffffff;
+    }
+    .feed-container {
+      width: 100%;
+      height: 100%;
+      overflow-y: scroll;
+      scroll-snap-type: y mandatory;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+    }
+    .feed-container::-webkit-scrollbar {
+      display: none;
+    }
+    .slide {
+      width: 100%;
+      height: 100%;
+      scroll-snap-align: start;
+      scroll-snap-stop: always;
+      position: relative;
       display: flex;
       align-items: center;
       justify-content: center;
+      background: #000000;
+      overflow: hidden;
     }
-    video {
+    .ambient-backdrop {
+      position: absolute;
+      top: -10%;
+      left: -10%;
+      width: 120%;
+      height: 120%;
+      object-fit: cover;
+      filter: blur(40px) brightness(0.25);
+      z-index: 1;
+      pointer-events: none;
+    }
+    .stage {
+      position: relative;
+      width: 100%;
+      max-width: 520px;
+      height: 100%;
+      background: #050505;
+      z-index: 2;
+      overflow: hidden;
+    }
+    video.player {
+      position: absolute;
+      top: 0;
+      left: 0;
       width: 100%;
       height: 100%;
       object-fit: contain;
       background: #000000;
       display: block;
+      z-index: 2;
+    }
+    .poster-img {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      background: #000000;
+      z-index: 3;
+      transition: opacity 0.25s ease;
+    }
+    .poster-img.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+    .gradient-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(
+        to bottom,
+        rgba(0, 0, 0, 0.45) 0%,
+        transparent 18%,
+        transparent 62%,
+        rgba(0, 0, 0, 0.35) 75%,
+        rgba(0, 0, 0, 0.88) 100%
+      );
+      z-index: 4;
+      pointer-events: none;
+    }
+    .top-header {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 60px;
+      padding: env(safe-area-inset-top, 14px) 16px 0 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      z-index: 100;
+      pointer-events: none;
+    }
+    .top-header * {
+      pointer-events: auto;
+    }
+    .header-btn {
+      width: 40px;
+      height: 40px;
+      border-radius: 20px;
+      background: rgba(0, 0, 0, 0.45);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      color: #ffffff;
+      transition: transform 0.15s ease, background 0.2s ease;
+    }
+    .header-btn:active {
+      transform: scale(0.92);
+      background: rgba(0, 0, 0, 0.65);
+    }
+    .header-brand {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 17px;
+      font-weight: 800;
+      letter-spacing: -0.3px;
+      text-shadow: 0 1px 4px rgba(0,0,0,0.8);
+    }
+    .live-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 3px;
+      background: #e50914;
+      box-shadow: 0 0 8px #e50914;
+    }
+    .right-actions {
+      position: absolute;
+      right: 14px;
+      bottom: calc(env(safe-area-inset-bottom, 16px) + 78px);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 18px;
+      z-index: 20;
+    }
+    .action-btn {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      background: none;
+      border: none;
+      color: #ffffff;
+      cursor: pointer;
+      gap: 5px;
+    }
+    .action-btn:active {
+      transform: scale(0.9);
+    }
+    .action-icon-circle {
+      width: 46px;
+      height: 46px;
+      border-radius: 23px;
+      background: rgba(0, 0, 0, 0.45);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+    }
+    .action-btn.liked .action-icon-circle {
+      background: rgba(229, 9, 20, 0.25);
+      border-color: rgba(229, 9, 20, 0.45);
+    }
+    .action-btn.liked svg {
+      fill: #e50914;
+      stroke: #e50914;
+    }
+    .action-label {
+      font-size: 11px;
+      font-weight: 700;
+      color: #e5e5e5;
+      text-shadow: 0 1px 3px rgba(0,0,0,0.9);
+    }
+    .bottom-info {
+      position: absolute;
+      left: 16px;
+      right: 80px;
+      bottom: calc(env(safe-area-inset-bottom, 16px) + 20px);
+      z-index: 20;
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+    }
+    .creator-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .creator-avatar {
+      width: 28px;
+      height: 28px;
+      border-radius: 14px;
+      object-fit: cover;
+      border: 1.5px solid rgba(255, 255, 255, 0.9);
+    }
+    .creator-name {
+      font-size: 13px;
+      font-weight: 700;
+      color: #ffffff;
+      text-shadow: 0 1px 3px rgba(0,0,0,0.9);
+    }
+    .shot-title {
+      font-size: 15px;
+      font-weight: 700;
+      line-height: 1.35;
+      color: #ffffff;
+      text-shadow: 0 1px 4px rgba(0,0,0,0.95);
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .ep-pill {
+      display: inline-flex;
+      align-items: center;
+      align-self: flex-start;
+      gap: 6px;
+      background: rgba(255, 255, 255, 0.12);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      border-radius: 14px;
+      padding: 4px 10px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #ffffff;
+    }
+    .ep-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2px 4px;
+      cursor: pointer;
+      opacity: 0.8;
+      border: none;
+      background: none;
+      color: #fff;
+      font-size: 9px;
+    }
+    .ep-btn:active {
+      opacity: 1;
+      transform: scale(1.2);
+    }
+    .progress-bar-track {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 2.5px;
+      background: rgba(255, 255, 255, 0.18);
+      z-index: 50;
+    }
+    .progress-bar-fill {
+      height: 100%;
+      width: 0%;
+      background: #e50914;
+      transition: width 0.15s linear;
+    }
+    .heart-burst {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%) scale(0);
+      pointer-events: none;
+      z-index: 30;
+      opacity: 0;
+      transition: transform 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.3s ease;
+    }
+    .heart-burst.pop {
+      transform: translate(-50%, -50%) scale(1.35);
+      opacity: 1;
+    }
+    .play-pause-hud {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 68px;
+      height: 68px;
+      border-radius: 34px;
+      background: rgba(0, 0, 0, 0.6);
+      backdrop-filter: blur(10px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+      z-index: 25;
+      opacity: 0;
+      transition: opacity 0.25s ease, transform 0.25s ease;
+      color: #ffffff;
+    }
+    .play-pause-hud.show {
+      opacity: 1;
+      transform: translate(-50%, -50%) scale(1.1);
+    }
+    .buffer-spinner {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 44px;
+      height: 44px;
+      border: 3px solid rgba(255, 255, 255, 0.2);
+      border-top-color: #e50914;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      z-index: 22;
+      display: none;
+    }
+    .buffer-spinner.active {
+      display: block;
+    }
+    @keyframes spin {
+      to { transform: translate(-50%, -50%) rotate(360deg); }
     }
   </style>
-  <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
 </head>
 <body>
-  <video
-    id="player"
-    playsinline
-    webkit-playsinline
-    x5-playsinline
-    preload="auto"
-    loop
-    poster="${posterUrl || ''}"
-    ${isMuted ? 'muted' : ''}
-    ${shouldAutoPlay ? 'autoplay' : ''}
-  ></video>
+  <div class="top-header">
+    <div style="display: flex; align-items: center; gap: 12px;">
+      <button class="header-btn" id="backBtn" aria-label="Back">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+      </button>
+      <div class="header-brand">
+        <span style="color: #e50914;">Movieflix</span>
+        <span>Shots</span>
+        <div class="live-dot"></div>
+      </div>
+    </div>
+    <button class="header-btn" id="muteBtn" aria-label="Mute">
+      <svg id="muteIcon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></svg>
+    </button>
+  </div>
+
+  <div class="feed-container" id="feed"></div>
 
   <script>
     (function() {
-      var v = document.getElementById('player');
-      var url = ${JSON.stringify(videoUrl || '')};
-      var shouldPlay = ${shouldAutoPlay ? 'true' : 'false'};
-      v.muted = ${isMuted ? 'true' : 'false'};
+      var API_BASE = ${safeApiBase};
+      var initialShots = ${safeShotsJson};
+      var targetShortId = ${safeTargetId};
+      var isMuted = ${safeIsMuted};
+      var currentActiveIdx = -1;
+      var streamCache = {};
+      var shots = initialShots.slice();
+      var feed = document.getElementById('feed');
+      var muteBtn = document.getElementById('muteBtn');
+      var muteIcon = document.getElementById('muteIcon');
+      var backBtn = document.getElementById('backBtn');
 
-      function post(type, payload) {
+      var volOnSvg = '<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>';
+      var volOffSvg = '<polygon points="11 5 6 9 2 9 2 15 6 15 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line>';
+      var playSvg = '<svg width="34" height="34" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>';
+      var pauseSvg = '<svg width="34" height="34" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>';
+
+      function updateMuteIcon() {
+        muteIcon.innerHTML = isMuted ? volOffSvg : volOnSvg;
+      }
+      updateMuteIcon();
+
+      function postToNative(payload) {
         if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
-          window.ReactNativeWebView.postMessage(JSON.stringify(Object.assign({ type: type }, payload || {})));
+          window.ReactNativeWebView.postMessage(JSON.stringify(payload));
+        } else if (window.parent && window.parent !== window) {
+          window.parent.postMessage(JSON.stringify(payload), '*');
         }
       }
 
-      function loadAndPlay(src) {
-        if (!src) return;
-        if (window.hlsInstance) {
-          try { window.hlsInstance.destroy(); } catch (e) {}
-          window.hlsInstance = null;
+      backBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        postToNative({ type: 'back' });
+      });
+
+      muteBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        isMuted = !isMuted;
+        updateMuteIcon();
+        var allVideos = document.querySelectorAll('video.player');
+        for (var i = 0; i < allVideos.length; i++) {
+          allVideos[i].muted = isMuted;
+        }
+        postToNative({ type: 'toast', message: isMuted ? 'Muted 🔇' : 'Sound unmuted 🔊' });
+      });
+
+      function formatCount(num) {
+        if (!num) return '0';
+        if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+        if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+        return String(num);
+      }
+
+      function createSlideElement(item, idx) {
+        item.currentEp = item.ep || 1;
+        item.total_episodes = item.total_episodes || 12;
+        item.likesCount = item.likes || 0;
+        item.liked = false;
+
+        var slide = document.createElement('div');
+        slide.className = 'slide';
+        slide.dataset.index = idx;
+        slide.dataset.id = item.subject_id || item.id;
+
+        slide.innerHTML =
+          '<img class="ambient-backdrop" src="' + (item.poster_url || '') + '" alt="" />' +
+          '<div class="stage">' +
+            '<video class="player" playsinline webkit-playsinline loop preload="none"></video>' +
+            '<img class="poster-img" src="' + (item.poster_url || '') + '" alt="" />' +
+            '<div class="gradient-overlay"></div>' +
+            '<div class="buffer-spinner"></div>' +
+            '<div class="play-pause-hud"></div>' +
+            '<div class="heart-burst">' +
+              '<svg width="90" height="90" viewBox="0 0 24 24" fill="#e50914" stroke="#e50914" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>' +
+            '</div>' +
+            '<div class="right-actions">' +
+              '<button class="action-btn like-btn" aria-label="Like">' +
+                '<div class="action-icon-circle">' +
+                  '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>' +
+                '</div>' +
+                '<span class="action-label like-count">' + formatCount(item.likesCount) + '</span>' +
+              '</button>' +
+              '<button class="action-btn share-btn" aria-label="Share">' +
+                '<div class="action-icon-circle">' +
+                  '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>' +
+                '</div>' +
+                '<span class="action-label">Share</span>' +
+              '</button>' +
+            '</div>' +
+            '<div class="bottom-info">' +
+              '<div class="creator-row">' +
+                '<img class="creator-avatar" src="' + (item.poster_url || '') + '" alt="" />' +
+                '<span class="creator-name">' + (item.author || '@Movieflix') + '</span>' +
+              '</div>' +
+              '<div class="shot-title">' + (item.title || '') + '</div>' +
+              '<div class="ep-pill">' +
+                '<button class="ep-btn ep-prev-btn">&#9664;</button>' +
+                '<span class="ep-text">Ep ' + item.currentEp + ' / ' + item.total_episodes + '</span>' +
+                '<button class="ep-btn ep-next-btn">&#9654;</button>' +
+              '</div>' +
+            '</div>' +
+            '<div class="progress-bar-track">' +
+              '<div class="progress-bar-fill"></div>' +
+            '</div>' +
+          '</div>';
+
+        setupSlideEvents(slide, item, idx);
+        return slide;
+      }
+
+      function setupSlideEvents(slide, item, idx) {
+        var video = slide.querySelector('video.player');
+        var poster = slide.querySelector('.poster-img');
+        var spinner = slide.querySelector('.buffer-spinner');
+        var hud = slide.querySelector('.play-pause-hud');
+        var progressFill = slide.querySelector('.progress-bar-fill');
+        var likeBtn = slide.querySelector('.like-btn');
+        var likeCountEl = slide.querySelector('.like-count');
+        var shareBtn = slide.querySelector('.share-btn');
+        var heartBurst = slide.querySelector('.heart-burst');
+        var epText = slide.querySelector('.ep-text');
+        var prevEpBtn = slide.querySelector('.ep-prev-btn');
+        var nextEpBtn = slide.querySelector('.ep-next-btn');
+
+        video.addEventListener('timeupdate', function() {
+          if (video.duration > 0) {
+            var pct = (video.currentTime / video.duration) * 100;
+            progressFill.style.width = pct + '%';
+          }
+        });
+
+        video.addEventListener('playing', function() {
+          poster.classList.add('hidden');
+          spinner.classList.remove('active');
+        });
+
+        video.addEventListener('waiting', function() {
+          spinner.classList.add('active');
+        });
+
+        video.addEventListener('canplay', function() {
+          spinner.classList.remove('active');
+        });
+
+        video.addEventListener('error', function() {
+          spinner.classList.remove('active');
+          poster.classList.remove('hidden');
+        });
+
+        function toggleLike() {
+          item.liked = !item.liked;
+          item.likesCount = Math.max(0, item.likesCount + (item.liked ? 1 : -1));
+          likeCountEl.textContent = formatCount(item.likesCount);
+          if (item.liked) {
+            likeBtn.classList.add('liked');
+          } else {
+            likeBtn.classList.remove('liked');
+          }
+          postToNative({
+            type: 'like',
+            shotId: item.subject_id || item.id,
+            liked: item.liked
+          });
         }
 
-        if (src.indexOf('.m3u8') !== -1 && !v.canPlayType('application/vnd.apple.mpegurl')) {
-          if (typeof Hls !== 'undefined' && Hls.isSupported()) {
-            var hls = new Hls({ enableWorker: false });
-            hls.loadSource(src);
-            hls.attachMedia(v);
-            window.hlsInstance = hls;
-            hls.on(Hls.Events.MANIFEST_PARSED, function() {
-              if (shouldPlay) {
-                v.play().catch(function() {});
-              }
-            });
-          } else {
-            v.src = src;
-            if (shouldPlay) v.play().catch(function() {});
+        likeBtn.addEventListener('click', function(e) {
+          e.stopPropagation();
+          toggleLike();
+        });
+
+        shareBtn.addEventListener('click', function(e) {
+          e.stopPropagation();
+          postToNative({ type: 'share', item: item });
+        });
+
+        function changeEp(delta) {
+          var newEp = item.currentEp + delta;
+          if (newEp >= 1 && newEp <= item.total_episodes) {
+            item.currentEp = newEp;
+            epText.textContent = 'Ep ' + newEp + ' / ' + item.total_episodes;
+            postToNative({ type: 'toast', message: 'Playing Episode ' + newEp + ' of ' + item.total_episodes });
+            playSlide(idx);
           }
-        } else {
-          v.src = src;
-          if (shouldPlay) {
-            var p = v.play();
-            if (p && p.catch) {
-              p.catch(function() {
-                if (!v.muted) {
-                  v.muted = true;
-                  v.play().catch(function() {});
-                  post('mutedAutoPlay', {});
-                }
-              });
+        }
+
+        prevEpBtn.addEventListener('click', function(e) {
+          e.stopPropagation();
+          changeEp(-1);
+        });
+
+        nextEpBtn.addEventListener('click', function(e) {
+          e.stopPropagation();
+          changeEp(1);
+        });
+
+        var lastTapTime = 0;
+        slide.addEventListener('click', function(e) {
+          if (e.target.closest('button')) return;
+          var now = Date.now();
+          if (now - lastTapTime < 280) {
+            heartBurst.classList.add('pop');
+            setTimeout(function() { heartBurst.classList.remove('pop'); }, 400);
+            if (!item.liked) toggleLike();
+          } else {
+            if (video.paused) {
+              video.play().catch(function() {});
+              hud.innerHTML = playSvg;
+            } else {
+              video.pause();
+              hud.innerHTML = pauseSvg;
+            }
+            hud.classList.add('show');
+            setTimeout(function() { hud.classList.remove('show'); }, 600);
+          }
+          lastTapTime = now;
+        });
+
+        var touchStartX = 0;
+        var touchStartY = 0;
+        slide.addEventListener('touchstart', function(e) {
+          touchStartX = e.touches[0].clientX;
+          touchStartY = e.touches[0].clientY;
+        }, { passive: true });
+
+        slide.addEventListener('touchend', function(e) {
+          var dx = e.changedTouches[0].clientX - touchStartX;
+          var dy = e.changedTouches[0].clientY - touchStartY;
+          if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+            if (dx < 0) changeEp(1);
+            else changeEp(-1);
+          }
+        }, { passive: true });
+      }
+
+      function renderFeed() {
+        feed.innerHTML = '';
+        for (var i = 0; i < shots.length; i++) {
+          var slide = createSlideElement(shots[i], i);
+          feed.appendChild(slide);
+          observer.observe(slide);
+        }
+      }
+
+      var observer = new IntersectionObserver(function(entries) {
+        for (var i = 0; i < entries.length; i++) {
+          var entry = entries[i];
+          if (entry.isIntersecting && entry.intersectionRatio >= 0.55) {
+            var idx = parseInt(entry.target.dataset.index, 10);
+            if (idx !== currentActiveIdx) {
+              onActiveChange(idx);
             }
           }
         }
+      }, { threshold: [0.55] });
+
+      function onActiveChange(idx) {
+        if (currentActiveIdx >= 0 && currentActiveIdx !== idx) {
+          var oldSlide = feed.children[currentActiveIdx];
+          if (oldSlide) {
+            var oldVid = oldSlide.querySelector('video.player');
+            if (oldVid) {
+              oldVid.pause();
+            }
+          }
+        }
+        currentActiveIdx = idx;
+        playSlide(idx);
+
+        if (idx >= shots.length - 3) {
+          loadMore();
+        }
       }
 
-      loadAndPlay(url);
+      async function fetchStreamUrl(item) {
+        var ep = item.currentEp || 1;
+        var key = (item.subject_id || item.id) + '-ep-' + ep;
+        if (streamCache[key]) return streamCache[key];
 
-      v.addEventListener('timeupdate', function() {
-        post('timeUpdate', { currentTime: v.currentTime, duration: v.duration || 0 });
-      });
-
-      v.addEventListener('playing', function() {
-        post('statusChange', { status: 'playing', duration: v.duration || 0 });
-      });
-
-      v.addEventListener('pause', function() {
-        post('statusChange', { status: 'paused', duration: v.duration || 0 });
-      });
-
-      v.addEventListener('loadeddata', function() {
-        post('statusChange', { status: 'loaded', duration: v.duration || 0 });
-        if (shouldPlay && v.paused) {
-          v.play().catch(function() {});
+        try {
+          var res = await fetch(API_BASE + '/api/content?endpoint=stream&id=' + encodeURIComponent(item.subject_id) + '&detail_path=' + encodeURIComponent(item.slug || '') + '&se=1&ep=' + ep);
+          var data = await res.json();
+          var raw = data && data.sources && data.sources[0] && data.sources[0].url;
+          if (raw) {
+            var proxied = API_BASE + '/api/proxy?url=' + encodeURIComponent(raw);
+            streamCache[key] = proxied;
+            return proxied;
+          }
+        } catch (e) {
+          console.warn('Fetch stream error:', e);
         }
-      });
+        return null;
+      }
 
-      v.addEventListener('canplay', function() {
-        if (shouldPlay && v.paused) {
-          v.play().catch(function() {});
+      async function playSlide(idx) {
+        var slide = feed.children[idx];
+        if (!slide) return;
+        var item = shots[idx];
+        if (!item) return;
+
+        var video = slide.querySelector('video.player');
+        var poster = slide.querySelector('.poster-img');
+        var spinner = slide.querySelector('.buffer-spinner');
+
+        spinner.classList.add('active');
+
+        var url = await fetchStreamUrl(item);
+
+        if (url && currentActiveIdx === idx) {
+          if (video.src !== url) {
+            video.src = url;
+          }
+          video.muted = isMuted;
+          video.currentTime = 0;
+          var p = video.play();
+          if (p && p.catch) {
+            p.then(function() {
+              poster.classList.add('hidden');
+              spinner.classList.remove('active');
+            }).catch(function() {
+              video.muted = true;
+              video.play().then(function() {
+                poster.classList.add('hidden');
+                spinner.classList.remove('active');
+              }).catch(function() {
+                spinner.classList.remove('active');
+              });
+            });
+          }
         }
-      });
 
-      v.addEventListener('error', function() {
-        post('error', { message: 'Video error' });
-      });
+        if (idx + 1 < shots.length) {
+          fetchStreamUrl(shots[idx + 1]);
+        }
+      }
 
-      window.playVideo = function() {
-        shouldPlay = true;
-        v.play().catch(function() {});
-      };
+      var page = 1;
+      var isLoadingMore = false;
+      var hasMore = true;
 
-      window.pauseVideo = function() {
-        shouldPlay = false;
-        v.pause();
-      };
+      async function loadMore() {
+        if (isLoadingMore || !hasMore) return;
+        isLoadingMore = true;
+        page++;
+        try {
+          var res = await fetch(API_BASE + '/api/content?endpoint=shots&page=' + page);
+          var data = await res.json();
+          if (data && Array.isArray(data.items) && data.items.length > 0) {
+            var existingIds = new Set(shots.map(function(s) { return String(s.subject_id || s.id); }));
+            var newItems = data.items.filter(function(s) { return !existingIds.has(String(s.subject_id || s.id)); });
+            for (var j = 0; j < newItems.length; j++) {
+              var newIdx = shots.length;
+              shots.push(newItems[j]);
+              var newSlide = createSlideElement(newItems[j], newIdx);
+              feed.appendChild(newSlide);
+              observer.observe(newSlide);
+            }
+          } else {
+            hasMore = false;
+          }
+        } catch (e) {
+          console.warn('Load more error:', e);
+        } finally {
+          isLoadingMore = false;
+        }
+      }
 
-      window.setMuted = function(muted) {
-        v.muted = Boolean(muted);
-      };
+      renderFeed();
 
-      window.setPlaybackRate = function(rate) {
-        v.playbackRate = Number(rate) || 1.0;
-      };
+      var startIdx = 0;
+      if (targetShortId) {
+        for (var t = 0; t < shots.length; t++) {
+          if (String(shots[t].subject_id || shots[t].id) === String(targetShortId) || shots[t].slug === targetShortId) {
+            startIdx = t;
+            if (feed.children[t]) feed.children[t].scrollIntoView();
+            break;
+          }
+        }
+      }
 
-      window.seekTo = function(seconds) {
-        if (typeof seconds === 'number' && !isNaN(seconds) && isFinite(seconds)) {
-          v.currentTime = seconds;
+      // Auto start target/first slide if observer hasn't fired yet
+      setTimeout(function() {
+        if (currentActiveIdx === -1 && shots.length > 0) {
+          onActiveChange(startIdx);
+        }
+      }, 120);
+
+      window.pauseActiveVideo = function() {
+        if (currentActiveIdx >= 0 && feed.children[currentActiveIdx]) {
+          var v = feed.children[currentActiveIdx].querySelector('video.player');
+          if (v) v.pause();
         }
       };
+
+      window.resumeActiveVideo = function() {
+        if (currentActiveIdx >= 0 && feed.children[currentActiveIdx]) {
+          var v = feed.children[currentActiveIdx].querySelector('video.player');
+          if (v) v.play().catch(function() {});
+        }
+      };
+
+      window.addEventListener('message', function(e) {
+        try {
+          var data = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
+          if (data && data.type === 'pause') window.pauseActiveVideo();
+          if (data && data.type === 'resume') window.resumeActiveVideo();
+        } catch (_) {}
+      });
     })();
   </script>
 </body>
 </html>`;
-}
-
-function ShotItem({
-  item,
-  index,
-  isActive,
-  isTabActive,
-  isMuted,
-  onToggleMute,
-  isLiked,
-  realLikesCount = 0,
-  onToggleLike,
-  onShare,
-  videoQuality = '720p',
-  containerHeight,
-  containerWidth,
-  showToast,
-  triggerHaptic,
-}) {
-  const [currentEp, setCurrentEp] = useState(item.ep || 1);
-  const [totalEpisodes, setTotalEpisodes] = useState(item.total_episodes || item.max_ep || 12);
-  const [videoStreamUrl, setVideoStreamUrl] = useState(null);
-  const [isLoadingStream, setIsLoadingStream] = useState(false);
-  const [isPausedByUser, setIsPausedByUser] = useState(false);
-  const [showPlayPauseAnim, setShowPlayPauseAnim] = useState(false);
-  const [showHeartAnim, setShowHeartAnim] = useState(false);
-  const [showEpModal, setShowEpModal] = useState(false);
-  const [playbackProgress, setPlaybackProgress] = useState(0);
-  const [isScrubbing, setIsScrubbing] = useState(false);
-  const [is2xActive, setIs2xActive] = useState(false);
-  const isScrubbingRef = useRef(false);
-  const isHolding2x = useRef(false);
-  const epStreamsCache = useRef({});
-  const epSourcesCache = useRef({});
-
-  // Compute real dynamic video quality label
-  const activeQualityLabel = useMemo(() => {
-    const cachedSources = epSourcesCache.current[currentEp];
-    if (Array.isArray(cachedSources) && videoStreamUrl) {
-      const match = cachedSources.find((s) => s.url === videoStreamUrl);
-      if (match?.resolution) {
-        const r = String(match.resolution).toUpperCase();
-        return r.includes('P') ? r : `${r}P`;
-      }
-    }
-    if (videoStreamUrl) {
-      if (videoStreamUrl.includes('1080')) return '1080P FHD';
-      if (videoStreamUrl.includes('720')) return '720P HD';
-      if (videoStreamUrl.includes('480')) return '480P SD';
-      if (videoStreamUrl.includes('360')) return '360P';
-    }
-    if (videoQuality && videoQuality !== 'Auto') {
-      return `${videoQuality.toUpperCase()}`;
-    }
-    return '720P HD';
-  }, [videoStreamUrl, currentEp, videoQuality]);
-
-  // Floating heart animation (Instagram double tap)
-  const heartScale = useRef(new Animated.Value(0)).current;
-  const heartOpacity = useRef(new Animated.Value(0)).current;
-
-  // Play/pause feedback animation
-  const playPauseAnim = useRef(new Animated.Value(0)).current;
-
-  // Rotating vinyl disc animation
-  const spinAnim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    let anim;
-    if (isActive && isTabActive && !isPausedByUser) {
-      anim = Animated.loop(
-        Animated.timing(spinAnim, {
-          toValue: 1,
-          duration: 5000,
-          easing: Easing.linear,
-          useNativeDriver: true,
-        })
-      );
-      anim.start();
-    } else {
-      spinAnim.stopAnimation();
-    }
-    return () => {
-      anim?.stop?.();
-    };
-  }, [isActive, isTabActive, isPausedByUser]);
-
-  const spin = spinAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '360deg'],
-  });
-
-  // Fetch episode count if not provided
-  useEffect(() => {
-    if (isActive && item.slug && (!item.total_episodes || item.total_episodes <= 1)) {
-      apiFetch(`${API_BASE}/api/content?endpoint=detail&slug=${encodeURIComponent(item.slug)}`)
-        .then((res) => res.json())
-        .then((detail) => {
-          const seasons = detail?.data?.resource?.seasons || [];
-          const maxEp = seasons[0]?.maxEp;
-          if (typeof maxEp === 'number' && maxEp > 1) {
-            setTotalEpisodes(maxEp);
-          }
-        })
-        .catch(() => {});
-    }
-  }, [isActive, item.slug]);
-
-  // Resolve stream URL whenever active, episode, or quality changes
-  useEffect(() => {
-    if (!isActive) return;
-
-    if (epSourcesCache.current[currentEp]) {
-      const chosen = selectShotStreamQuality(epSourcesCache.current[currentEp], videoQuality);
-      if (chosen?.url) {
-        setVideoStreamUrl(chosen.url);
-        return;
-      }
-    }
-
-    let isCurrent = true;
-    setIsLoadingStream(true);
-
-    const subjectId = item.subject_id;
-    const detailPath = item.slug || '';
-    const epToFetch = currentEp;
-
-    apiFetch(`${API_BASE}/api/content?endpoint=stream&id=${encodeURIComponent(subjectId)}&detail_path=${encodeURIComponent(detailPath)}&se=1&ep=${epToFetch}`)
-      .then((res) => res.json())
-      .then((data) => {
-        if (!isCurrent) return;
-        const sources = data?.sources || [];
-        epSourcesCache.current[epToFetch] = sources;
-        const chosen = selectShotStreamQuality(sources, videoQuality);
-        if (chosen?.url) {
-          epStreamsCache.current[epToFetch] = chosen.url;
-          setVideoStreamUrl(chosen.url);
-        } else {
-          // Fallback to ep 1 or se 0
-          apiFetch(`${API_BASE}/api/content?endpoint=stream&id=${encodeURIComponent(subjectId)}&detail_path=${encodeURIComponent(detailPath)}&se=1&ep=1`)
-            .then((r) => r.json())
-            .then((fb) => {
-              if (!isCurrent) return;
-              const fbSources = fb?.sources || [];
-              epSourcesCache.current[1] = fbSources;
-              const fbChosen = selectShotStreamQuality(fbSources, videoQuality);
-              if (fbChosen?.url) {
-                setVideoStreamUrl(fbChosen.url);
-              }
-            })
-            .catch(() => {});
-        }
-      })
-      .catch((e) => console.warn('[Shots] Stream resolve note:', e))
-      .finally(() => {
-        if (isCurrent) setIsLoadingStream(false);
-      });
-
-    return () => {
-      isCurrent = false;
-    };
-  }, [isActive, currentEp, item, videoQuality]);
-
-  // Respond instantly to quality changes when sources are cached
-  useEffect(() => {
-    const cachedSources = epSourcesCache.current[currentEp];
-    if (Array.isArray(cachedSources) && cachedSources.length > 0) {
-      const chosen = selectShotStreamQuality(cachedSources, videoQuality);
-      if (chosen?.url && chosen.url !== videoStreamUrl) {
-        setVideoStreamUrl(chosen.url);
-      }
-    }
-  }, [videoQuality, currentEp]);
-
-  // HTML5 Video Player references and duration
-  const webViewRef = useRef(null);
-  const webVideoRef = useRef(null);
-  const videoDurationRef = useRef(0);
-  const currentTimeRef = useRef(0);
-
-  // Memoize HTML source for current stream
-  const htmlShotSource = useMemo(() => {
-    // Android WebView does not reliably preserve the CDN Referer/Origin
-    // required by signed media URLs. Route only the native HTML5 player
-    // through Movieflix's media proxy; the browser path already does this
-    // in the <video> src below.
-    const htmlVideoUrl = Platform.OS === 'web' || !videoStreamUrl || !/^https?:\/\//i.test(videoStreamUrl)
-      ? videoStreamUrl
-      : `${API_BASE}/api/proxy?url=${encodeURIComponent(videoStreamUrl)}`;
-    return buildHtmlShotPlayerSource(
-      htmlVideoUrl,
-      item.poster_url,
-      isMuted,
-      isActive && isTabActive && !isPausedByUser
-    );
-  }, [videoStreamUrl, item.poster_url, isMuted, isActive, isTabActive, isPausedByUser, currentEp]);
-
-  // Handle messages from HTML5 player inside WebView
-  const handleWebViewMessage = useCallback((event) => {
-    try {
-      const data = JSON.parse(event.nativeEvent.data);
-      if (data.type === 'timeUpdate') {
-        if (typeof data.currentTime === 'number') {
-          currentTimeRef.current = data.currentTime;
-        }
-        if (typeof data.duration === 'number' && data.duration > 0) {
-          videoDurationRef.current = data.duration;
-        }
-        if (!isScrubbingRef.current && videoDurationRef.current > 0) {
-          setPlaybackProgress(Math.min(1, Math.max(0, currentTimeRef.current / videoDurationRef.current)));
-        }
-      } else if (data.type === 'statusChange') {
-        if (typeof data.duration === 'number' && data.duration > 0) {
-          videoDurationRef.current = data.duration;
-        }
-      }
-    } catch (_) {}
-  }, []);
-
-  // Web platform Hls.js fallback if running in browser
-  useEffect(() => {
-    if (Platform.OS !== 'web' || !webVideoRef.current || !videoStreamUrl) return;
-    const v = webVideoRef.current;
-    const src = (typeof videoStreamUrl === 'string' && (videoStreamUrl.startsWith('http://') || videoStreamUrl.startsWith('https://')))
-      ? `/api/proxy?url=${encodeURIComponent(videoStreamUrl)}`
-      : videoStreamUrl;
-
-    if (src.includes('.m3u8') && !v.canPlayType('application/vnd.apple.mpegurl') && typeof window !== 'undefined' && window.Hls && window.Hls.isSupported()) {
-      const hls = new window.Hls();
-      hls.loadSource(src);
-      hls.attachMedia(v);
-      return () => {
-        try { hls.destroy(); } catch (_) {}
-      };
-    } else {
-      v.src = src;
-    }
-  }, [videoStreamUrl]);
-
-  // Synchronize play / pause state
-  useEffect(() => {
-    const shouldPlay = isActive && isTabActive && !isPausedByUser;
-    if (Platform.OS === 'web') {
-      if (webVideoRef.current) {
-        if (shouldPlay) {
-          webVideoRef.current.play?.().catch?.(() => {});
-        } else {
-          webVideoRef.current.pause?.();
-        }
-      }
-    } else {
-      if (webViewRef.current) {
-        if (shouldPlay) {
-          webViewRef.current.injectJavaScript('window.playVideo && window.playVideo(); true;');
-        } else {
-          webViewRef.current.injectJavaScript('window.pauseVideo && window.pauseVideo(); true;');
-        }
-      }
-    }
-  }, [isActive, isTabActive, isPausedByUser]);
-
-  // Synchronize mute state
-  useEffect(() => {
-    if (Platform.OS === 'web') {
-      if (webVideoRef.current) {
-        webVideoRef.current.muted = isMuted;
-      }
-    } else {
-      webViewRef.current?.injectJavaScript(`window.setMuted && window.setMuted(${isMuted ? 'true' : 'false'}); true;`);
-    }
-  }, [isMuted]);
-
-  // Reset 2x speed when item becomes inactive
-  useEffect(() => {
-    if (!isActive) {
-      if (Platform.OS === 'web') {
-        if (webVideoRef.current) webVideoRef.current.playbackRate = 1.0;
-      } else {
-        webViewRef.current?.injectJavaScript('window.setPlaybackRate && window.setPlaybackRate(1.0); true;');
-      }
-      setIs2xActive(false);
-      isHolding2x.current = false;
-    }
-  }, [isActive]);
-
-  // Long press 2X fast-forward handlers
-  const handleLongPress = () => {
-    if (!isActive || !isTabActive) return;
-    isHolding2x.current = true;
-    setIs2xActive(true);
-    triggerHaptic?.('impactMedium');
-    if (Platform.OS === 'web') {
-      if (webVideoRef.current) webVideoRef.current.playbackRate = 2.0;
-    } else {
-      webViewRef.current?.injectJavaScript('window.setPlaybackRate && window.setPlaybackRate(2.0); true;');
-    }
-  };
-
-  const handlePressOut = () => {
-    if (isHolding2x.current) {
-      isHolding2x.current = false;
-      setIs2xActive(false);
-      if (Platform.OS === 'web') {
-        if (webVideoRef.current) webVideoRef.current.playbackRate = 1.0;
-      } else {
-        webViewRef.current?.injectJavaScript('window.setPlaybackRate && window.setPlaybackRate(1.0); true;');
-      }
-    }
-  };
-
-  // Interactive scrubber pan responder for seeking/moving video forward and backward
-  const scrubberPanResponder = useMemo(() => {
-    const seekWithEvent = (evt) => {
-      const pageX = evt.nativeEvent.pageX;
-      const curVideoWidth = Math.min(containerWidth, Math.max(320, Math.floor(containerHeight * (9 / 16))));
-      const videoLeft = Math.max(0, (containerWidth - curVideoWidth) / 2);
-      const relativeX = pageX - videoLeft;
-      const ratio = Math.max(0, Math.min(1, relativeX / curVideoWidth));
-      setPlaybackProgress(ratio);
-
-      const dur = videoDurationRef.current || 0;
-      if (dur > 0) {
-        const targetTime = ratio * dur;
-        currentTimeRef.current = targetTime;
-        if (Platform.OS === 'web') {
-          if (webVideoRef.current) webVideoRef.current.currentTime = targetTime;
-        } else {
-          webViewRef.current?.injectJavaScript(`window.seekTo && window.seekTo(${targetTime}); true;`);
-        }
-      }
-    };
-
-    return PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onStartShouldSetPanResponderCapture: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponderCapture: () => true,
-      onPanResponderGrant: (evt) => {
-        isScrubbingRef.current = true;
-        setIsScrubbing(true);
-        triggerHaptic?.('selection');
-        seekWithEvent(evt);
-      },
-      onPanResponderMove: (evt) => {
-        seekWithEvent(evt);
-      },
-      onPanResponderRelease: (evt) => {
-        seekWithEvent(evt);
-        isScrubbingRef.current = false;
-        setIsScrubbing(false);
-      },
-      onPanResponderTerminate: () => {
-        isScrubbingRef.current = false;
-        setIsScrubbing(false);
-      },
-    });
-  }, [containerWidth, containerHeight, triggerHaptic]);
-
-  const handleSwipeEpisode = (direction) => {
-    if (direction === 'next') {
-      if (currentEp < totalEpisodes) {
-        const next = currentEp + 1;
-        setCurrentEp(next);
-        triggerHaptic?.('selection');
-        showToast?.(`Playing Episode ${next} of ${totalEpisodes}`);
-      } else {
-        showToast?.(`Last episode reached (${totalEpisodes})`);
-      }
-    } else if (direction === 'prev') {
-      if (currentEp > 1) {
-        const prev = currentEp - 1;
-        setCurrentEp(prev);
-        triggerHaptic?.('selection');
-        showToast?.(`Playing Episode ${prev} of ${totalEpisodes}`);
-      } else {
-        setShowEpModal(true);
-        showToast?.(`All ${totalEpisodes} Episodes`);
-      }
-    }
-  };
-
-  // PanResponder for smooth, high-precision horizontal swipe across episodes
-  // Strictly ignores vertical gestures so parent FlatList vertical scrolling remains silky smooth
-  const panResponder = useMemo(() => {
-    return PanResponder.create({
-      onStartShouldSetPanResponder: () => false,
-      onStartShouldSetPanResponderCapture: () => false,
-      onMoveShouldSetPanResponder: (_, gestureState) => {
-        return Math.abs(gestureState.dx) > 18 && Math.abs(gestureState.dx) > Math.abs(gestureState.dy) * 1.5;
-      },
-      onMoveShouldSetPanResponderCapture: (_, gestureState) => {
-        return Math.abs(gestureState.dx) > 18 && Math.abs(gestureState.dx) > Math.abs(gestureState.dy) * 1.5;
-      },
-      onPanResponderRelease: (_, gestureState) => {
-        if (Math.abs(gestureState.dx) > 25) {
-          if (gestureState.dx < 0) {
-            handleSwipeEpisode('next');
-          } else {
-            handleSwipeEpisode('prev');
-          }
-        }
-      },
-    });
-  }, [currentEp, totalEpisodes]);
-
-  // Double tap to like handling
-  const lastTapRef = useRef(0);
-  const handleScreenPress = () => {
-    if (isHolding2x.current) return;
-    const now = Date.now();
-    if (now - lastTapRef.current < 280) {
-      // Double tap detected!
-      triggerLikeHeart();
-      if (!isLiked) {
-        onToggleLike();
-      }
-    } else {
-      // Single tap -> toggle play / pause
-      togglePlayPause();
-    }
-    lastTapRef.current = now;
-  };
-
-  const triggerLikeHeart = () => {
-    triggerHaptic?.('impactMedium');
-    setShowHeartAnim(true);
-    heartScale.setValue(0);
-    heartOpacity.setValue(1);
-    Animated.sequence([
-      Animated.spring(heartScale, {
-        toValue: 1.25,
-        friction: 4,
-        tension: 80,
-        useNativeDriver: true,
-      }),
-      Animated.timing(heartOpacity, {
-        toValue: 0,
-        duration: 350,
-        useNativeDriver: true,
-      }),
-    ]).start(() => {
-      setShowHeartAnim(false);
-    });
-  };
-
-  const togglePlayPause = () => {
-    triggerHaptic?.('selection');
-    const willPause = !isPausedByUser;
-    setIsPausedByUser(willPause);
-    if (Platform.OS === 'web') {
-      if (webVideoRef.current) {
-        if (willPause) {
-          webVideoRef.current.pause?.();
-        } else {
-          webVideoRef.current.play?.().catch?.(() => {});
-        }
-      }
-    } else {
-      if (webViewRef.current) {
-        if (willPause) {
-          webViewRef.current.injectJavaScript('window.pauseVideo && window.pauseVideo(); true;');
-        } else {
-          webViewRef.current.injectJavaScript('window.playVideo && window.playVideo(); true;');
-        }
-      }
-    }
-    setShowPlayPauseAnim(true);
-    playPauseAnim.setValue(1);
-    Animated.timing(playPauseAnim, {
-      toValue: 0,
-      duration: 600,
-      easing: Easing.out(Easing.ease),
-      useNativeDriver: true,
-    }).start(() => {
-      setShowPlayPauseAnim(false);
-    });
-  };
-
-  // Render bottom episode navigation dots
-  const renderEpisodeDots = () => {
-    const maxVisibleDots = 7;
-    let startEp = 1;
-    let endEp = totalEpisodes;
-
-    if (totalEpisodes > maxVisibleDots) {
-      const half = Math.floor(maxVisibleDots / 2);
-      startEp = Math.max(1, currentEp - half);
-      endEp = Math.min(totalEpisodes, startEp + maxVisibleDots - 1);
-      if (endEp - startEp + 1 < maxVisibleDots) {
-        startEp = Math.max(1, endEp - maxVisibleDots + 1);
-      }
-    }
-
-    const dots = [];
-    for (let ep = startEp; ep <= endEp; ep++) {
-      const isCur = ep === currentEp;
-      dots.push(
-        <TouchableOpacity
-          key={`shot-ep-dot-${ep}`}
-          onPress={() => {
-            if (ep !== currentEp) {
-              setCurrentEp(ep);
-              triggerHaptic?.('selection');
-              showToast?.(`Playing Episode ${ep} of ${totalEpisodes}`);
-            }
-          }}
-          hitSlop={{ top: 8, bottom: 8, left: 3, right: 3 }}
-          style={[styles.shotsEpDot, isCur && styles.shotsEpDotActive]}
-        />
-      );
-    }
-    return dots;
-  };
-
-  const videoWidth = Math.min(containerWidth, Math.max(320, Math.floor(containerHeight * (9 / 16))));
-  const isLetterboxed = containerWidth > videoWidth;
-
-  return (
-    <View style={{ width: containerWidth, height: containerHeight, backgroundColor: '#000000', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
-      {/* Desktop Ambient Blurred Backdrop */}
-      {isLetterboxed && (
-        <SafeImage
-          uri={item.poster_url}
-          style={[StyleSheet.absoluteFillObject, { opacity: 0.22, transform: [{ scale: 1.15 }] }]}
-          blurRadius={30}
-          resizeMode="cover"
-        />
-      )}
-
-      {/* 9:16 Vertical Video Frame (Full screen on mobile, centered 9:16 on desktop) */}
-      <View
-        style={{ width: videoWidth, height: containerHeight, backgroundColor: '#050505', position: 'relative' }}
-        {...panResponder.panHandlers}
-      >
-        {/* 9:16 Video Player or High-Res Poster */}
-        <View style={StyleSheet.absoluteFillObject}>
-          {/* While stream is loading or not active, display High-Res Poster */}
-          {(!videoStreamUrl || !isActive) && (
-            <SafeImage
-              uri={item.poster_url}
-              style={[StyleSheet.absoluteFill, { width: '100%', height: '100%' }]}
-              resizeMode="contain"
-            />
-          )}
-
-          {/* HTML5 Video Player Stream (WebView on Native APK / iOS, <video> on Web) */}
-          {Boolean(videoStreamUrl && isActive) && (
-            <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
-              {Platform.OS === 'web' ? (
-                <video
-                  ref={webVideoRef}
-                  src={
-                    typeof videoStreamUrl === 'string' && (videoStreamUrl.startsWith('http://') || videoStreamUrl.startsWith('https://'))
-                      ? `/api/proxy?url=${encodeURIComponent(videoStreamUrl)}`
-                      : videoStreamUrl
-                  }
-                  poster={item.poster_url}
-                  style={{
-                    width: '100%',
-                    height: '100%',
-                    objectFit: 'contain',
-                    backgroundColor: '#000000',
-                    display: 'block',
-                    pointerEvents: 'none',
-                  }}
-                  playsInline
-                  loop
-                  muted={isMuted}
-                  autoPlay={isActive && isTabActive && !isPausedByUser}
-                  onTimeUpdate={(e) => {
-                    const cur = e.target.currentTime;
-                    const dur = e.target.duration;
-                    if (dur > 0) videoDurationRef.current = dur;
-                    if (!isScrubbingRef.current && dur > 0) {
-                      setPlaybackProgress(Math.min(1, Math.max(0, cur / dur)));
-                    }
-                  }}
-                />
-              ) : (
-                <WebView
-                  ref={webViewRef}
-                  key={`shot-wv-${currentEp}-${videoStreamUrl}`}
-                  source={{
-                    html: htmlShotSource,
-                    baseUrl: 'https://netfilm.world/',
-                  }}
-                  style={[StyleSheet.absoluteFill, { backgroundColor: '#000000' }]}
-                  containerStyle={{ backgroundColor: '#000000' }}
-                  allowsInlineMediaPlayback={true}
-                  mediaPlaybackRequiresUserAction={false}
-                  javaScriptEnabled={true}
-                  domStorageEnabled={true}
-                  mixedContentMode="always"
-                  androidLayerType="hardware"
-                  allowsFullscreenVideo={false}
-                  originWhitelist={['*']}
-                  scrollEnabled={false}
-                  bounces={false}
-                  overScrollMode="never"
-                  pointerEvents="none"
-                  onMessage={handleWebViewMessage}
-                />
-              )}
-            </View>
-          )}
-
-          {/* Tap area to pause/play (single tap), double-tap to like, and long-press for 2X speed */}
-          <TouchableOpacity
-            activeOpacity={1}
-            onPress={handleScreenPress}
-            onLongPress={handleLongPress}
-            onPressOut={handlePressOut}
-            delayLongPress={220}
-            style={[StyleSheet.absoluteFill, { zIndex: 2 }]}
-          />
-
-          {/* Long Press 2X Speed HUD Indicator */}
-          {is2xActive && (
-            <View style={[styles.shots2xHUD, { zIndex: 3 }]} pointerEvents="none">
-              <Feather name="fast-forward" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
-              <Text style={styles.shots2xHUDText}>2X Speed</Text>
-            </View>
-          )}
-
-          {/* Ambient Dark Gradient for UI Readability */}
-          <LinearGradient
-            colors={['rgba(0,0,0,0.35)', 'transparent', 'rgba(0,0,0,0.4)', 'rgba(0,0,0,0.88)']}
-            locations={[0, 0.25, 0.65, 1]}
-            style={[StyleSheet.absoluteFill, { zIndex: 3 }]}
-            pointerEvents="none"
-          />
-
-          {/* Loading Spinner while buffering or switching episodes */}
-          {isLoadingStream && (
-            <View style={[styles.shotsBufferingOverlay, { zIndex: 4 }]} pointerEvents="none">
-              <ActivityIndicator size="large" color="#e50914" />
-              <Text style={styles.shotsBufferingText}>
-                Loading Ep {currentEp}...
-              </Text>
-            </View>
-          )}
-
-          {/* Double-Tap Floating Heart Animation */}
-          {showHeartAnim && (
-            <Animated.View
-              style={[
-                styles.shotsHeartBurst,
-                {
-                  opacity: heartOpacity,
-                  transform: [{ scale: heartScale }],
-                },
-              ]}
-              pointerEvents="none"
-            >
-              <Feather name="heart" size={90} color="#e50914" />
-            </Animated.View>
-          )}
-
-          {/* Single-Tap Play/Pause Indicator Flash */}
-          {showPlayPauseAnim && (
-            <Animated.View
-              style={[
-                styles.shotsPlayPauseIndicator,
-                { opacity: playPauseAnim },
-              ]}
-              pointerEvents="none"
-            >
-              <Feather
-                name={isPausedByUser ? "pause" : "play"}
-                size={36}
-                color="#FFFFFF"
-                style={{ marginLeft: isPausedByUser ? 0 : 3 }}
-              />
-            </Animated.View>
-          )}
-
-          {/* Tap to Unmute Badge if muted on Web */}
-          {isMuted && isActive && (
-            <TouchableOpacity
-              style={styles.shotsUnmuteBadge}
-              onPress={() => {
-                onToggleMute();
-                showToast?.("Sound unmuted 🔊");
-              }}
-              activeOpacity={0.8}
-            >
-              <Feather name="volume-x" size={13} color="#FFFFFF" style={{ marginRight: 5 }} />
-              <Text style={styles.shotsUnmuteText}>Tap for sound</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-
-        {/* ── Instagram Right Column Floating Actions ── */}
-        <View style={styles.shotsRightColumn}>
-          {/* Creator Avatar with follow plus badge */}
-          <View style={styles.shotsAvatarContainer}>
-            <SafeImage uri={item.poster_url} style={styles.shotsAvatarImg} resizeMode="cover" />
-            <View style={styles.shotsAvatarBadge}>
-              <Feather name="plus" size={10} color="#fff" />
-            </View>
-          </View>
-
-          {/* Like / Heart Button (Real Authentic Count from Neon) */}
-          <TouchableOpacity
-            style={styles.shotsActionBtn}
-            onPress={() => {
-              triggerHaptic?.('selection');
-              onToggleLike();
-            }}
-            activeOpacity={0.7}
-          >
-            <View style={[styles.shotsActionIconCircle, isLiked && { backgroundColor: 'rgba(229, 9, 20, 0.25)' }]}>
-              <Feather name="heart" size={26} color={isLiked ? "#e50914" : "#FFFFFF"} />
-            </View>
-            <Text style={styles.shotsActionCount}>
-              {formatShotCount(realLikesCount)}
-            </Text>
-          </TouchableOpacity>
-
-          {/* Share Button (Clean with Share Text, No Mock Counts) */}
-          <TouchableOpacity
-            style={styles.shotsActionBtn}
-            onPress={onShare}
-            activeOpacity={0.7}
-          >
-            <View style={styles.shotsActionIconCircle}>
-              <Feather name="send" size={23} color="#FFFFFF" />
-            </View>
-            <Text style={styles.shotsActionCount}>
-              Share
-            </Text>
-          </TouchableOpacity>
-
-          {/* Mute / Unmute Button */}
-          <TouchableOpacity
-            style={styles.shotsActionBtn}
-            onPress={() => {
-              triggerHaptic?.('selection');
-              onToggleMute();
-            }}
-            activeOpacity={0.7}
-          >
-            <View style={styles.shotsActionIconCircle}>
-              <Feather name={isMuted ? "volume-x" : "volume-2"} size={22} color="#FFFFFF" />
-            </View>
-          </TouchableOpacity>
-
-          {/* Spinning Vinyl Audio Disc (Instagram Signature) */}
-          <Animated.View style={[styles.shotsVinylContainer, { transform: [{ rotate: spin }] }]}>
-            <View style={styles.shotsVinylRing}>
-              <View style={styles.shotsVinylCenter}>
-                <Feather name="music" size={11} color="#FFFFFF" />
-              </View>
-            </View>
-          </Animated.View>
-        </View>
-
-        {/* ── Bottom-Left Caption & Creator Overlay ── */}
-        <View style={styles.shotsBottomOverlay} pointerEvents="box-none">
-          <View style={styles.shotsAuthorRow}>
-            <Text style={styles.shotsAuthorText}>{item.author || '@DramaBox'}</Text>
-            <View style={styles.shotsVerifiedBadge}>
-              <Feather name="check" size={10} color="#FFFFFF" />
-            </View>
-            <View style={styles.shotsEpisodeBadge}>
-              <Text style={styles.shotsEpisodeText}>{activeQualityLabel}</Text>
-            </View>
-          </View>
-
-          <Text style={styles.shotsTitleText} numberOfLines={2}>
-            {item.title}
-          </Text>
-
-          {/* ── Episode Selector & Dot Indicators in Clean Correct Place ── */}
-          {totalEpisodes > 1 && (
-            <View style={styles.shotsEpisodeBar} pointerEvents="box-none">
-              <TouchableOpacity
-                style={[styles.shotsEpArrowBtn, currentEp <= 1 && styles.shotsEpArrowDisabled]}
-                onPress={() => handleSwipeEpisode('prev')}
-                disabled={currentEp <= 1}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                activeOpacity={0.7}
-              >
-                <Feather name="chevron-left" size={15} color={currentEp <= 1 ? "rgba(255,255,255,0.25)" : "#FFFFFF"} />
-              </TouchableOpacity>
-
-              <View style={styles.shotsEpDotsRow}>
-                {renderEpisodeDots()}
-              </View>
-
-              <TouchableOpacity
-                style={[styles.shotsEpArrowBtn, currentEp >= totalEpisodes && styles.shotsEpArrowDisabled]}
-                onPress={() => handleSwipeEpisode('next')}
-                disabled={currentEp >= totalEpisodes}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                activeOpacity={0.7}
-              >
-                <Feather name="chevron-right" size={15} color={currentEp >= totalEpisodes ? "rgba(255,255,255,0.25)" : "#FFFFFF"} />
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.shotsEpBadgePill}
-                onPress={() => setShowEpModal(true)}
-                activeOpacity={0.75}
-                hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
-              >
-                <Text style={styles.shotsEpBadgeText}>EP {currentEp}/{totalEpisodes}</Text>
-                <Feather name="grid" size={10} color="#FFFFFF" style={{ marginLeft: 4 }} />
-              </TouchableOpacity>
-
-              <Text style={styles.shotsEpSwipeHint}>Swipe ↔</Text>
-            </View>
-          )}
-
-          <Text style={styles.shotsTagsText}>
-            #shots #reels #dramabox #vertical916 #trending
-          </Text>
-
-          <View style={styles.shotsAudioTickerRow}>
-            <Feather name="music" size={12} color="rgba(255,255,255,0.7)" style={{ marginRight: 6 }} />
-            <Text style={styles.shotsAudioTickerText} numberOfLines={1}>
-              Original Sound • {item.author || 'DramaBox'} Studios
-            </Text>
-          </View>
-        </View>
-
-        {/* ── Interactive Seek Scrubber / Player Line ── */}
-        <View
-          style={[styles.shotsScrubberHitArea, isScrubbing && styles.shotsScrubberHitAreaActive]}
-          {...scrubberPanResponder.panHandlers}
-        >
-          <View style={[styles.shotsProgressTrack, isScrubbing && styles.shotsProgressTrackActive]}>
-            <View style={[styles.shotsProgressFill, { width: `${playbackProgress * 100}%` }]} />
-            {isScrubbing && (
-              <View
-                style={[
-                  styles.shotsProgressScrubberThumb,
-                  { left: `${Math.min(99, Math.max(1, playbackProgress * 100))}%` },
-                ]}
-              />
-            )}
-          </View>
-        </View>
-      </View>
-
-      {/* ── Episodes Grid Bottom Sheet Modal ── */}
-      <Modal
-        visible={showEpModal}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setShowEpModal(false)}
-      >
-        <TouchableOpacity
-          style={styles.shotsModalBackdrop}
-          activeOpacity={1}
-          onPress={() => setShowEpModal(false)}
-        >
-          <View style={styles.shotsModalSheet} onStartShouldSetResponder={() => true}>
-            <View style={styles.shotsModalHeader}>
-              <View style={styles.shotsModalDragIndicator} />
-              <View style={styles.shotsModalHeaderRow}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.shotsModalTitle} numberOfLines={1}>{item.title}</Text>
-                  <Text style={styles.shotsModalSubtitle}>Select Episode (Total {totalEpisodes})</Text>
-                </View>
-                <TouchableOpacity
-                  onPress={() => setShowEpModal(false)}
-                  style={styles.shotsModalCloseBtn}
-                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                >
-                  <Feather name="x" size={20} color="#FFFFFF" />
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            <ScrollView
-              contentContainerStyle={styles.shotsEpGridContainer}
-              showsVerticalScrollIndicator={false}
-            >
-              {Array.from({ length: totalEpisodes }, (_, i) => i + 1).map((ep) => {
-                const isSelected = ep === currentEp;
-                return (
-                  <TouchableOpacity
-                    key={`ep-grid-btn-${ep}`}
-                    style={[
-                      styles.shotsEpGridBtn,
-                      isSelected && styles.shotsEpGridBtnActive,
-                    ]}
-                    onPress={() => {
-                      triggerHaptic?.('selection');
-                      setCurrentEp(ep);
-                      setShowEpModal(false);
-                      showToast?.(`Playing Episode ${ep}`);
-                    }}
-                    activeOpacity={0.7}
-                  >
-                    <Text
-                      style={[
-                        styles.shotsEpGridBtnText,
-                        isSelected && styles.shotsEpGridBtnTextActive,
-                      ]}
-                    >
-                      {ep}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-          </View>
-        </TouchableOpacity>
-      </Modal>
-    </View>
-  );
 }
 
 function ShotsFeedView({
@@ -2350,411 +2060,157 @@ function ShotsFeedView({
   openAuthModal,
   targetShortId,
 }) {
-  const seenIdsRef = useRef(new Set());
-  const sessionSeedRef = useRef(Date.now() % 100000);
-  const userProfileRef = useRef(null);
-  const likedItemsRef = useRef([]);
+  const webViewRef = useRef(null);
+  const iframeRef = useRef(null);
+  const [shotsHtml, setShotsHtml] = useState(null);
 
-  // Chunk loading: start with a ranked initial chunk to avoid freezes
-  const [shots, setShots] = useState(() => rankShotsFeed(INITIAL_SHOTS, null, seenIdsRef.current, sessionSeedRef.current));
-  const [activeShotIndex, setActiveShotIndex] = useState(0);
-  const [isMuted, setIsMuted] = useState(Platform.OS === 'web');
-  const [shotsQuality, setShotsQuality] = useState('720p');
-  const [showQualityModal, setShowQualityModal] = useState(false);
-  const [shotLikesCounts, setShotLikesCounts] = useState({});
-  const [likedShotIds, setLikedShotIds] = useState(() => new Set());
-  const [page, setPage] = useState(1);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const [hasMore, setHasMore] = useState(true);
-
-  const QUALITY_OPTIONS = ['Auto', '1080p', '720p', '480p'];
-  const { width: winWidth, height: winHeight } = useWindowDimensions();
-  const containerHeight = winHeight;
-  const containerWidth = winWidth;
-
-  // Chunk loading: fetch page 1 from live API and rank with NextViper algo
+  // Generate the standalone pure HTML/CSS/JS page
   useEffect(() => {
-    let isMounted = true;
-    apiFetch(`${API_BASE}/api/content?endpoint=shots&page=1`)
-      .then((res) => res.json())
-      .then((data) => {
-        if (!isMounted) return;
-        if (Array.isArray(data?.items) && data.items.length > 0) {
-          const ranked = rankShotsFeed(data.items, userProfileRef.current, seenIdsRef.current, sessionSeedRef.current);
-          setShots((prev) => {
-            const existingIds = new Set(prev.map((s) => String(s.subject_id || s.id)));
-            const newItems = ranked.filter((s) => !existingIds.has(String(s.subject_id || s.id)));
-            return [...prev, ...newItems];
-          });
-        }
-      })
-      .catch((e) => console.warn('[Shots] Live feed note:', e));
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  // Jump to targeted short if deep-linked via /short/:id
-  useEffect(() => {
-    if (targetShortId && shots.length > 0) {
-      const idx = shots.findIndex((s) => String(s.subject_id || s.id) === String(targetShortId) || s.slug === targetShortId);
-      if (idx >= 0 && idx !== activeShotIndex) {
-        setActiveShotIndex(idx);
-      }
-    }
-  }, [targetShortId, shots]);
-
-  // Lazy Chunk Loader: Only fetches one page at a time to prevent UI freezes
-  const loadMoreShots = useCallback(() => {
-    if (isLoadingMore || !hasMore) return;
-    setIsLoadingMore(true);
-    const nextPage = page + 1;
-    apiFetch(`${API_BASE}/api/content?endpoint=shots&page=${nextPage}`)
-      .then((res) => res.json())
-      .then((data) => {
-        if (Array.isArray(data?.items) && data.items.length > 0) {
-          const ranked = rankShotsFeed(data.items, userProfileRef.current, seenIdsRef.current, sessionSeedRef.current + nextPage);
-          setShots((prev) => {
-            const existingIds = new Set(prev.map((s) => String(s.subject_id || s.id)));
-            const newItems = ranked.filter((s) => !existingIds.has(String(s.subject_id || s.id)));
-            return [...prev, ...newItems];
-          });
-          setPage(nextPage);
-        } else {
-          setHasMore(false);
-        }
-      })
-      .catch((e) => console.warn('[Shots] loadMoreShots error:', e))
-      .finally(() => setIsLoadingMore(false));
-  }, [isLoadingMore, hasMore, page]);
-
-  // Track active visible item
-  const onViewableItemsChanged = useRef(({ viewableItems }) => {
-    if (viewableItems && viewableItems.length > 0) {
-      const first = viewableItems[0];
-      if (typeof first.index === 'number') {
-        setActiveShotIndex(first.index);
-      }
-    }
-  }).current;
-
-  const viewabilityConfig = useRef({
-    itemVisiblePercentThreshold: 65,
-  }).current;
-
-  // Sync browser URL to /short/:id and mark as seen in NextViper entropy engine
-  useEffect(() => {
-    const cur = shots[activeShotIndex];
-    if (cur) {
-      const curId = String(cur.subject_id || cur.id);
-      seenIdsRef.current.add(curId);
-      if (Platform.OS === 'web' && typeof window !== 'undefined' && window.history?.replaceState) {
-        const targetPath = `/short/${curId}`;
-        if (window.location.pathname !== targetPath && !window.location.pathname.startsWith('/auth')) {
-          window.history.replaceState({ shotId: curId }, '', targetPath);
-        }
-      }
-    }
-  }, [activeShotIndex, shots]);
-
-  // Restore persisted likes state from AsyncStorage on mount
-  useEffect(() => {
-    AsyncStorage.getItem('@mf_shots_likes')
-      .then((data) => {
-        if (data) {
-          try {
-            const parsed = JSON.parse(data);
-            if (Array.isArray(parsed)) setLikedShotIds(new Set(parsed));
-          } catch (_) {}
-        }
-      })
-      .catch(() => {});
-
-    AsyncStorage.getItem('@mf_shots_likes_counts')
-      .then((data) => {
-        if (data) {
-          try {
-            const parsed = JSON.parse(data);
-            if (parsed && typeof parsed === 'object') setShotLikesCounts((prev) => ({ ...prev, ...parsed }));
-          } catch (_) {}
-        }
-      })
-      .catch(() => {});
-  }, []);
-
-  // Fetch authentic real-time likes for all shots from Neon DB in batch
-  useEffect(() => {
-    if (!shots || shots.length === 0) return;
-    const shotIds = shots.map((s) => String(s.subject_id || s.id));
-    const headers = authAccessToken ? { Authorization: `Bearer ${authAccessToken}` } : {};
-    apiFetch(`${API_BASE}/api/auth?action=batch-shot-likes&shot_ids=${encodeURIComponent(shotIds.join(','))}`, { headers })
-      .then((r) => r.json())
-      .then((res) => {
-        if (res?.status === 'success' && res.counts) {
-          setShotLikesCounts((prev) => {
-            const merged = { ...prev, ...res.counts };
-            AsyncStorage.setItem('@mf_shots_likes_counts', JSON.stringify(merged)).catch(() => {});
-            return merged;
-          });
-          if (Array.isArray(res.user_liked_ids) && res.user_liked_ids.length > 0) {
-            setLikedShotIds((prev) => {
-              const merged = new Set([...prev, ...res.user_liked_ids]);
-              AsyncStorage.setItem('@mf_shots_likes', JSON.stringify([...merged])).catch(() => {});
-              return merged;
-            });
-          }
-        }
-      })
-      .catch(() => {});
-  }, [shots, authAccessToken]);
-
-  // Only logged-in users can like; records to Neon PostgreSQL
-  const handleToggleLike = async (item) => {
-    if (!authUser || !authAccessToken) {
-      triggerHaptic?.('notificationWarning');
-      showToast?.('Please sign in to like this shot! ❤️');
-      openAuthModal?.();
-      return;
-    }
-
-    triggerHaptic?.('selection');
-    const shotId = String(item.subject_id || item.id);
-    const currentlyLiked = likedShotIds.has(shotId);
-
-    // Optimistic UI update with AsyncStorage persistence
-    setLikedShotIds((prev) => {
-      const next = new Set(prev);
-      if (currentlyLiked) next.delete(shotId);
-      else next.add(shotId);
-      AsyncStorage.setItem('@mf_shots_likes', JSON.stringify([...next])).catch(() => {});
-      return next;
+    const apiBase = Platform.OS === 'web' ? '' : 'https://movieflix-pi-six.vercel.app';
+    const rankedShots = typeof rankShotsFeed === 'function'
+      ? rankShotsFeed(INITIAL_SHOTS, null, new Set(), Date.now() % 100000)
+      : INITIAL_SHOTS;
+    const html = buildPureHtmlShotsPage({
+      initialShots: rankedShots,
+      apiBase,
+      isMuted: Platform.OS === 'web',
+      targetShortId,
     });
-    setShotLikesCounts((prev) => {
-      const nextCount = Math.max(0, (prev[shotId] || 0) + (currentlyLiked ? -1 : 1));
-      const updated = { ...prev, [shotId]: nextCount };
-      AsyncStorage.setItem('@mf_shots_likes_counts', JSON.stringify(updated)).catch(() => {});
-      return updated;
-    });
+    setShotsHtml(html);
+  }, [targetShortId]);
 
-    // Update NextViper user interest vector dynamically
-    if (!currentlyLiked) {
-      likedItemsRef.current.push(item);
-      userProfileRef.current = buildUserInterestVector(likedItemsRef.current, []);
-    }
-
-    try {
-      const res = await apiFetch(`${API_BASE}/api/auth`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${authAccessToken}`,
-        },
-        body: JSON.stringify({
-          action: currentlyLiked ? 'unlike-shot' : 'like-shot',
-          shot_id: shotId,
-        }),
-      });
-      const data = await res.json();
-      if (data?.status === 'success') {
-        if (typeof data.likes_count === 'number') {
-          setShotLikesCounts((prev) => {
-            const updated = { ...prev, [shotId]: data.likes_count };
-            AsyncStorage.setItem('@mf_shots_likes_counts', JSON.stringify(updated)).catch(() => {});
-            return updated;
-          });
-        }
-        showToast?.(currentlyLiked ? 'Unliked' : 'Liked Shot ❤️');
-      }
-    } catch (e) {
-      console.warn('[Shots] Like action note:', e);
-    }
-  };
-
-  const handleShare = async (item) => {
-    triggerHaptic?.('selection');
-    const shotId = item.subject_id || item.id;
-    const shareUrl = `https://movieflix-pi-six.vercel.app/short/${shotId}`;
-    if (Platform.OS !== 'web') {
-      try {
-        await Share.share({
-          message: `Watch "${item.title}" on MovieFlix Shots: ${shareUrl}`,
-          url: shareUrl,
-          title: item.title,
-        });
-      } catch (_) {}
-    } else {
-      if (typeof navigator !== 'undefined' && navigator.clipboard) {
-        navigator.clipboard.writeText(shareUrl).then(() => {
-          showToast?.("Link copied to clipboard! 📋");
-        }).catch(() => {
-          showToast?.(shareUrl);
-        });
+  // Tab switching: pause video when moving away from Shots, resume when returning
+  useEffect(() => {
+    if (!isTabActive) {
+      if (Platform.OS === 'web') {
+        iframeRef.current?.contentWindow?.postMessage(JSON.stringify({ type: 'pause' }), '*');
       } else {
-        showToast?.("Link copied to clipboard! 📋");
+        webViewRef.current?.injectJavaScript(
+          'window.pauseActiveVideo && window.pauseActiveVideo(); true;'
+        );
+      }
+    } else {
+      if (Platform.OS === 'web') {
+        iframeRef.current?.contentWindow?.postMessage(JSON.stringify({ type: 'resume' }), '*');
+      } else {
+        webViewRef.current?.injectJavaScript(
+          'window.resumeActiveVideo && window.resumeActiveVideo(); true;'
+        );
       }
     }
-  };
+  }, [isTabActive]);
+
+  // Handle messages from the pure HTML player
+  const handleMessage = useCallback((data) => {
+    if (!data || !data.type) return;
+
+    if (data.type === 'back') {
+      triggerHaptic?.('selection');
+      onBack?.();
+    } else if (data.type === 'toast') {
+      showToast?.(data.message);
+    } else if (data.type === 'haptic') {
+      triggerHaptic?.(data.style || 'selection');
+    } else if (data.type === 'like') {
+      triggerHaptic?.('selection');
+      if (authUser && authAccessToken && data.shotId) {
+        apiFetch(`${API_BASE}/api/auth`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${authAccessToken}`,
+          },
+          body: JSON.stringify({
+            action: data.liked ? 'like-shot' : 'unlike-shot',
+            shot_id: String(data.shotId),
+          }),
+        }).catch(() => {});
+      }
+    } else if (data.type === 'share' && data.item) {
+      triggerHaptic?.('selection');
+      const sId = data.item.subject_id || data.item.id;
+      const shareUrl = `https://movieflix-pi-six.vercel.app/short/${sId}`;
+      Share.share({
+        message: `Watch "${data.item.title || 'Movieflix Shorts'}" on Movieflix Shorts! 🎬🍿\n${shareUrl}`,
+        url: shareUrl,
+        title: data.item.title || 'Movieflix Shorts',
+      }).catch(() => {});
+    }
+  }, [authUser, authAccessToken, onBack, showToast, triggerHaptic]);
+
+  // Listen for Web iframe postMessage
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    const onWindowMsg = (e) => {
+      try {
+        const payload = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
+        if (payload && typeof payload === 'object') {
+          handleMessage(payload);
+        }
+      } catch (_) {}
+    };
+    window.addEventListener('message', onWindowMsg);
+    return () => window.removeEventListener('message', onWindowMsg);
+  }, [handleMessage]);
+
+  const onWebViewMessage = useCallback((event) => {
+    try {
+      const payload = JSON.parse(event.nativeEvent.data);
+      if (payload && typeof payload === 'object') {
+        handleMessage(payload);
+      }
+    } catch (_) {}
+  }, [handleMessage]);
+
+  if (!shotsHtml) {
+    return (
+      <View style={[StyleSheet.absoluteFill, { backgroundColor: '#000000', alignItems: 'center', justifyContent: 'center' }]}>
+        <ActivityIndicator size="large" color="#e50914" />
+      </View>
+    );
+  }
+
+  if (Platform.OS === 'web') {
+    return (
+      <View style={[StyleSheet.absoluteFill, { backgroundColor: '#000000', zIndex: 999 }]}>
+        <iframe
+          ref={iframeRef}
+          srcDoc={shotsHtml}
+          style={{
+            width: '100%',
+            height: '100%',
+            border: 'none',
+            backgroundColor: '#000000',
+          }}
+          allow="autoplay; fullscreen; encrypted-media"
+        />
+      </View>
+    );
+  }
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#000000', position: 'relative' }}>
-      {/* Top Header: Back Button + Shots Title + Quality Selector + Mute */}
-      <View style={[styles.shotsTopHeader, { paddingTop: insets.top + 8 }]} pointerEvents="box-none">
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <TouchableOpacity
-            style={styles.shotsHeaderBackBtn}
-            onPress={() => {
-              triggerHaptic?.('selection');
-              onBack?.();
-            }}
-            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-            activeOpacity={0.7}
-          >
-            <Feather name="arrow-left" size={22} color="#FFFFFF" />
-          </TouchableOpacity>
-
-          <View style={styles.shotsBrandRow}>
-            <Feather name="film" size={20} color="#e50914" style={{ marginRight: 6 }} />
-            <Text style={styles.shotsBrandText}>Shots</Text>
-            <View style={styles.shotsLiveDot} />
-          </View>
-        </View>
-
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-          {/* Video Quality Selector */}
-          <TouchableOpacity
-            style={styles.shotsQualityBtn}
-            onPress={() => {
-              triggerHaptic?.('selection');
-              setShowQualityModal(true);
-            }}
-            activeOpacity={0.8}
-          >
-            <Feather name="sliders" size={13} color="#FFFFFF" style={{ marginRight: 5 }} />
-            <Text style={styles.shotsQualityBtnText}>{shotsQuality}</Text>
-            <Feather name="chevron-down" size={12} color="rgba(255, 255, 255, 0.7)" style={{ marginLeft: 3 }} />
-          </TouchableOpacity>
-
-          {/* Sound Toggle */}
-          <TouchableOpacity
-            style={styles.shotsHeaderIconBtn}
-            onPress={() => {
-              triggerHaptic?.('selection');
-              setIsMuted((prev) => !prev);
-            }}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            activeOpacity={0.7}
-          >
-            <Feather name={isMuted ? "volume-x" : "volume-2"} size={18} color="#FFFFFF" />
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {/* 9:16 Vertical Snap Scroll Feed (Chunk loaded) */}
-      <FlatList
-        data={shots}
-        keyExtractor={(item) => String(item.id || item.subject_id)}
-        renderItem={({ item, index }) => {
-          const sId = String(item.subject_id || item.id);
-          const realLikes = typeof shotLikesCounts[sId] === 'number' ? shotLikesCounts[sId] : (item.likes || 0);
-          return (
-            <ShotItem
-              item={item}
-              index={index}
-              isActive={index === activeShotIndex}
-              isTabActive={isTabActive}
-              isMuted={isMuted}
-              onToggleMute={() => setIsMuted((prev) => !prev)}
-              isLiked={likedShotIds.has(sId)}
-              realLikesCount={realLikes}
-              onToggleLike={() => handleToggleLike(item)}
-              onShare={() => handleShare(item)}
-              videoQuality={shotsQuality}
-              containerHeight={containerHeight}
-              containerWidth={containerWidth}
-              showToast={showToast}
-              triggerHaptic={triggerHaptic}
-            />
-          );
+    <View style={[StyleSheet.absoluteFill, { backgroundColor: '#000000', zIndex: 999 }]}>
+      <WebView
+        ref={webViewRef}
+        source={{
+          html: shotsHtml,
+          baseUrl: 'https://movieflix-pi-six.vercel.app',
         }}
-        pagingEnabled={true}
-        snapToInterval={containerHeight}
-        snapToAlignment="start"
-        decelerationRate="fast"
-        showsVerticalScrollIndicator={false}
-        onViewableItemsChanged={onViewableItemsChanged}
-        viewabilityConfig={viewabilityConfig}
-        initialNumToRender={2}
-        maxToRenderPerBatch={2}
-        windowSize={3}
-        onEndReached={loadMoreShots}
-        onEndReachedThreshold={0.5}
-        ListFooterComponent={
-          isLoadingMore ? (
-            <View style={styles.shotsFooterLoader}>
-              <ActivityIndicator size="small" color="#e50914" />
-              <Text style={styles.shotsFooterText}>Loading more Shots...</Text>
-            </View>
-          ) : null
-        }
-        removeClippedSubviews={false}
-        getItemLayout={(_, index) => ({
-          length: containerHeight,
-          offset: containerHeight * index,
-          index,
-        })}
+        style={{ flex: 1, backgroundColor: '#000000' }}
+        containerStyle={{ backgroundColor: '#000000' }}
+        allowsInlineMediaPlayback={true}
+        mediaPlaybackRequiresUserAction={false}
+        javaScriptEnabled={true}
+        domStorageEnabled={true}
+        mixedContentMode="always"
+        androidLayerType="hardware"
+        allowsFullscreenVideo={false}
+        originWhitelist={['*']}
+        scrollEnabled={true}
+        bounces={false}
+        overScrollMode="never"
+        onMessage={onWebViewMessage}
       />
-
-      {/* Global Video Quality Selector Modal */}
-      <Modal
-        visible={showQualityModal}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setShowQualityModal(false)}
-      >
-        <TouchableOpacity
-          style={styles.shotsModalBackdrop}
-          activeOpacity={1}
-          onPress={() => setShowQualityModal(false)}
-        >
-          <View style={styles.shotsQualitySheet} onStartShouldSetResponder={() => true}>
-            <View style={styles.shotsModalDragIndicator} />
-            <View style={styles.shotsModalHeaderRow}>
-              <View>
-                <Text style={styles.shotsModalTitle}>Video Playback Quality</Text>
-                <Text style={styles.shotsModalSubtitle}>Applies across all vertical drama shots</Text>
-              </View>
-              <TouchableOpacity
-                style={styles.shotsModalCloseBtn}
-                onPress={() => setShowQualityModal(false)}
-              >
-                <Feather name="x" size={18} color="#FFFFFF" />
-              </TouchableOpacity>
-            </View>
-
-            {QUALITY_OPTIONS.map((q) => {
-              const isSelected = shotsQuality === q;
-              return (
-                <TouchableOpacity
-                  key={`quality-opt-${q}`}
-                  style={styles.shotsQualityOptionBtn}
-                  onPress={() => {
-                    triggerHaptic?.('selection');
-                    setShotsQuality(q);
-                    setShowQualityModal(false);
-                    showToast?.(`Video quality set to ${q}`);
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <Text style={[styles.shotsQualityOptionText, isSelected && styles.shotsQualityOptionTextActive]}>
-                    {q === 'Auto' ? 'Auto (Best for network speed)' : `${q} Full HD`}
-                  </Text>
-                  {isSelected && <Feather name="check" size={18} color="#e50914" />}
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        </TouchableOpacity>
-      </Modal>
     </View>
   );
 }
@@ -3319,12 +2775,16 @@ function ReelApp() {
     cartoonsList,
   ]);
 
-  // Handle Android Hardware Back Button for Me subpages
+  // Handle Android Hardware Back Button for Me subpages and Shots tab
   useEffect(() => {
     if (Platform.OS !== 'android') return;
     const onBackPress = () => {
       if (mainTab === 'Me' && meSubTab !== null) {
         setMeSubTab(null);
+        return true;
+      }
+      if (mainTab === 'Shots') {
+        setMainTab('Home');
         return true;
       }
       return false;
