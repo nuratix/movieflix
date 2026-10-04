@@ -110,6 +110,13 @@ async function ensureTables(sql) {
       );
     `;
     await sql`
+      CREATE TABLE IF NOT EXISTS mf_rate_limits (
+        key VARCHAR(255) PRIMARY KEY,
+        count INTEGER DEFAULT 1,
+        reset_time BIGINT NOT NULL
+      );
+    `;
+    await sql`
       CREATE INDEX IF NOT EXISTS idx_mf_downloads_email ON mf_downloads(user_email);
     `;
     await sql`
@@ -118,6 +125,36 @@ async function ensureTables(sql) {
     tablesInitialized = true;
   } catch (err) {
     console.error('[Download API] ensureTables error:', err);
+  }
+}
+
+async function checkDurableRateLimit(sql, key, maxAttempts, windowMs) {
+  const now = Date.now();
+  if (!sql) {
+    return checkDownloadRateLimit(key);
+  }
+  try {
+    const rows = await sql`
+      INSERT INTO mf_rate_limits (key, count, reset_time)
+      VALUES (${key}, 1, ${now + windowMs})
+      ON CONFLICT (key) DO UPDATE
+      SET count = CASE
+        WHEN mf_rate_limits.reset_time < ${now} THEN 1
+        ELSE mf_rate_limits.count + 1
+      END,
+      reset_time = CASE
+        WHEN mf_rate_limits.reset_time < ${now} THEN ${now + windowMs}
+        ELSE mf_rate_limits.reset_time
+      END
+      RETURNING count, reset_time;
+    `;
+    const record = rows[0];
+    if (record && record.count > maxAttempts) {
+      return false;
+    }
+    return true;
+  } catch (err) {
+    return checkDownloadRateLimit(key);
   }
 }
 
@@ -158,10 +195,27 @@ function verifyJwt(token) {
   }
 }
 
-export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+const ALLOWED_ORIGINS = new Set([
+  'https://movieflix-pi-six.vercel.app',
+  'https://netfilm.world',
+  'http://localhost:3000',
+  'http://localhost:8081',
+  'http://localhost:19006',
+]);
+
+function setCors(req, res) {
+  const origin = req.headers['origin'];
+  if (origin && ALLOWED_ORIGINS.has(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  } else {
+    res.setHeader('Access-Control-Allow-Origin', 'https://movieflix-pi-six.vercel.app');
+  }
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+}
+
+export default async function handler(req, res) {
+  setCors(req, res);
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
@@ -250,7 +304,8 @@ export default async function handler(req, res) {
 
   // 2. RATE LIMITING TO PREVENT FLOODING / ABUSE
   const clientIp = getClientIp(req);
-  if (!checkDownloadRateLimit(clientIp)) {
+  const isAllowed = await checkDurableRateLimit(sql, `download:${clientIp}`, 30, 60000);
+  if (!isAllowed) {
     return res.status(429).json({
       error: 'Too many download requests. Please try again later.',
       code: 'RATE_LIMIT_EXCEEDED',

@@ -28,20 +28,18 @@ function checkRateLimit(ip) {
   return true;
 }
 
-const ALLOWED_ORIGINS = [
+const ALLOWED_ORIGINS = new Set([
   'https://movieflix-pi-six.vercel.app',
   'https://netfilm.world',
   'http://localhost:3000',
   'http://localhost:8081',
   'http://localhost:19006',
-];
+]);
 
 function setCors(req, res) {
   const origin = req.headers['origin'];
-  if (origin && (ALLOWED_ORIGINS.includes(origin) || origin.endsWith('.vercel.app'))) {
+  if (origin && ALLOWED_ORIGINS.has(origin)) {
     res.setHeader('Access-Control-Allow-Origin', origin);
-  } else if (!origin) {
-    res.setHeader('Access-Control-Allow-Origin', '*');
   } else {
     res.setHeader('Access-Control-Allow-Origin', 'https://movieflix-pi-six.vercel.app');
   }
@@ -73,7 +71,12 @@ export default async function handler(req, res) {
   }
 
   // Server-side OMDB keys (configured via Vercel env variable OMDB_API_KEY or OMDB_API_KEYS)
-  const envKeys = process.env.OMDB_API_KEYS || process.env.OMDB_API_KEY || 'trilogy,2b21cd75,852233f0';
+  const envKeys = process.env.OMDB_API_KEYS || process.env.OMDB_API_KEY;
+  if (!envKeys) {
+    return res.status(500).json({
+      error: 'IMDb service is not configured. Please configure OMDB_API_KEY in server environment.',
+    });
+  }
   const apiKeys = envKeys
     .split(',')
     .map((k) => k.trim())

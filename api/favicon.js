@@ -50,7 +50,10 @@ async function handler(req, res) {
   res.setHeader('Content-Type', isIco ? 'image/x-icon' : 'image/png');
   res.setHeader('Content-Length', buffer.length);
   res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  const origin = req.headers['origin'];
+  if (origin && ['https://movieflix-pi-six.vercel.app', 'https://netfilm.world', 'http://localhost:3000', 'http://localhost:8081', 'http://localhost:19006'].includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  }
   res.setHeader('X-Content-Type-Options', 'nosniff');
 
   return res.status(200).send(buffer);

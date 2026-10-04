@@ -11,15 +11,14 @@ function getIntegritySecret() {
   const secret = process.env.INTEGRITY_SECRET;
   if (!secret) {
     if (process.env.NODE_ENV === 'production' || process.env.VERCEL) {
-      throw new Error('Server configuration error: INTEGRITY_SECRET environment variable is missing.');
+      return null;
     }
     return 'dev_integrity_secret_movieflix_2026';
   }
   return secret;
 }
 
-function createSeal(payload) {
-  const secret = getIntegritySecret();
+function createSeal(payload, secret) {
   return crypto
     .createHmac('sha256', secret)
     .update(JSON.stringify(payload))
@@ -53,20 +52,18 @@ function checkRateLimit(ip) {
   return true;
 }
 
-const ALLOWED_ORIGINS = [
+const ALLOWED_ORIGINS = new Set([
   'https://movieflix-pi-six.vercel.app',
   'https://netfilm.world',
   'http://localhost:3000',
   'http://localhost:8081',
   'http://localhost:19006',
-];
+]);
 
 function setCors(req, res) {
   const origin = req.headers['origin'];
-  if (origin && (ALLOWED_ORIGINS.includes(origin) || origin.endsWith('.vercel.app'))) {
+  if (origin && ALLOWED_ORIGINS.has(origin)) {
     res.setHeader('Access-Control-Allow-Origin', origin);
-  } else if (!origin) {
-    res.setHeader('Access-Control-Allow-Origin', '*');
   } else {
     res.setHeader('Access-Control-Allow-Origin', 'https://movieflix-pi-six.vercel.app');
   }
@@ -156,6 +153,15 @@ export default async function handler(req, res) {
       }
 
       // 4. Issue Cryptographic Verification Seal
+      const secret = getIntegritySecret();
+      if (!secret) {
+        return res.status(503).json({
+          success: false,
+          error: 'INTEGRITY_SERVICE_UNAVAILABLE',
+          message: 'Integrity service is currently unavailable. Please verify configuration.',
+        });
+      }
+
       const verificationPayload = {
         packageName: OFFICIAL_PACKAGE_NAME,
         buildFingerprint: OFFICIAL_BUILD_FINGERPRINT,
@@ -165,7 +171,7 @@ export default async function handler(req, res) {
         verifiedAt: Date.now(),
       };
 
-      const seal = createSeal(verificationPayload);
+      const seal = createSeal(verificationPayload, secret);
 
       return res.status(200).json({
         success: true,

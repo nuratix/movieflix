@@ -80,11 +80,27 @@ function checkUpdateRateLimit(ip) {
   return true;
 }
 
-export default async function handler(req, res) {
-  // CORS Headers
-  res.setHeader('Access-Control-Allow-Origin', '*');
+const ALLOWED_ORIGINS = new Set([
+  'https://movieflix-pi-six.vercel.app',
+  'https://netfilm.world',
+  'http://localhost:3000',
+  'http://localhost:8081',
+  'http://localhost:19006',
+]);
+
+function setCors(req, res) {
+  const origin = req.headers['origin'];
+  if (origin && ALLOWED_ORIGINS.has(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  } else {
+    res.setHeader('Access-Control-Allow-Origin', 'https://movieflix-pi-six.vercel.app');
+  }
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+}
+
+export default async function handler(req, res) {
+  setCors(req, res);
   // Disable caching for update checks so clients always get live version info
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0, s-maxage=0');
 

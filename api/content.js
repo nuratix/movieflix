@@ -18,20 +18,18 @@ const MAX_REQUESTS_PER_WINDOW = 150;
 const cacheMap = new Map();
 const CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes
 
-const ALLOWED_ORIGINS = [
+const ALLOWED_ORIGINS = new Set([
   'https://movieflix-pi-six.vercel.app',
   'https://netfilm.world',
   'http://localhost:3000',
   'http://localhost:8081',
   'http://localhost:19006',
-];
+]);
 
 function setCors(req, res) {
   const origin = req.headers['origin'];
-  if (origin && (ALLOWED_ORIGINS.includes(origin) || origin.endsWith('.vercel.app'))) {
+  if (origin && ALLOWED_ORIGINS.has(origin)) {
     res.setHeader('Access-Control-Allow-Origin', origin);
-  } else if (!origin) {
-    res.setHeader('Access-Control-Allow-Origin', '*');
   } else {
     res.setHeader('Access-Control-Allow-Origin', 'https://movieflix-pi-six.vercel.app');
   }

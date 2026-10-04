@@ -1327,21 +1327,12 @@ function DedicatedShotPlayer({
   useEffect(() => {
     if (!player) return;
     const sub = player.addListener?.('timeUpdate', ({ currentTime }) => {
-      if (currentTime > 0.05) {
-        onVideoReady?.();
-      }
       onTimeUpdate?.(currentTime, player.duration || 0);
-    });
-    const statusSub = player.addListener?.('statusChange', (payload) => {
-      if (payload?.status === 'readyToPlay') {
-        onVideoReady?.();
-      }
     });
     return () => {
       sub?.remove?.();
-      statusSub?.remove?.();
     };
-  }, [player, onTimeUpdate, onVideoReady]);
+  }, [player, onTimeUpdate]);
 
   return (
     <VideoView
@@ -1352,6 +1343,7 @@ function DedicatedShotPlayer({
       nativeControls={false}
       allowsFullscreen={false}
       contentFit="contain"
+      onFirstFrameRender={onVideoReady}
     />
   );
 }
@@ -1389,6 +1381,11 @@ function ShotItem({
   const isHolding2x = useRef(false);
   const epStreamsCache = useRef({});
   const epSourcesCache = useRef({});
+
+  // Reset video readiness state on episode or video stream change
+  useEffect(() => {
+    setIsVideoReady(false);
+  }, [currentEp, videoStreamUrl]);
 
   // Compute real dynamic video quality label
   const activeQualityLabel = useMemo(() => {
@@ -1800,9 +1797,6 @@ function ShotItem({
               isPausedByUser={isPausedByUser}
               is2xActive={is2xActive}
               onTimeUpdate={(currentTime, duration) => {
-                if (currentTime > 0.05) {
-                  setIsVideoReady(true);
-                }
                 if (duration > 0) {
                   videoDurationRef.current = duration;
                 }

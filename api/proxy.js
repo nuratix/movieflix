@@ -131,15 +131,33 @@ export default async function handler(req, res) {
   return handleEdge(req);
 }
 
+const ALLOWED_ORIGINS = new Set([
+  'https://movieflix-pi-six.vercel.app',
+  'https://netfilm.world',
+  'http://localhost:3000',
+  'http://localhost:8081',
+  'http://localhost:19006',
+]);
+
+function getCorsOrigin(origin) {
+  if (origin && ALLOWED_ORIGINS.has(origin)) {
+    return origin;
+  }
+  return 'https://movieflix-pi-six.vercel.app';
+}
+
 // ----------------------------------------------------
 // Edge Runtime Handler (Vercel Production)
 // ----------------------------------------------------
 async function handleEdge(req) {
+  const reqOrigin = req.headers.get('origin');
+  const corsOrigin = getCorsOrigin(reqOrigin);
+
   if (req.method === 'OPTIONS') {
     return new Response(null, {
       status: 204,
       headers: {
-        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Origin': corsOrigin,
         'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
         'Access-Control-Allow-Headers': '*',
         'Access-Control-Max-Age': '86400',
@@ -153,7 +171,7 @@ async function handleEdge(req) {
   if (!targetUrl || !isSafeUrl(targetUrl)) {
     return new Response('Access denied: target URL is not in the approved media allowlist.', {
       status: 403,
-      headers: { 'Access-Control-Allow-Origin': '*' },
+      headers: { 'Access-Control-Allow-Origin': corsOrigin },
     });
   }
 
@@ -195,7 +213,7 @@ async function handleEdge(req) {
     }
 
     responseHeaders.set('Content-Disposition', 'inline');
-    responseHeaders.set('Access-Control-Allow-Origin', '*',);
+    responseHeaders.set('Access-Control-Allow-Origin', corsOrigin);
     responseHeaders.set('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
     responseHeaders.set('Access-Control-Allow-Headers', '*');
     responseHeaders.set('Access-Control-Expose-Headers', 'Content-Range, Content-Length, Accept-Ranges');
@@ -208,7 +226,7 @@ async function handleEdge(req) {
   } catch (err) {
     return new Response(`Streaming proxy error: ${err.message}`, {
       status: 502,
-      headers: { 'Access-Control-Allow-Origin': '*' },
+      headers: { 'Access-Control-Allow-Origin': corsOrigin },
     });
   }
 }
@@ -217,7 +235,10 @@ async function handleEdge(req) {
 // Node.js / Connect Handler (Metro Dev Server / Local)
 // ----------------------------------------------------
 async function handleNode(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  const reqOrigin = req.headers['origin'];
+  const corsOrigin = getCorsOrigin(reqOrigin);
+
+  res.setHeader('Access-Control-Allow-Origin', corsOrigin);
   res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', '*');
   res.setHeader('Access-Control-Expose-Headers', 'Content-Range, Content-Length, Accept-Ranges');

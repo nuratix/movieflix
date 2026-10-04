@@ -186,6 +186,13 @@ async function ensureTables(sql) {
       );
     `;
     await sql`
+      CREATE TABLE IF NOT EXISTS mf_rate_limits (
+        key VARCHAR(255) PRIMARY KEY,
+        count INTEGER DEFAULT 1,
+        reset_time BIGINT NOT NULL
+      );
+    `;
+    await sql`
       CREATE INDEX IF NOT EXISTS idx_mf_shots_likes_shot ON mf_shots_likes(shot_id);
     `;
     await sql`
@@ -193,28 +200,58 @@ async function ensureTables(sql) {
     `;
     tablesInitialized = true;
   } catch (err) {
-    console.error('ensureTables error:', err);
+    console.error('Database migration/init error:', err);
+  }
+}
+
+// ─── Durable Neon Rate Limiter ───────────────────────────────────────────────
+async function checkDurableRateLimit(sql, key, maxAttempts, windowMs) {
+  const now = Date.now();
+  if (!sql) {
+    return checkAuthRateLimit(key);
+  }
+  try {
+    const rows = await sql`
+      INSERT INTO mf_rate_limits (key, count, reset_time)
+      VALUES (${key}, 1, ${now + windowMs})
+      ON CONFLICT (key) DO UPDATE
+      SET count = CASE
+        WHEN mf_rate_limits.reset_time < ${now} THEN 1
+        ELSE mf_rate_limits.count + 1
+      END,
+      reset_time = CASE
+        WHEN mf_rate_limits.reset_time < ${now} THEN ${now + windowMs}
+        ELSE mf_rate_limits.reset_time
+      END
+      RETURNING count, reset_time;
+    `;
+    const record = rows[0];
+    if (record && record.count > maxAttempts) {
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.warn('[RateLimit] Durable check fallback to memory:', err.message);
+    return checkAuthRateLimit(key);
   }
 }
 
 // ─── Main API Handler ────────────────────────────────────────────────────────
+const ALLOWED_ORIGINS = new Set([
+  'https://movieflix-pi-six.vercel.app',
+  'https://netfilm.world',
+  'http://localhost:8081',
+  'http://localhost:3000',
+  'http://localhost:19006',
+]);
+
 function setCorsHeaders(req, res) {
   const origin = req.headers.origin;
-  const allowedOrigins = [
-    'https://movieflix-pi-six.vercel.app',
-    'https://netfilm.world',
-    'http://localhost:8081',
-    'http://localhost:3000',
-    'http://localhost:19006',
-  ];
-  if (origin && (allowedOrigins.includes(origin) || origin.endsWith('.vercel.app') || origin.startsWith('http://localhost:'))) {
+  if (origin && ALLOWED_ORIGINS.has(origin)) {
     res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Access-Control-Allow-Credentials', 'true');
-  } else if (!origin) {
-    res.setHeader('Access-Control-Allow-Origin', '*');
   } else {
-    res.setHeader('Access-Control-Allow-Origin', allowedOrigins[0]);
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Access-Control-Allow-Origin', 'https://movieflix-pi-six.vercel.app');
   }
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
   res.setHeader(
@@ -350,7 +387,8 @@ export default async function handler(req, res) {
 
     // 1. REGISTER
     if (action === 'register') {
-      if (!checkAuthRateLimit(clientIp)) {
+      const isAllowed = await checkDurableRateLimit(sql, `register:${clientIp}`, 5, 60000);
+      if (!isAllowed) {
         return res.status(429).json({ error: 'Too many registration attempts. Please try again shortly.' });
       }
 
@@ -403,7 +441,8 @@ export default async function handler(req, res) {
 
     // 2. LOGIN
     if (action === 'login') {
-      if (!checkAuthRateLimit(clientIp)) {
+      const isAllowed = await checkDurableRateLimit(sql, `login:${clientIp}`, 10, 60000);
+      if (!isAllowed) {
         return res.status(429).json({ error: 'Too many login attempts. Please try again shortly.' });
       }
 
