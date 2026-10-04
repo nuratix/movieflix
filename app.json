@@ -117,6 +117,14 @@
             }
           ]
         }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "extraProguardRules": "-keep class androidx.media3.** { *; }\n-keep class com.google.android.exoplayer2.** { *; }\n-keep class expo.modules.video.** { *; }\n-dontwarn androidx.media3.**\n-dontwarn com.google.android.exoplayer2.**"
+          }
+        }
       ]
     ],
     "updates": {

@@ -1794,6 +1794,7 @@ function ShotItem({
               style={StyleSheet.absoluteFillObject}
               contentFit="contain"
               surfaceType={Platform.OS === 'android' ? 'textureView' : 'surfaceView'}
+              useExoShutter={true}
               nativeControls={false}
             />
           )}
@@ -3888,13 +3889,8 @@ function ReelApp() {
         .catch(() => {});
     }
 
-    if (Platform.OS === 'web' || skipIntro) {
-      setIsIntroLoading(false);
-      setIsPlayerOpen(true);
-    } else {
-      setIsPlayerOpen(false);
-      setIsIntroLoading(true);
-    }
+    setIsIntroLoading(false);
+    setIsPlayerOpen(true);
     setLoadingStream(!offlineVideoUrl);
     setStreamError(null);
     setAvailableStreams([]);
@@ -8890,14 +8886,11 @@ function ReelCustomPlayer({
       */}
       <VideoView
         ref={videoViewRef}
-        style={[
-          StyleSheet.absoluteFill,
-          Platform.OS === 'web'
-            ? { width: '100%', height: '100%', objectFit: contentFitMode }
-            : { width: '100%', height: '100%' },
-        ]}
+        key={`main-video-${videoUrl}`}
+        style={StyleSheet.absoluteFillObject}
         player={player}
         surfaceType={Platform.OS === 'android' ? 'textureView' : 'surfaceView'}
+        useExoShutter={true}
         nativeControls={false}
         allowsFullscreen={false}
         allowsPictureInPicture={true}
