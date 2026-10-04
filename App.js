@@ -1606,8 +1606,15 @@ function ShotItem({
 
   // Memoize HTML source for current stream
   const htmlShotSource = useMemo(() => {
+    // Android WebView does not reliably preserve the CDN Referer/Origin
+    // required by signed media URLs. Route only the native HTML5 player
+    // through Movieflix's media proxy; the browser path already does this
+    // in the <video> src below.
+    const htmlVideoUrl = Platform.OS === 'web' || !videoStreamUrl || !/^https?:\/\//i.test(videoStreamUrl)
+      ? videoStreamUrl
+      : `${API_BASE}/api/proxy?url=${encodeURIComponent(videoStreamUrl)}`;
     return buildHtmlShotPlayerSource(
-      videoStreamUrl,
+      htmlVideoUrl,
       item.poster_url,
       isMuted,
       isActive && isTabActive && !isPausedByUser
@@ -14178,4 +14185,3 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
 });
-
