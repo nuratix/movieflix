@@ -17,6 +17,8 @@ import {
   PanResponder,
   Linking,
   RefreshControl,
+  FlatList,
+  Share,
 } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import { StatusBar } from 'expo-status-bar';
@@ -1095,183 +1097,736 @@ function HomeSkeletonLoader() {
   );
 }
 
-// ─── SPOTIFY RED MUSIC HELPERS & COMPONENTS ─────────────────────────────────
-function parseMusicTrackInfo(rawName) {
-  if (!rawName) return { title: 'Music Track', artist: 'Popular Artist' };
-  let clean = String(rawName)
-    .replace(/\s*[\(\[](official\s*(music\s*)?video|audio|lyrics|hd|4k|clean|remastered|lyrical\s*video|full\s*album|playlist|full\s*song|video\s*mix)[\)\]]/gi, '')
-    .trim();
-
-  if (clean.includes('|')) {
-    const parts = clean.split('|').map(p => p.trim()).filter(Boolean);
-    return {
-      title: parts[0] || clean,
-      artist: parts[1] || 'Featured Artist',
-    };
+// ─── INSTAGRAM-STYLE 9:16 SHOTS FEED & VIDEO PLAYER ─────────────────────────
+const INITIAL_SHOTS = [
+  {
+    id: "545117293769020152-ep1",
+    subject_id: "545117293769020152",
+    title: "I'm pregnant, it's not yours",
+    slug: "im-pregnant-its-not-yours-iLdEdERDgE",
+    poster_url: "https://pbcdnw.aoneroom.com/image/2026/08/19/c0a1ea39fb7a40fd3d0ec44fa6684a39.jpg",
+    rating: "7.9",
+    video_url: "https://bcdnxw.hakunaymatata.com/dramabox/1dec3ee273238342f33befdeab24006e.mp4?sign=3acca8a5ac90f140367c0590a3e7ecae&t=1791093507",
+    duration: 137,
+    author: "@DramaBox",
+    likes: 42430,
+    shares: 7551,
+  },
+  {
+    id: "8514694265598101032-ep1",
+    subject_id: "8514694265598101032",
+    title: "Beneath Her Gown: The Master's Claimed Wolf Pet",
+    slug: "beneath-her-gown-the-masters-claimed-wolf-pet-k8xuNqboZ8a",
+    poster_url: "https://pbcdnw.aoneroom.com/image/2026/08/11/50e2c2fc118aaacb56bf6e892743d5ff.jpg",
+    rating: "7.2",
+    video_url: "https://bcdnxw.hakunaymatata.com/netshort/156142bbcb4b08e6aeab4a2ec8b66f6e.mp4?sign=3f7e91c1310b989d1cac063f590a8e2d&t=1791093553",
+    duration: 157,
+    author: "@NetShort",
+    likes: 47582,
+    shares: 3782,
+  },
+  {
+    id: "3453846752107844528-ep1",
+    subject_id: "3453846752107844528",
+    title: "Disciplined by My Mafia Master",
+    slug: "disciplined-by-my-mafia-master-IOUVnVAE874",
+    poster_url: "https://pbcdnw.aoneroom.com/image/2026/08/12/eba98a15ea3a790581c975c58a80cf94.jpg",
+    rating: "7.8",
+    video_url: "https://bcdnxw.hakunaymatata.com/dramabox/78b77c22753a097796eb3423da8b4f1f.mp4?sign=84e4de4bec3b651009d9daf4a427acc8&t=1791093554",
+    duration: 143,
+    author: "@DramaBox",
+    likes: 23473,
+    shares: 3201,
+  },
+  {
+    id: "8656852975811445184-ep1",
+    subject_id: "8656852975811445184",
+    title: "The Hidden Dragon Rider Returns for Justice",
+    slug: "the-hidden-dragon-rider-returns-for-justice-KTqXdfFtuja",
+    poster_url: "https://pbcdnw.aoneroom.com/image/2026/08/24/4be78c41bd06008edc758fed54b88750.jpg",
+    rating: "7.9",
+    video_url: "https://bcdnxw.hakunaymatata.com/resource/8de4068b08b56d566abb845244948c66.mp4?sign=865e812b76a2ccda15305d86ff01075f&t=1791093509",
+    duration: 286,
+    author: "@ShortMax",
+    likes: 26148,
+    shares: 5676,
+  },
+  {
+    id: "1893361129175368768-ep1",
+    subject_id: "1893361129175368768",
+    title: "The Gambling God Vanished Until the Final Hand",
+    slug: "the-gambling-god-vanished-until-the-final-hand-8sEaor4CRf2",
+    poster_url: "https://pbcdnw.aoneroom.com/image/2026/08/24/1901755c3ec30ab5e338938d3c9f0064.jpg",
+    rating: "7.1",
+    video_url: "https://bcdnxw.hakunaymatata.com/resource/d8ece1c6ea53db3a347cbe2d9558d519.mp4?sign=fdb1d6aed967cc2ae6dcce0e0a8e91fa&t=1791093556",
+    duration: 202,
+    author: "@ReelShort",
+    likes: 43305,
+    shares: 5837,
+  },
+  {
+    id: "8569709395045678544-ep1",
+    subject_id: "8569709395045678544",
+    title: "OMG! My Divorce Client Is My Billionaire Husband",
+    slug: "omg-my-divorce-client-is-my-billionaire-husband-6Rd6xDjm3da",
+    poster_url: "https://pbcdnw.aoneroom.com/image/2026/08/19/6b3f8c18a5311f8b344a19037c6f199b.jpg",
+    rating: "7.6",
+    video_url: "https://bcdnxw.hakunaymatata.com/resource/ac8a896a5d270f0a719705d147b47054.mp4?sign=5caf1fbd0266753516a3b29c1687b8d8&t=1791093556",
+    duration: 202,
+    author: "@DramaBox",
+    likes: 32274,
+    shares: 6097,
+  },
+  {
+    id: "9106721078893863608-ep1",
+    subject_id: "9106721078893863608",
+    title: "One Move God Mode 2",
+    slug: "one-move-god-mode-2-uH6hEtvSIQa",
+    poster_url: "https://pbcdnw.aoneroom.com/image/2026/08/12/0a07afddec873b23bf2b74073424a4a4.jpg",
+    rating: "7.7",
+    video_url: "https://bcdnxw.hakunaymatata.com/netshort/d60f39f5d3e05105330d92edc602e4bb.mp4?sign=c3f4a1ce13abac499d74d7f25b8ba1b8&t=1791093512",
+    duration: 224,
+    author: "@NetShort",
+    likes: 40962,
+    shares: 1735,
+  },
+  {
+    id: "8529996031482808168-ep1",
+    subject_id: "8529996031482808168",
+    title: "Daddy Don's Forbidden Pet",
+    slug: "daddy-dons-forbidden-pet-QEduiBht7aa",
+    poster_url: "https://pbcdnw.aoneroom.com/image/2026/08/25/f02290e1f49389c5a626cea31c20c3a0.jpg",
+    rating: "7.0",
+    video_url: "https://bcdnxw.hakunaymatata.com/goodshort/e3efe9f0da6340af9ff9602c7e4c734d.mp4?sign=110e23608f7627ff9c8e801e4d9ec40c&t=1791093159",
+    duration: 152,
+    author: "@GoodShort",
+    likes: 47795,
+    shares: 8244,
+  },
+  {
+    id: "6191020716834840472-ep1",
+    subject_id: "6191020716834840472",
+    title: "The 100th Divorce Was Final",
+    slug: "the-100th-divorce-was-final-ke4MZwjWkn7",
+    poster_url: "https://pbcdnw.aoneroom.com/image/2026/08/18/5fbef86eb4e1a06e9708fe18412b2e60.jpg",
+    rating: "7.1",
+    video_url: "https://bcdnxw.hakunaymatata.com/resource/d5d4a715d35a2b34742d8db2991d1600.mp4?sign=4b5b3c9b9c6de463e82611e4f4c68947&t=1791093559",
+    duration: 139,
+    author: "@ReelShort",
+    likes: 26778,
+    shares: 5717,
+  },
+  {
+    id: "1980899104976688224-ep1",
+    subject_id: "1980899104976688224",
+    title: "From XL to Extra Love",
+    slug: "from-xl-to-extra-love-EOfYUApxkm2",
+    poster_url: "https://pbcdnw.aoneroom.com/image/2026/03/26/68269d6d0a6b02da95bd09cb04b42cce.jpg",
+    rating: "7.7",
+    video_url: "https://bcdnxw.hakunaymatata.com/resource/a8423c123a978d208969481422fbe092.mp4?sign=b69550f73c14086513e20515139ffeea&t=1791093560",
+    duration: 189,
+    author: "@ShortMax",
+    likes: 33548,
+    shares: 2847,
   }
-
-  if (clean.includes(' - ')) {
-    const parts = clean.split(' - ').map(p => p.trim()).filter(Boolean);
-    if (parts.length >= 2) {
-      return {
-        artist: parts[0] || 'Artist',
-        title: parts.slice(1).join(' - ') || parts[0],
-      };
-    }
-  }
-
-  return {
-    title: clean,
-    artist: 'Movieflix Music',
-  };
-}
-
-const MUSIC_GENRES = [
-  { id: 'All', label: 'All Hits' },
-  { id: 'Trending', label: '🔥 Trending' },
-  { id: 'Pop', label: 'Pop' },
-  { id: 'Hip-Hop', label: 'Hip-Hop' },
-  { id: 'Rock', label: 'Rock' },
-  { id: 'Bollywood', label: 'Bollywood' },
-  { id: 'EDM', label: 'EDM & Dance' },
-  { id: 'Lo-Fi', label: 'Lo-Fi' },
-  { id: 'R&B', label: 'R&B' },
-  { id: 'Favorites', label: '❤️ Liked' },
 ];
 
-function MusicPlaybackEngine({
-  streamUrl,
-  isPlaying,
-  seekTarget,
-  onTimeUpdate,
-  onDurationChange,
-  onTrackEnd,
+function formatShotCount(num) {
+  if (!num) return '0';
+  if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
+  if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
+  return String(num);
+}
+
+function ShotItem({
+  item,
+  index,
+  isActive,
+  isTabActive,
+  isMuted,
+  onToggleMute,
+  isLiked,
+  onToggleLike,
+  isSaved,
+  onToggleSave,
+  onShare,
+  containerHeight,
+  containerWidth,
+  showToast,
+  triggerHaptic,
 }) {
-  const source = useMemo(() => (streamUrl ? buildVideoSource(streamUrl) : null), [streamUrl]);
-  const player = useVideoPlayer(source, (p) => {
+  const [videoStreamUrl, setVideoStreamUrl] = useState(item.video_url || null);
+  const [isLoadingStream, setIsLoadingStream] = useState(false);
+  const [isPausedByUser, setIsPausedByUser] = useState(false);
+  const [showPlayPauseAnim, setShowPlayPauseAnim] = useState(false);
+  const [showHeartAnim, setShowHeartAnim] = useState(false);
+  const [playbackProgress, setPlaybackProgress] = useState(0);
+
+  // Floating heart animation (Instagram double tap)
+  const heartScale = useRef(new Animated.Value(0)).current;
+  const heartOpacity = useRef(new Animated.Value(0)).current;
+
+  // Play/pause feedback animation
+  const playPauseAnim = useRef(new Animated.Value(0)).current;
+
+  // Rotating vinyl disc animation
+  const spinAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    let anim;
+    if (isActive && isTabActive && !isPausedByUser) {
+      anim = Animated.loop(
+        Animated.timing(spinAnim, {
+          toValue: 1,
+          duration: 5000,
+          easing: Easing.linear,
+          useNativeDriver: true,
+        })
+      );
+      anim.start();
+    } else {
+      spinAnim.stopAnimation();
+    }
+    return () => {
+      anim?.stop?.();
+    };
+  }, [isActive, isTabActive, isPausedByUser]);
+
+  const spin = spinAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg'],
+  });
+
+  // Resolve stream URL if not already available
+  useEffect(() => {
+    if (!videoStreamUrl && isActive && !isLoadingStream) {
+      setIsLoadingStream(true);
+      const subjectId = item.subject_id;
+      const detailPath = item.slug || '';
+      apiFetch(`${API_BASE}/api/content?endpoint=stream&id=${encodeURIComponent(subjectId)}&detail_path=${encodeURIComponent(detailPath)}&se=${item.se || 1}&ep=${item.ep || 1}`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (data?.sources?.[0]?.url) {
+            setVideoStreamUrl(data.sources[0].url);
+          }
+        })
+        .catch((e) => console.warn('[Shots] Stream resolve note:', e))
+        .finally(() => setIsLoadingStream(false));
+    }
+  }, [isActive, videoStreamUrl, item, isLoadingStream]);
+
+  // Video player via expo-video
+  const videoSource = useMemo(() => {
+    return videoStreamUrl ? buildVideoSource(videoStreamUrl) : null;
+  }, [videoStreamUrl]);
+
+  const player = useVideoPlayer(videoSource, (p) => {
     try {
-      p.loop = false;
+      p.loop = true;
+      p.muted = isMuted;
       p.timeUpdateEventInterval = 0.25;
-      if (isPlaying) p.play();
+      if (isActive && isTabActive && !isPausedByUser) {
+        p.play();
+      }
     } catch (e) {
-      console.warn('[MusicEngine] setup note:', e);
+      console.warn('[Shots] Player setup note:', e);
     }
   });
 
-  const lastUrlRef = useRef(streamUrl);
+  // Keep playback state synchronized
   useEffect(() => {
     if (!player) return;
-    if (streamUrl && streamUrl !== lastUrlRef.current) {
-      lastUrlRef.current = streamUrl;
-      try {
-        if (typeof player.replace === 'function') {
-          player.replace(buildVideoSource(streamUrl));
-        }
-        if (isPlaying) {
-          player.play();
-        }
-      } catch (err) {
-        console.warn('[MusicEngine] replace note:', err);
+    try {
+      if (isActive && isTabActive && !isPausedByUser) {
+        player.play();
+      } else {
+        player.pause();
       }
+    } catch (e) {
+      console.warn('[Shots] play/pause note:', e);
     }
-  }, [player, streamUrl, isPlaying]);
+  }, [player, isActive, isTabActive, isPausedByUser]);
 
+  // Synchronize mute state
   useEffect(() => {
     if (!player) return;
     try {
-      if (isPlaying) player.play();
-      else player.pause();
-    } catch (err) {
-      console.warn('[MusicEngine] play/pause note:', err);
-    }
-  }, [player, isPlaying]);
+      player.muted = isMuted;
+    } catch (_) {}
+  }, [player, isMuted]);
 
-  useEffect(() => {
-    if (!player || seekTarget === null || seekTarget === undefined) return;
-    try {
-      player.currentTime = seekTarget;
-    } catch (err) {
-      console.warn('[MusicEngine] seek note:', err);
-    }
-  }, [player, seekTarget]);
-
+  // Track playback time
   useEffect(() => {
     if (!player) return;
-    const timeSub = player.addListener?.('timeUpdate', ({ currentTime }) => {
-      onTimeUpdate?.(currentTime);
+    const sub = player.addListener?.('timeUpdate', ({ currentTime }) => {
       if (typeof player.duration === 'number' && player.duration > 0) {
-        onDurationChange?.(player.duration);
+        setPlaybackProgress(Math.min(1, Math.max(0, currentTime / player.duration)));
       }
     });
-    const endSub = player.addListener?.('playToEnd', () => {
-      onTrackEnd?.();
-    });
-    return () => {
-      timeSub?.remove?.();
-      endSub?.remove?.();
-    };
-  }, [player, onTimeUpdate, onDurationChange, onTrackEnd]);
+    return () => sub?.remove?.();
+  }, [player]);
 
-  if (!streamUrl) return null;
+  // Double tap to like handling
+  const lastTapRef = useRef(0);
+  const handleScreenPress = () => {
+    const now = Date.now();
+    if (now - lastTapRef.current < 280) {
+      // Double tap detected!
+      triggerLikeHeart();
+      if (!isLiked) {
+        onToggleLike();
+      }
+    } else {
+      // Single tap -> toggle play / pause
+      togglePlayPause();
+    }
+    lastTapRef.current = now;
+  };
+
+  const triggerLikeHeart = () => {
+    triggerHaptic?.('impactMedium');
+    setShowHeartAnim(true);
+    heartScale.setValue(0);
+    heartOpacity.setValue(1);
+    Animated.sequence([
+      Animated.spring(heartScale, {
+        toValue: 1.25,
+        friction: 4,
+        tension: 80,
+        useNativeDriver: true,
+      }),
+      Animated.timing(heartOpacity, {
+        toValue: 0,
+        duration: 350,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      setShowHeartAnim(false);
+    });
+  };
+
+  const togglePlayPause = () => {
+    triggerHaptic?.('selection');
+    const willPause = !isPausedByUser;
+    setIsPausedByUser(willPause);
+    setShowPlayPauseAnim(true);
+    playPauseAnim.setValue(1);
+    Animated.timing(playPauseAnim, {
+      toValue: 0,
+      duration: 600,
+      easing: Easing.out(Easing.ease),
+      useNativeDriver: true,
+    }).start(() => {
+      setShowPlayPauseAnim(false);
+    });
+  };
+
+  const videoWidth = Math.min(containerWidth, Math.max(320, Math.floor(containerHeight * (9 / 16))));
+  const isLetterboxed = containerWidth > videoWidth;
 
   return (
-    <View style={{ width: 0, height: 0, position: 'absolute', opacity: 0 }} pointerEvents="none">
-      <VideoView player={player} style={{ width: 1, height: 1 }} allowsFullscreen={false} contentFit="contain" />
+    <View style={{ width: containerWidth, height: containerHeight, backgroundColor: '#000000', alignItems: 'center', justifyContent: 'center', position: 'relative', overflow: 'hidden' }}>
+      {/* Desktop Ambient Blurred Backdrop */}
+      {isLetterboxed && (
+        <SafeImage
+          uri={item.poster_url}
+          style={[StyleSheet.absoluteFillObject, { opacity: 0.22, transform: [{ scale: 1.15 }] }]}
+          blurRadius={30}
+          resizeMode="cover"
+        />
+      )}
+
+      {/* 9:16 Vertical Video Frame (Full screen on mobile, centered 9:16 on desktop) */}
+      <View style={{ width: videoWidth, height: containerHeight, backgroundColor: '#050505', position: 'relative', overflow: 'hidden' }}>
+        {/* 9:16 Video Player or High-Res Poster */}
+        <TouchableOpacity
+          style={StyleSheet.absoluteFillObject}
+          activeOpacity={1}
+          onPress={handleScreenPress}
+        >
+        {videoStreamUrl && isActive ? (
+          <VideoView
+            player={player}
+            style={StyleSheet.absoluteFillObject}
+            contentFit="cover"
+            nativeControls={false}
+          />
+        ) : (
+          <SafeImage
+            uri={item.poster_url}
+            style={StyleSheet.absoluteFillObject}
+            resizeMode="cover"
+          />
+        )}
+
+        {/* Ambient Dark Gradient for UI Readability */}
+        <LinearGradient
+          colors={['rgba(0,0,0,0.35)', 'transparent', 'rgba(0,0,0,0.4)', 'rgba(0,0,0,0.88)']}
+          locations={[0, 0.25, 0.65, 1]}
+          style={StyleSheet.absoluteFillObject}
+          pointerEvents="none"
+        />
+
+        {/* Loading Spinner while buffering */}
+        {isLoadingStream && (
+          <View style={styles.shotsBufferingOverlay} pointerEvents="none">
+            <ActivityIndicator size="large" color="#e50914" />
+          </View>
+        )}
+
+        {/* Double-Tap Floating Heart Animation */}
+        {showHeartAnim && (
+          <Animated.View
+            style={[
+              styles.shotsHeartBurst,
+              {
+                opacity: heartOpacity,
+                transform: [{ scale: heartScale }],
+              },
+            ]}
+            pointerEvents="none"
+          >
+            <Feather name="heart" size={90} color="#e50914" />
+          </Animated.View>
+        )}
+
+        {/* Single-Tap Play/Pause Indicator Flash */}
+        {showPlayPauseAnim && (
+          <Animated.View
+            style={[
+              styles.shotsPlayPauseIndicator,
+              { opacity: playPauseAnim },
+            ]}
+            pointerEvents="none"
+          >
+            <Feather
+              name={isPausedByUser ? "pause" : "play"}
+              size={36}
+              color="#FFFFFF"
+              style={{ marginLeft: isPausedByUser ? 0 : 3 }}
+            />
+          </Animated.View>
+        )}
+      </TouchableOpacity>
+
+      {/* ── Instagram Right Column Floating Actions ── */}
+      <View style={styles.shotsRightColumn}>
+        {/* Creator Avatar with follow plus badge */}
+        <View style={styles.shotsAvatarContainer}>
+          <SafeImage uri={item.poster_url} style={styles.shotsAvatarImg} resizeMode="cover" />
+          <View style={styles.shotsAvatarBadge}>
+            <Feather name="plus" size={10} color="#fff" />
+          </View>
+        </View>
+
+        {/* Like / Heart Button */}
+        <TouchableOpacity
+          style={styles.shotsActionBtn}
+          onPress={() => {
+            triggerHaptic?.('selection');
+            onToggleLike();
+          }}
+          activeOpacity={0.7}
+        >
+          <View style={[styles.shotsActionIconCircle, isLiked && { backgroundColor: 'rgba(229, 9, 20, 0.25)' }]}>
+            <Feather name="heart" size={26} color={isLiked ? "#e50914" : "#FFFFFF"} />
+          </View>
+          <Text style={styles.shotsActionCount}>
+            {formatShotCount(isLiked ? item.likes + 1 : item.likes)}
+          </Text>
+        </TouchableOpacity>
+
+        {/* Comment Button */}
+        <TouchableOpacity
+          style={styles.shotsActionBtn}
+          onPress={() => showToast?.("Comments coming soon! 💬")}
+          activeOpacity={0.7}
+        >
+          <View style={styles.shotsActionIconCircle}>
+            <Feather name="message-circle" size={24} color="#FFFFFF" />
+          </View>
+          <Text style={styles.shotsActionCount}>
+            {formatShotCount(item.shares ? Math.floor(item.shares / 3) : 840)}
+          </Text>
+        </TouchableOpacity>
+
+        {/* Bookmark / Save Button */}
+        <TouchableOpacity
+          style={styles.shotsActionBtn}
+          onPress={() => {
+            triggerHaptic?.('selection');
+            onToggleSave();
+          }}
+          activeOpacity={0.7}
+        >
+          <View style={[styles.shotsActionIconCircle, isSaved && { backgroundColor: 'rgba(245, 158, 11, 0.25)' }]}>
+            <Feather name="bookmark" size={24} color={isSaved ? "#f59e0b" : "#FFFFFF"} />
+          </View>
+          <Text style={styles.shotsActionCount}>
+            {isSaved ? "Saved" : "Save"}
+          </Text>
+        </TouchableOpacity>
+
+        {/* Share Button */}
+        <TouchableOpacity
+          style={styles.shotsActionBtn}
+          onPress={onShare}
+          activeOpacity={0.7}
+        >
+          <View style={styles.shotsActionIconCircle}>
+            <Feather name="send" size={23} color="#FFFFFF" />
+          </View>
+          <Text style={styles.shotsActionCount}>
+            {formatShotCount(item.shares || 1200)}
+          </Text>
+        </TouchableOpacity>
+
+        {/* Mute / Unmute Button */}
+        <TouchableOpacity
+          style={styles.shotsActionBtn}
+          onPress={() => {
+            triggerHaptic?.('selection');
+            onToggleMute();
+          }}
+          activeOpacity={0.7}
+        >
+          <View style={styles.shotsActionIconCircle}>
+            <Feather name={isMuted ? "volume-x" : "volume-2"} size={22} color="#FFFFFF" />
+          </View>
+        </TouchableOpacity>
+
+        {/* Spinning Vinyl Audio Disc (Instagram Signature) */}
+        <Animated.View style={[styles.shotsVinylContainer, { transform: [{ rotate: spin }] }]}>
+          <View style={styles.shotsVinylRing}>
+            <View style={styles.shotsVinylCenter}>
+              <Feather name="music" size={11} color="#FFFFFF" />
+            </View>
+          </View>
+        </Animated.View>
+      </View>
+
+      {/* ── Bottom-Left Caption & Creator Overlay ── */}
+      <View style={styles.shotsBottomOverlay} pointerEvents="box-none">
+        <View style={styles.shotsAuthorRow}>
+          <Text style={styles.shotsAuthorText}>{item.author || '@DramaBox'}</Text>
+          <View style={styles.shotsVerifiedBadge}>
+            <Feather name="check" size={10} color="#FFFFFF" />
+          </View>
+          <View style={styles.shotsEpisodeBadge}>
+            <Text style={styles.shotsEpisodeText}>9:16 HD</Text>
+          </View>
+        </View>
+
+        <Text style={styles.shotsTitleText} numberOfLines={2}>
+          {item.title}
+        </Text>
+
+        <Text style={styles.shotsTagsText}>
+          #shots #reels #dramabox #vertical916 #trending
+        </Text>
+
+        <View style={styles.shotsAudioTickerRow}>
+          <Feather name="music" size={12} color="rgba(255,255,255,0.7)" style={{ marginRight: 6 }} />
+          <Text style={styles.shotsAudioTickerText} numberOfLines={1}>
+            Original Sound • {item.author || 'DramaBox'} Studios
+          </Text>
+        </View>
+      </View>
+
+      {/* ── Bottom Red Progress Bar ── */}
+      <View style={styles.shotsProgressTrack}>
+        <View style={[styles.shotsProgressFill, { width: `${playbackProgress * 100}%` }]} />
+      </View>
+      </View>
     </View>
   );
 }
 
-function MusicTrackRow({
-  track,
-  index,
-  isActive,
-  isPlaying,
-  onPress,
-  onToggleLike,
-  isLiked,
+function ShotsFeedView({
+  insets,
+  isTabActive,
+  showToast,
+  triggerHaptic,
 }) {
-  const info = parseMusicTrackInfo(track.name);
+  const [shots, setShots] = useState(INITIAL_SHOTS);
+  const [activeShotIndex, setActiveShotIndex] = useState(0);
+  const [isMuted, setIsMuted] = useState(false);
+  const [likedShotIds, setLikedShotIds] = useState(() => new Set());
+  const [savedShotIds, setSavedShotIds] = useState(() => new Set());
+  const [shotsCategory, setShotsCategory] = useState('For You');
+
+  const { width: winWidth, height: winHeight } = useWindowDimensions();
+  const containerHeight = winHeight;
+  const containerWidth = winWidth;
+
+  // Fetch more shots from live API
+  useEffect(() => {
+    let isMounted = true;
+    apiFetch(`${API_BASE}/api/content?endpoint=shots`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (!isMounted) return;
+        if (Array.isArray(data?.items) && data.items.length > 0) {
+          setShots((prev) => {
+            const existingIds = new Set(prev.map((s) => s.id || s.subject_id));
+            const newItems = data.items.filter((s) => !existingIds.has(s.id || s.subject_id));
+            return [...prev, ...newItems];
+          });
+        }
+      })
+      .catch((e) => console.warn('[Shots] Live feed note:', e));
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const onViewableItemsChanged = useRef(({ viewableItems }) => {
+    if (viewableItems && viewableItems.length > 0) {
+      const first = viewableItems[0];
+      if (typeof first.index === 'number') {
+        setActiveShotIndex(first.index);
+      }
+    }
+  }).current;
+
+  const viewabilityConfig = useRef({
+    itemVisiblePercentThreshold: 65,
+  }).current;
+
+  const toggleLike = (shotId) => {
+    setLikedShotIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(shotId)) {
+        next.delete(shotId);
+        showToast?.("Unliked");
+      } else {
+        next.add(shotId);
+        showToast?.("Liked Shot ❤️");
+      }
+      return next;
+    });
+  };
+
+  const toggleSave = (shotId) => {
+    setSavedShotIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(shotId)) {
+        next.delete(shotId);
+        showToast?.("Removed from Saved");
+      } else {
+        next.add(shotId);
+        showToast?.("Saved to Bookmarks 🔖");
+      }
+      return next;
+    });
+  };
+
+  const handleShare = async (item) => {
+    triggerHaptic?.('selection');
+    const shareUrl = `https://movieflix-pi-six.vercel.app/shots/${item.slug || item.subject_id}`;
+    if (Platform.OS !== 'web') {
+      try {
+        await Share.share({
+          message: `Watch "${item.title}" on MovieFlix Shots: ${shareUrl}`,
+          url: shareUrl,
+          title: item.title,
+        });
+      } catch (_) {}
+    } else {
+      if (typeof navigator !== 'undefined' && navigator.clipboard) {
+        navigator.clipboard.writeText(shareUrl).then(() => {
+          showToast?.("Link copied to clipboard! 📋");
+        }).catch(() => {
+          showToast?.(shareUrl);
+        });
+      } else {
+        showToast?.("Link copied to clipboard! 📋");
+      }
+    }
+  };
+
   return (
-    <TouchableOpacity
-      style={[styles.musicTrackRow, isActive && styles.musicTrackRowActive]}
-      onPress={onPress}
-      activeOpacity={0.75}
-    >
-      <Text style={[styles.musicTrackRank, isActive && { color: '#e50914', fontWeight: '800' }]}>
-        {index < 10 ? `0${index}` : index}
-      </Text>
-      <View style={styles.musicTrackThumbWrapper}>
-        <SafeImage uri={track.poster_url} style={styles.musicTrackThumb} resizeMode="cover" />
-        {isActive && isPlaying && (
-          <View style={styles.musicTrackPlayingPill}>
-            <View style={[styles.musicPlayingBar, { height: 8 }]} />
-            <View style={[styles.musicPlayingBar, { height: 13 }]} />
-            <View style={[styles.musicPlayingBar, { height: 6 }]} />
-          </View>
+    <View style={{ flex: 1, backgroundColor: '#000000', position: 'relative' }}>
+      {/* Instagram-Style Top Header Bar */}
+      <View style={[styles.shotsTopHeader, { paddingTop: insets.top + 8 }]} pointerEvents="box-none">
+        <View style={styles.shotsBrandRow}>
+          <Feather name="film" size={20} color="#e50914" style={{ marginRight: 6 }} />
+          <Text style={styles.shotsBrandText}>Shots</Text>
+          <View style={styles.shotsLiveDot} />
+        </View>
+
+        <View style={styles.shotsFilterTabsRow}>
+          {['For You', 'Trending', 'Dramas'].map((tab) => {
+            const isActive = shotsCategory === tab;
+            return (
+              <TouchableOpacity
+                key={`shots-tab-${tab}`}
+                onPress={() => {
+                  triggerHaptic?.('selection');
+                  setShotsCategory(tab);
+                }}
+                style={styles.shotsFilterTabBtn}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.shotsFilterTabText, isActive && styles.shotsFilterTabTextActive]}>
+                  {tab}
+                </Text>
+                {isActive && <View style={styles.shotsFilterTabUnderline} />}
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        <TouchableOpacity
+          onPress={() => showToast?.("Swipe up for next 9:16 video ⬆️")}
+          style={styles.shotsHelpBtn}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Feather name="info" size={19} color="rgba(255,255,255,0.7)" />
+        </TouchableOpacity>
+      </View>
+
+      {/* 9:16 Vertical Snap Scroll Feed */}
+      <FlatList
+        data={shots}
+        keyExtractor={(item) => item.id}
+        renderItem={({ item, index }) => (
+          <ShotItem
+            item={item}
+            index={index}
+            isActive={index === activeShotIndex}
+            isTabActive={isTabActive}
+            isMuted={isMuted}
+            onToggleMute={() => setIsMuted((prev) => !prev)}
+            isLiked={likedShotIds.has(item.id)}
+            onToggleLike={() => toggleLike(item.id)}
+            isSaved={savedShotIds.has(item.id)}
+            onToggleSave={() => toggleSave(item.id)}
+            onShare={() => handleShare(item)}
+            containerHeight={containerHeight}
+            containerWidth={containerWidth}
+            showToast={showToast}
+            triggerHaptic={triggerHaptic}
+          />
         )}
-      </View>
-      <View style={styles.musicTrackMeta}>
-        <Text style={[styles.musicTrackName, isActive && { color: '#e50914' }]} numberOfLines={1}>
-          {info.title}
-        </Text>
-        <Text style={styles.musicTrackArtist} numberOfLines={1}>
-          {info.artist} {track.year ? `• ${track.year}` : ''}
-        </Text>
-      </View>
-      <TouchableOpacity
-        onPress={(e) => {
-          e.stopPropagation?.();
-          onToggleLike?.();
-        }}
-        style={styles.musicTrackLikeBtn}
-        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-      >
-        <Feather name="heart" size={17} color={isLiked ? '#e50914' : 'rgba(255,255,255,0.3)'} />
-      </TouchableOpacity>
-      <View style={[styles.musicTrackPlayCircle, isActive && { backgroundColor: '#e50914' }]}>
-        <Feather name={isActive && isPlaying ? "pause" : "play"} size={13} color="#FFFFFF" />
-      </View>
-    </TouchableOpacity>
+        pagingEnabled={true}
+        snapToInterval={containerHeight}
+        snapToAlignment="start"
+        decelerationRate="fast"
+        showsVerticalScrollIndicator={false}
+        onViewableItemsChanged={onViewableItemsChanged}
+        viewabilityConfig={viewabilityConfig}
+        initialNumToRender={2}
+        maxToRenderPerBatch={2}
+        windowSize={3}
+        removeClippedSubviews={Platform.OS !== 'web'}
+        getItemLayout={(_, index) => ({
+          length: containerHeight,
+          offset: containerHeight * index,
+          index,
+        })}
+      />
+    </View>
   );
 }
 
@@ -1300,16 +1855,16 @@ function ReelApp() {
   );
   const horizontalCardWidth = isDesktop ? 180 : isTablet ? 150 : 130;
 
-  // Navigation: 'Home' | 'Music' | 'Me'
+  // Navigation: 'Home' | 'Shots' | 'Me'
   const [mainTab, setMainTab] = useState('Home');
   const [homeCategory, setHomeCategory] = useState('All'); // 'All' | 'Movies' | 'Series'
   const [meSubTab, setMeSubTab] = useState(null); // null (clean buttons hub) | 'History' | 'MyList' | 'Downloads'
   const [meDotDismissed, setMeDotDismissed] = useState(false);
 
-  // Floating Apple-Style Navigation Bar Animation & Fluid Drag State (3 Tabs: Home | Music | Me)
+  // Floating Apple-Style Navigation Bar Animation & Fluid Drag State (3 Tabs: Home | Shots | Me)
   const floatingBarWidth = Math.min(windowWidth - 36, 330);
   const floatingTabWidth = (floatingBarWidth - 8) / 3;
-  const navAnim = useRef(new Animated.Value(mainTab === 'Home' ? 0 : mainTab === 'Music' ? 1 : 2)).current;
+  const navAnim = useRef(new Animated.Value(mainTab === 'Home' ? 0 : mainTab === 'Shots' ? 1 : 2)).current;
   const mainTabRef = useRef(mainTab);
 
   useEffect(() => {
@@ -1317,7 +1872,7 @@ function ReelApp() {
     if (mainTab === 'Me') {
       setMeDotDismissed(true);
     }
-    const toVal = mainTab === 'Home' ? 0 : mainTab === 'Music' ? 1 : 2;
+    const toVal = mainTab === 'Home' ? 0 : mainTab === 'Shots' ? 1 : 2;
     Animated.spring(navAnim, {
       toValue: toVal,
       tension: 280,
@@ -1336,7 +1891,7 @@ function ReelApp() {
         navAnim.stopAnimation();
       },
       onPanResponderMove: (_, gestureState) => {
-        const base = mainTabRef.current === 'Home' ? 0 : mainTabRef.current === 'Music' ? 1 : 2;
+        const base = mainTabRef.current === 'Home' ? 0 : mainTabRef.current === 'Shots' ? 1 : 2;
         const progress = base + (gestureState.dx / floatingTabWidth);
         let clamped = progress;
         if (progress < 0) {
@@ -1347,7 +1902,7 @@ function ReelApp() {
         navAnim.setValue(clamped);
       },
       onPanResponderRelease: (_, gestureState) => {
-        const base = mainTabRef.current === 'Home' ? 0 : mainTabRef.current === 'Music' ? 1 : 2;
+        const base = mainTabRef.current === 'Home' ? 0 : mainTabRef.current === 'Shots' ? 1 : 2;
         const dx = gestureState.dx;
         const vx = gestureState.vx;
         let nextIdx = base;
@@ -1358,7 +1913,7 @@ function ReelApp() {
           nextIdx = Math.max(0, base - 1);
         }
 
-        const tabs = ['Home', 'Music', 'Me'];
+        const tabs = ['Home', 'Shots', 'Me'];
         const nextTab = tabs[nextIdx];
 
         Animated.spring(navAnim, {
@@ -1377,7 +1932,7 @@ function ReelApp() {
         }
       },
       onPanResponderTerminate: () => {
-        const toVal = mainTabRef.current === 'Home' ? 0 : mainTabRef.current === 'Music' ? 1 : 2;
+        const toVal = mainTabRef.current === 'Home' ? 0 : mainTabRef.current === 'Shots' ? 1 : 2;
         Animated.spring(navAnim, {
           toValue: toVal,
           tension: 280,
@@ -2047,214 +2602,8 @@ function ReelApp() {
   const [downloadCaptions, setDownloadCaptions] = useState([]);
   const [loadingDownloadOptions, setLoadingDownloadOptions] = useState(false);
 
-  // ─── Music Catalog & Spotify Red Player State ─────────────────────────────
-  const [musicTrending, setMusicTrending] = useState([]);
-  const [musicLoading, setMusicLoading] = useState(false);
-  const [refreshingMusic, setRefreshingMusic] = useState(false);
-  const [musicSearchQuery, setMusicSearchQuery] = useState('');
-  const [musicSearchResults, setMusicSearchResults] = useState([]);
-  const [musicSearching, setMusicSearching] = useState(false);
-  const [musicSelectedGenre, setMusicSelectedGenre] = useState('All');
-  const [activeMusicTrack, setActiveMusicTrack] = useState(null);
-  const [musicStreamUrl, setMusicStreamUrl] = useState(null);
-  const [isMusicPlaying, setIsMusicPlaying] = useState(false);
-  const [musicCurrentTime, setMusicCurrentTime] = useState(0);
-  const [musicDuration, setMusicDuration] = useState(0);
-  const [musicSeekTarget, setMusicSeekTarget] = useState(null);
-  const [musicQueue, setMusicQueue] = useState([]);
-  const [musicQueueIndex, setMusicQueueIndex] = useState(0);
-  const [isMusicPlayerOpen, setIsMusicPlayerOpen] = useState(false);
-  const [isMusicShuffle, setIsMusicShuffle] = useState(false);
-  const [isMusicRepeat, setIsMusicRepeat] = useState(false);
-  const [likedMusicIds, setLikedMusicIds] = useState(() => new Set());
-  const [loadingMusicStream, setLoadingMusicStream] = useState(false);
-  const [musicPlayerError, setMusicPlayerError] = useState(null);
-  const [showMusicQueueModal, setShowMusicQueueModal] = useState(false);
-  const musicSearchTimerRef = useRef(null);
-
-  const fetchMusicCatalog = async (silent = false) => {
-    if (!silent) setMusicLoading(true);
-    try {
-      const res = await apiFetch(`${API_BASE}/api/content?endpoint=music&page=1`);
-      const data = await res.json();
-      const items = Array.isArray(data?.items) ? data.items : [];
-      setMusicTrending(items);
-      if (musicQueue.length === 0 && items.length > 0) {
-        setMusicQueue(items);
-      }
-    } catch (err) {
-      console.warn("Music catalog fetch error:", err);
-    } finally {
-      if (!silent) setMusicLoading(false);
-      setRefreshingMusic(false);
-    }
-  };
-
-  const performMusicSearch = async (queryStr) => {
-    const q = (queryStr || '').trim();
-    if (!q) return;
-    setMusicSearching(true);
-    try {
-      const res = await apiFetch(`${API_BASE}/api/content?endpoint=music-search&q=${encodeURIComponent(q)}&page=1`);
-      const data = await res.json();
-      const items = Array.isArray(data?.items) ? data.items : [];
-      setMusicSearchResults(items);
-    } catch (err) {
-      console.warn("Music search error:", err);
-      setMusicSearchResults([]);
-    } finally {
-      setMusicSearching(false);
-    }
-  };
-
-  const handleMusicSearchChange = (text) => {
-    setMusicSearchQuery(text);
-    if (!text.trim()) {
-      setMusicSearchResults([]);
-      setMusicSearching(false);
-      if (musicSearchTimerRef.current) clearTimeout(musicSearchTimerRef.current);
-      return;
-    }
-    if (musicSearchTimerRef.current) clearTimeout(musicSearchTimerRef.current);
-    musicSearchTimerRef.current = setTimeout(() => {
-      performMusicSearch(text);
-    }, 400);
-  };
-
-  const handleSelectMusicGenre = async (genreId) => {
-    setMusicSelectedGenre(genreId);
-    triggerHaptic('selection');
-    if (genreId === 'All' || genreId === 'Trending') {
-      setMusicSearchQuery('');
-      setMusicSearchResults([]);
-      if (musicTrending.length === 0) {
-        fetchMusicCatalog();
-      }
-      return;
-    }
-    if (genreId === 'Favorites') {
-      setMusicSearchQuery('');
-      const favs = musicTrending.filter(t => likedMusicIds.has(t.subject_id));
-      setMusicSearchResults(favs);
-      return;
-    }
-    setMusicSearchQuery(genreId);
-    performMusicSearch(genreId);
-  };
-
-  const playMusicTrack = async (track, queueList = null) => {
-    if (!track) return;
-    triggerHaptic('impactLight');
-    setActiveMusicTrack(track);
-    setIsMusicPlaying(true);
-    setLoadingMusicStream(true);
-    setMusicPlayerError(null);
-    setMusicCurrentTime(0);
-
-    if (isPlayerOpen) {
-      setIsPlayerOpen(false);
-    }
-
-    const currentList = Array.isArray(queueList) && queueList.length > 0 ? queueList : musicTrending;
-    if (currentList && currentList.length > 0) {
-      setMusicQueue(currentList);
-      const idx = currentList.findIndex(t => (t.subject_id && t.subject_id === track.subject_id) || (t.slug && t.slug === track.slug));
-      setMusicQueueIndex(idx >= 0 ? idx : 0);
-    }
-
-    try {
-      const streamRes = await apiFetch(`${API_BASE}/api/content?endpoint=stream&id=${encodeURIComponent(track.subject_id)}&detail_path=${encodeURIComponent(track.slug || '')}&se=0&ep=0`);
-      const streamData = await streamRes.json();
-      if (streamData?.sources && streamData.sources.length > 0) {
-        const streamUrl = streamData.sources[0].url;
-        setMusicStreamUrl(streamUrl);
-        setLoadingMusicStream(false);
-      } else {
-        setMusicPlayerError("Audio stream not available for this track.");
-        setLoadingMusicStream(false);
-      }
-    } catch (err) {
-      console.warn("Music stream error:", err);
-      setMusicPlayerError("Failed to fetch audio stream.");
-      setLoadingMusicStream(false);
-    }
-  };
-
-  const toggleMusicPlayPause = () => {
-    triggerHaptic('impactLight');
-    setIsMusicPlaying(prev => !prev);
-  };
-
-  const playNextMusicTrack = () => {
-    if (musicQueue.length === 0) return;
-    let nextIdx = musicQueueIndex + 1;
-    if (isMusicShuffle) {
-      nextIdx = Math.floor(Math.random() * musicQueue.length);
-    } else if (nextIdx >= musicQueue.length) {
-      if (isMusicRepeat) {
-        nextIdx = 0;
-      } else {
-        setIsMusicPlaying(false);
-        return;
-      }
-    }
-    setMusicQueueIndex(nextIdx);
-    const nextTrack = musicQueue[nextIdx];
-    if (nextTrack) {
-      playMusicTrack(nextTrack, musicQueue);
-    }
-  };
-
-  const playPrevMusicTrack = () => {
-    if (musicCurrentTime > 3) {
-      setMusicSeekTarget(0);
-      setMusicCurrentTime(0);
-      return;
-    }
-    if (musicQueue.length === 0) return;
-    let prevIdx = musicQueueIndex - 1;
-    if (prevIdx < 0) {
-      prevIdx = isMusicRepeat ? musicQueue.length - 1 : 0;
-    }
-    setMusicQueueIndex(prevIdx);
-    const prevTrack = musicQueue[prevIdx];
-    if (prevTrack) {
-      playMusicTrack(prevTrack, musicQueue);
-    }
-  };
-
-  const seekMusic = (targetSecs) => {
-    setMusicSeekTarget(targetSecs);
-    setMusicCurrentTime(targetSecs);
-  };
-
-  const toggleLikeMusic = (subjectId) => {
-    if (!subjectId) return;
-    triggerHaptic('selection');
-    setLikedMusicIds(prev => {
-      const next = new Set(prev);
-      if (next.has(subjectId)) {
-        next.delete(subjectId);
-        showToast("Removed from Liked Songs");
-      } else {
-        next.add(subjectId);
-        showToast("Added to Liked Songs ❤️");
-      }
-      return next;
-    });
-  };
-
-  useEffect(() => {
-    if (mainTab === 'Music' && musicTrending.length === 0 && !musicLoading) {
-      fetchMusicCatalog();
-    }
-  }, [mainTab]);
-
-  useEffect(() => {
-    if (isPlayerOpen && isMusicPlaying) {
-      setIsMusicPlaying(false);
-    }
-  }, [isPlayerOpen]);
+  // ─── Shots / Reels Feed State ─────────────────────────────────────────────
+  // (Managed within ShotsFeedView component)
 
   // Toast Notification
   const [toastMsg, setToastMsg] = useState(null);
@@ -3281,7 +3630,8 @@ function ReelApp() {
       currentUrl === '/series' ||
       currentUrl === '/tv' ||
       currentUrl === '/animation' ||
-      currentUrl === '/music' ||
+      currentUrl === '/shots' ||
+      currentUrl === '/reels' ||
       currentUrl.startsWith('/me');
 
     if (!isTabRoute) return;
@@ -3292,8 +3642,8 @@ function ReelApp() {
       else if (meSubTab === 'MyList') targetUrl = '/me/mylist';
       else if (meSubTab === 'Downloads') targetUrl = '/me/downloads';
       else targetUrl = '/me';
-    } else if (mainTab === 'Music') {
-      targetUrl = '/music';
+    } else if (mainTab === 'Shots') {
+      targetUrl = '/shots';
     } else {
       if (homeCategory === 'Movies') targetUrl = '/movies';
       else if (homeCategory === 'TV Series' || homeCategory === 'Series') targetUrl = '/series';
@@ -3576,10 +3926,10 @@ function ReelApp() {
         setHomeCategory('Animation');
         return;
       }
-      if (pathname === '/music' || pathname.startsWith('/music/')) {
+      if (pathname === '/shots' || pathname === '/reels' || pathname.startsWith('/shots/')) {
         setIs404PageOpen(false);
         setNotFoundPath('');
-        setMainTab('Music');
+        setMainTab('Shots');
         return;
       }
 
@@ -3681,8 +4031,8 @@ function ReelApp() {
         setHomeCategory('Animation');
         return;
       }
-      if (pathname === '/music' || pathname.startsWith('/music/')) {
-        setMainTab('Music');
+      if (pathname === '/shots' || pathname === '/reels' || pathname.startsWith('/shots/')) {
+        setMainTab('Shots');
         return;
       }
       if (
@@ -4219,10 +4569,18 @@ function ReelApp() {
         </View>
       )}
 
-      {/* MAIN SCROLLABLE CONTENT AREA */}
-      <ScrollView
-        ref={mainScrollRef}
-        style={styles.mainScrollView}
+      {/* ─── MAIN CONTENT: SHOTS 9:16 VERTICAL FEED OR HOME/ME SCROLLVIEW ─── */}
+      {mainTab === 'Shots' ? (
+        <ShotsFeedView
+          insets={insets}
+          isTabActive={mainTab === 'Shots'}
+          showToast={showToast}
+          triggerHaptic={triggerHaptic}
+        />
+      ) : (
+        <ScrollView
+          ref={mainScrollRef}
+          style={styles.mainScrollView}
         contentContainerStyle={{ paddingBottom: Math.max(insets.bottom + 96, 110) }}
         showsVerticalScrollIndicator={false}
         refreshControl={
@@ -4795,299 +5153,6 @@ function ReelApp() {
                 )}
               </View>
             )}
-          </View>
-        ) : mainTab === 'Music' ? (
-          /* ==================================================== */
-          /* VIEW: MUSIC (SPOTIFY RED INTERFACE & MUSIC SEARCH)   */
-          /* ==================================================== */
-          <View style={[styles.musicScreenContainer, { paddingTop: insets.top + 10, paddingBottom: activeMusicTrack ? insets.bottom + 140 : insets.bottom + 90 }]}>
-            <ScrollView
-              showsVerticalScrollIndicator={false}
-              refreshControl={
-                <RefreshControl
-                  refreshing={refreshingMusic}
-                  onRefresh={() => {
-                    setRefreshingMusic(true);
-                    fetchMusicCatalog(true);
-                  }}
-                  tintColor="#e50914"
-                  colors={['#e50914']}
-                />
-              }
-            >
-              {/* ── 1. Top Header ── */}
-              <View style={styles.musicHeaderRow}>
-                <View>
-                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <Feather name="music" size={24} color="#e50914" style={{ marginRight: 8 }} />
-                    <Text style={styles.musicHeaderTitle}>Music</Text>
-                  </View>
-                  <Text style={styles.musicHeaderSubtitle}>SPOTIFY RED • PURE HIGH-RES STREAMING</Text>
-                </View>
-                <TouchableOpacity
-                  style={[styles.musicHeaderLikedBtn, musicSelectedGenre === 'Favorites' && { backgroundColor: '#e50914', borderColor: '#ff2a34' }]}
-                  onPress={() => {
-                    if (musicSelectedGenre === 'Favorites') {
-                      handleSelectMusicGenre('All');
-                    } else {
-                      handleSelectMusicGenre('Favorites');
-                    }
-                  }}
-                  activeOpacity={0.8}
-                >
-                  <Feather name="heart" size={18} color={musicSelectedGenre === 'Favorites' ? '#FFFFFF' : '#e50914'} />
-                </TouchableOpacity>
-              </View>
-
-              {/* ── 2. Dedicated Music Search Bar (Pure Music Search) ── */}
-              <View style={styles.musicSearchContainer}>
-                <Feather name="search" size={18} color="#e50914" style={{ marginRight: 10 }} />
-                <TextInput
-                  style={styles.musicSearchInput}
-                  placeholder="Search songs, artists, albums..."
-                  placeholderTextColor="rgba(255, 255, 255, 0.45)"
-                  value={musicSearchQuery}
-                  onChangeText={handleMusicSearchChange}
-                  returnKeyType="search"
-                  onSubmitEditing={() => performMusicSearch(musicSearchQuery)}
-                />
-                {Boolean(musicSearchQuery) && (
-                  <TouchableOpacity onPress={() => handleMusicSearchChange('')} style={{ padding: 4 }}>
-                    <Feather name="x" size={16} color="rgba(255, 255, 255, 0.6)" />
-                  </TouchableOpacity>
-                )}
-              </View>
-
-              {/* ── 3. Quick Genre / Filter Chips (Red Glass Pills) ── */}
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.musicGenreChipsScroll}
-              >
-                {MUSIC_GENRES.map((genre) => {
-                  const isActive = musicSelectedGenre === genre.id;
-                  return (
-                    <TouchableOpacity
-                      key={`genre-${genre.id}`}
-                      style={[styles.musicGenreChip, isActive && styles.musicGenreChipActive]}
-                      onPress={() => handleSelectMusicGenre(genre.id)}
-                      activeOpacity={0.8}
-                    >
-                      <Text style={[styles.musicGenreChipText, isActive && styles.musicGenreChipTextActive]}>
-                        {genre.label}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
-
-              {/* ── 4. Dedicated Music Search Results (When Searching) ── */}
-              {Boolean(musicSearchQuery) ? (
-                <View style={styles.musicSearchResultsSection}>
-                  <Text style={styles.musicSectionHeading}>
-                    {musicSearching ? 'Searching music catalog...' : `Results for "${musicSearchQuery}" (${musicSearchResults.length})`}
-                  </Text>
-                  {musicSearching ? (
-                    <ActivityIndicator size="large" color="#e50914" style={{ marginVertical: 36 }} />
-                  ) : musicSearchResults.length === 0 ? (
-                    <View style={styles.musicEmptySearchBox}>
-                      <Feather name="music" size={42} color="#444" style={{ marginBottom: 12 }} />
-                      <Text style={styles.musicEmptySearchTitle}>No tracks found</Text>
-                      <Text style={styles.musicEmptySearchSub}>
-                        Try searching for a song, artist or band name (e.g. Coldplay, Ed Sheeran, Taylor Swift, Arijit Singh).
-                      </Text>
-                    </View>
-                  ) : (
-                    <View style={styles.musicTrackListContainer}>
-                      {musicSearchResults.map((track, idx) => (
-                        <MusicTrackRow
-                          key={`search-track-${track.subject_id || idx}`}
-                          track={track}
-                          index={idx + 1}
-                          isActive={activeMusicTrack?.subject_id === track.subject_id}
-                          isPlaying={isMusicPlaying && activeMusicTrack?.subject_id === track.subject_id}
-                          onPress={() => playMusicTrack(track, musicSearchResults)}
-                          onToggleLike={() => toggleLikeMusic(track.subject_id)}
-                          isLiked={likedMusicIds.has(track.subject_id)}
-                        />
-                      ))}
-                    </View>
-                  )}
-                </View>
-              ) : musicSelectedGenre === 'Favorites' ? (
-                /* ── 5. Liked Songs Section ── */
-                <View style={styles.musicSearchResultsSection}>
-                  <Text style={styles.musicSectionHeading}>
-                    Your Liked Songs ({musicTrending.filter(t => likedMusicIds.has(t.subject_id)).length})
-                  </Text>
-                  {musicTrending.filter(t => likedMusicIds.has(t.subject_id)).length === 0 ? (
-                    <View style={styles.musicEmptySearchBox}>
-                      <Feather name="heart" size={42} color="#444" style={{ marginBottom: 12 }} />
-                      <Text style={styles.musicEmptySearchTitle}>No Liked Songs Yet</Text>
-                      <Text style={styles.musicEmptySearchSub}>
-                        Tap the heart icon on any song to save it to your Spotify Red favorites.
-                      </Text>
-                    </View>
-                  ) : (
-                    <View style={styles.musicTrackListContainer}>
-                      {musicTrending.filter(t => likedMusicIds.has(t.subject_id)).map((track, idx) => (
-                        <MusicTrackRow
-                          key={`liked-track-${track.subject_id || idx}`}
-                          track={track}
-                          index={idx + 1}
-                          isActive={activeMusicTrack?.subject_id === track.subject_id}
-                          isPlaying={isMusicPlaying && activeMusicTrack?.subject_id === track.subject_id}
-                          onPress={() => playMusicTrack(track, musicTrending.filter(t => likedMusicIds.has(t.subject_id)))}
-                          onToggleLike={() => toggleLikeMusic(track.subject_id)}
-                          isLiked={true}
-                        />
-                      ))}
-                    </View>
-                  )}
-                </View>
-              ) : (
-                /* ── 6. Spotify Red Feed (Hero + Quick Grid + Trending + Charts) ── */
-                <>
-                  {/* Featured Hero Banner: TODAY'S SPOTIFY RED MIX */}
-                  {musicTrending.length > 0 && (
-                    <TouchableOpacity
-                      style={styles.musicHeroBanner}
-                      activeOpacity={0.9}
-                      onPress={() => playMusicTrack(musicTrending[0], musicTrending)}
-                    >
-                      <LinearGradient
-                        colors={['rgba(229, 9, 20, 0.45)', 'rgba(30, 8, 12, 0.95)', '#0c0c0e']}
-                        style={styles.musicHeroGradient}
-                      >
-                        <View style={styles.musicHeroContent}>
-                          <SafeImage
-                            uri={musicTrending[0].poster_url}
-                            style={styles.musicHeroImage}
-                            resizeMode="cover"
-                          />
-                          <View style={styles.musicHeroInfo}>
-                            <View style={styles.musicHeroTag}>
-                              <Text style={styles.musicHeroTagText}>SPOTIFY RED SPOTLIGHT</Text>
-                            </View>
-                            <Text style={styles.musicHeroTitle} numberOfLines={2}>
-                              {parseMusicTrackInfo(musicTrending[0].name).title}
-                            </Text>
-                            <Text style={styles.musicHeroArtist} numberOfLines={1}>
-                              {parseMusicTrackInfo(musicTrending[0].name).artist}
-                            </Text>
-                            <View style={styles.musicHeroBtnRow}>
-                              <View style={styles.musicHeroPlayBtn}>
-                                <Feather
-                                  name={isMusicPlaying && activeMusicTrack?.subject_id === musicTrending[0].subject_id ? "pause" : "play"}
-                                  size={15}
-                                  color="#FFFFFF"
-                                  style={{ marginRight: 6 }}
-                                />
-                                <Text style={styles.musicHeroPlayBtnText}>
-                                  {isMusicPlaying && activeMusicTrack?.subject_id === musicTrending[0].subject_id ? "Playing" : "Play Mix"}
-                                </Text>
-                              </View>
-                              <Text style={styles.musicHeroTrackCount}>{musicTrending.length} Tracks</Text>
-                            </View>
-                          </View>
-                        </View>
-                      </LinearGradient>
-                    </TouchableOpacity>
-                  )}
-
-                  {/* Quick Access 4-Pack (Spotify Home Grid) */}
-                  <View style={styles.musicQuickGrid}>
-                    {musicTrending.slice(0, 4).map((item, idx) => {
-                      const info = parseMusicTrackInfo(item.name);
-                      const isItemActive = activeMusicTrack?.subject_id === item.subject_id;
-                      return (
-                        <TouchableOpacity
-                          key={`quick-${item.subject_id || idx}`}
-                          style={[styles.musicQuickCard, isItemActive && styles.musicQuickCardActive]}
-                          onPress={() => playMusicTrack(item, musicTrending)}
-                          activeOpacity={0.8}
-                        >
-                          <SafeImage uri={item.poster_url} style={styles.musicQuickCardImg} resizeMode="cover" />
-                          <Text style={[styles.musicQuickCardTitle, isItemActive && { color: '#e50914' }]} numberOfLines={2}>
-                            {info.title}
-                          </Text>
-                          <View style={[styles.musicQuickPlayBadge, isItemActive && { backgroundColor: '#e50914' }]}>
-                            <Feather name={isMusicPlaying && isItemActive ? "pause" : "play"} size={11} color="#FFFFFF" />
-                          </View>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-
-                  {/* Trending Hits Carousel */}
-                  <View style={styles.musicSection}>
-                    <View style={styles.musicSectionHeader}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                        <Feather name="trending-up" size={16} color="#e50914" style={{ marginRight: 6 }} />
-                        <Text style={styles.musicSectionHeading}>Trending Hits</Text>
-                      </View>
-                      <Text style={styles.musicSectionSubBadge}>{musicTrending.length} Tracks</Text>
-                    </View>
-                    <ScrollView
-                      horizontal
-                      showsHorizontalScrollIndicator={false}
-                      contentContainerStyle={styles.musicHorizontalScroll}
-                    >
-                      {musicTrending.map((item, idx) => {
-                        const info = parseMusicTrackInfo(item.name);
-                        const isItemActive = activeMusicTrack?.subject_id === item.subject_id;
-                        return (
-                          <TouchableOpacity
-                            key={`trending-card-${item.subject_id || idx}`}
-                            style={[styles.musicCard, isItemActive && styles.musicCardActive]}
-                            onPress={() => playMusicTrack(item, musicTrending)}
-                            activeOpacity={0.85}
-                          >
-                            <View style={styles.musicCardImgWrapper}>
-                              <SafeImage uri={item.poster_url} style={styles.musicCardImg} resizeMode="cover" />
-                              <View style={[styles.musicCardPlayOverlay, isItemActive && styles.musicCardPlayOverlayActive]}>
-                                <Feather name={isMusicPlaying && isItemActive ? "pause" : "play"} size={15} color="#FFFFFF" />
-                              </View>
-                            </View>
-                            <Text style={[styles.musicCardTitle, isItemActive && { color: '#e50914' }]} numberOfLines={1}>
-                              {info.title}
-                            </Text>
-                            <Text style={styles.musicCardArtist} numberOfLines={1}>
-                              {info.artist}
-                            </Text>
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </ScrollView>
-                  </View>
-
-                  {/* Top Charts (Spotify Numbered Track List) */}
-                  <View style={styles.musicSection}>
-                    <View style={styles.musicSectionHeader}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                        <Feather name="award" size={16} color="#e50914" style={{ marginRight: 6 }} />
-                        <Text style={styles.musicSectionHeading}>Top Tracks This Week</Text>
-                      </View>
-                      <Text style={styles.musicSectionSubBadge}>Charts</Text>
-                    </View>
-                    <View style={styles.musicTrackListContainer}>
-                      {musicTrending.slice(0, 15).map((track, idx) => (
-                        <MusicTrackRow
-                          key={`chart-track-${track.subject_id || idx}`}
-                          track={track}
-                          index={idx + 1}
-                          isActive={activeMusicTrack?.subject_id === track.subject_id}
-                          isPlaying={isMusicPlaying && activeMusicTrack?.subject_id === track.subject_id}
-                          onPress={() => playMusicTrack(track, musicTrending)}
-                          onToggleLike={() => toggleLikeMusic(track.subject_id)}
-                          isLiked={likedMusicIds.has(track.subject_id)}
-                        />
-                      ))}
-                    </View>
-                  </View>
-                </>
-              )}
-            </ScrollView>
           </View>
         ) : (
           /* ==================================================== */
@@ -5796,6 +5861,7 @@ function ReelApp() {
           )
         )}
       </ScrollView>
+      )}
 
       {/* DETAIL MODAL (CLEAN GLASS, REAL DATA) */}
       <Modal
@@ -6836,107 +6902,6 @@ function ReelApp() {
       </Modal>
 
       {/* ==================================================== */}
-      {/* SPOTIFY RED FLOATING MINI MUSIC PLAYER              */}
-      {/* ==================================================== */}
-      {activeMusicTrack && (
-        <View
-          style={[
-            styles.musicMiniPlayerWrapper,
-            { bottom: Math.max(insets.bottom + 12, 18) + 64 },
-          ]}
-          pointerEvents="box-none"
-        >
-          <TouchableOpacity
-            style={styles.musicMiniPlayerContainer}
-            activeOpacity={0.92}
-            onPress={() => setIsMusicPlayerOpen(true)}
-          >
-            {/* Top red progress line */}
-            <View style={styles.musicMiniProgressTrack}>
-              <View
-                style={[
-                  styles.musicMiniProgressFill,
-                  {
-                    width: `${musicDuration > 0 ? Math.min(100, Math.max(0, (musicCurrentTime / musicDuration) * 100)) : 0}%`,
-                  },
-                ]}
-              />
-            </View>
-
-            <View style={styles.musicMiniInnerRow}>
-              <SafeImage uri={activeMusicTrack.poster_url} style={styles.musicMiniThumb} resizeMode="cover" />
-              <View style={styles.musicMiniMeta}>
-                <Text style={styles.musicMiniTitle} numberOfLines={1}>
-                  {parseMusicTrackInfo(activeMusicTrack.name).title}
-                </Text>
-                <Text style={styles.musicMiniArtist} numberOfLines={1}>
-                  {parseMusicTrackInfo(activeMusicTrack.name).artist}
-                </Text>
-              </View>
-
-              <TouchableOpacity
-                onPress={(e) => {
-                  e.stopPropagation?.();
-                  toggleLikeMusic(activeMusicTrack.subject_id);
-                }}
-                style={styles.musicMiniActionBtn}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                <Feather
-                  name="heart"
-                  size={18}
-                  color={likedMusicIds.has(activeMusicTrack.subject_id) ? "#e50914" : "rgba(255,255,255,0.4)"}
-                />
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={(e) => {
-                  e.stopPropagation?.();
-                  toggleMusicPlayPause();
-                }}
-                style={styles.musicMiniPlayBtn}
-                activeOpacity={0.8}
-              >
-                {loadingMusicStream ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-                ) : (
-                  <Feather
-                    name={isMusicPlaying ? "pause" : "play"}
-                    size={16}
-                    color="#FFFFFF"
-                    style={{ marginLeft: isMusicPlaying ? 0 : 2 }}
-                  />
-                )}
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={(e) => {
-                  e.stopPropagation?.();
-                  playNextMusicTrack();
-                }}
-                style={styles.musicMiniActionBtn}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                <Feather name="skip-forward" size={18} color="#FFFFFF" />
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={(e) => {
-                  e.stopPropagation?.();
-                  setIsMusicPlaying(false);
-                  setActiveMusicTrack(null);
-                  setMusicStreamUrl(null);
-                }}
-                style={styles.musicMiniActionBtn}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                <Feather name="x" size={16} color="rgba(255,255,255,0.4)" />
-              </TouchableOpacity>
-            </View>
-          </TouchableOpacity>
-        </View>
-      )}
-
       {/* ==================================================== */}
       {/* FLOATING APPLE-STYLE PILL BOTTOM NAVIGATION BAR       */}
       {/* ==================================================== */}
@@ -6988,29 +6953,29 @@ function ReelApp() {
             </Text>
           </TouchableOpacity>
 
-          {/* Music Tab (Center) */}
+          {/* Shots Tab (Center) */}
           <TouchableOpacity
             style={styles.floatingNavTab}
             onPress={() => {
-              if (mainTab !== 'Music') {
+              if (mainTab !== 'Shots') {
                 triggerHaptic('selection');
-                setMainTab('Music');
+                setMainTab('Shots');
               }
             }}
             activeOpacity={0.8}
           >
             <Feather
-              name="music"
+              name="film"
               size={18}
-              color={mainTab === 'Music' ? '#FFFFFF' : 'rgba(255, 255, 255, 0.55)'}
+              color={mainTab === 'Shots' ? '#FFFFFF' : 'rgba(255, 255, 255, 0.55)'}
             />
             <Text
               style={[
                 styles.floatingNavText,
-                mainTab === 'Music' && styles.floatingNavTextActive,
+                mainTab === 'Shots' && styles.floatingNavTextActive,
               ]}
             >
-              Music
+              Shots
             </Text>
           </TouchableOpacity>
 
@@ -7033,7 +6998,7 @@ function ReelApp() {
                 size={18}
                 color={mainTab === 'Me' ? '#FFFFFF' : 'rgba(255, 255, 255, 0.55)'}
               />
-              {!isWeb && downloads.some(d => d.status === 'downloading') ? (
+              {!isWeb && downloads.some((d) => d.status === 'downloading') ? (
                 <View style={styles.floatingNavDownloadBadge}>
                   <AnimatedDownloadSpinner size={9} color="#FFFFFF" />
                 </View>
@@ -7052,230 +7017,6 @@ function ReelApp() {
           </TouchableOpacity>
         </View>
       </View>
-
-      {/* Hidden Audio Stream Playback Engine (iOS, Android, Web) */}
-      <MusicPlaybackEngine
-        streamUrl={musicStreamUrl}
-        isPlaying={isMusicPlaying}
-        seekTarget={musicSeekTarget}
-        onTimeUpdate={(t) => setMusicCurrentTime(t)}
-        onDurationChange={(d) => setMusicDuration(d)}
-        onTrackEnd={playNextMusicTrack}
-      />
-
-      {/* ==================================================== */}
-      {/* SPOTIFY RED FULL-SCREEN MUSIC PLAYER MODAL           */}
-      {/* ==================================================== */}
-      <Modal
-        visible={isMusicPlayerOpen && Boolean(activeMusicTrack)}
-        animationType="slide"
-        presentationStyle="fullScreen"
-        onRequestClose={() => setIsMusicPlayerOpen(false)}
-      >
-        {activeMusicTrack && (
-          <LinearGradient
-            colors={['#4a070a', '#1a0406', '#09090b', '#000000']}
-            style={[styles.musicFullContainer, { paddingTop: Math.max(insets.top + 8, 20), paddingBottom: Math.max(insets.bottom + 16, 24) }]}
-          >
-            {/* Top Bar */}
-            <View style={styles.musicFullHeader}>
-              <TouchableOpacity
-                onPress={() => setIsMusicPlayerOpen(false)}
-                style={styles.musicFullHeaderBtn}
-                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-              >
-                <Feather name="chevron-down" size={26} color="#FFFFFF" />
-              </TouchableOpacity>
-              <View style={{ alignItems: 'center' }}>
-                <Text style={styles.musicFullHeaderTag}>PLAYING FROM MUSIC</Text>
-                <Text style={styles.musicFullHeaderMix} numberOfLines={1}>
-                  Spotify Red Mix • 1080p HQ
-                </Text>
-              </View>
-              <TouchableOpacity
-                onPress={() => setShowMusicQueueModal(prev => !prev)}
-                style={styles.musicFullHeaderBtn}
-                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-              >
-                <Feather name="list" size={22} color={showMusicQueueModal ? "#e50914" : "#FFFFFF"} />
-              </TouchableOpacity>
-            </View>
-
-            {/* Artwork with ambient red glow */}
-            <View style={styles.musicFullArtworkContainer}>
-              <View style={styles.musicFullArtworkGlow}>
-                <SafeImage
-                  uri={activeMusicTrack.poster_url}
-                  style={styles.musicFullArtwork}
-                  resizeMode="cover"
-                />
-                {loadingMusicStream && (
-                  <View style={styles.musicFullStreamLoadingOverlay}>
-                    <ActivityIndicator size="large" color="#e50914" />
-                    <Text style={styles.musicFullStreamLoadingText}>Connecting Lossless Stream...</Text>
-                  </View>
-                )}
-              </View>
-            </View>
-
-            {/* Title & Artist & Like Button Row */}
-            <View style={styles.musicFullMetaRow}>
-              <View style={{ flex: 1, marginRight: 12 }}>
-                <Text style={styles.musicFullTitle} numberOfLines={1}>
-                  {parseMusicTrackInfo(activeMusicTrack.name).title}
-                </Text>
-                <Text style={styles.musicFullArtist} numberOfLines={1}>
-                  {parseMusicTrackInfo(activeMusicTrack.name).artist} {activeMusicTrack.year ? `• ${activeMusicTrack.year}` : ''}
-                </Text>
-              </View>
-              <TouchableOpacity
-                onPress={() => toggleLikeMusic(activeMusicTrack.subject_id)}
-                style={styles.musicFullLikeBtn}
-                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-              >
-                <Feather
-                  name="heart"
-                  size={24}
-                  color={likedMusicIds.has(activeMusicTrack.subject_id) ? "#e50914" : "rgba(255,255,255,0.6)"}
-                />
-              </TouchableOpacity>
-            </View>
-
-            {/* Scrubbable Progress Bar */}
-            <TouchableOpacity
-              style={styles.musicProgressBarTouch}
-              activeOpacity={1}
-              onPress={(e) => {
-                const width = windowWidth - 48;
-                if (width > 0 && musicDuration > 0) {
-                  const clickX = e.nativeEvent.locationX;
-                  const ratio = Math.max(0, Math.min(1, clickX / width));
-                  seekMusic(ratio * musicDuration);
-                }
-              }}
-            >
-              <View style={styles.musicProgressBg}>
-                <View
-                  style={[
-                    styles.musicProgressFill,
-                    {
-                      width: `${musicDuration > 0 ? Math.min(100, Math.max(0, (musicCurrentTime / musicDuration) * 100)) : 0}%`,
-                    },
-                  ]}
-                />
-              </View>
-            </TouchableOpacity>
-
-            <View style={styles.musicTimeRow}>
-              <Text style={styles.musicTimeText}>{formatTimestamp(musicCurrentTime)}</Text>
-              <Text style={styles.musicTimeText}>{formatTimestamp(musicDuration || 240)}</Text>
-            </View>
-
-            {/* Spotify Red Player Controls */}
-            <View style={styles.musicControlsRow}>
-              <TouchableOpacity
-                onPress={() => {
-                  triggerHaptic('selection');
-                  setIsMusicShuffle(prev => !prev);
-                  showToast(!isMusicShuffle ? "Shuffle On 🔀" : "Shuffle Off");
-                }}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                <Feather name="shuffle" size={20} color={isMusicShuffle ? "#e50914" : "rgba(255,255,255,0.5)"} />
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={playPrevMusicTrack}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                <Feather name="skip-back" size={28} color="#FFFFFF" />
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.musicPlayBigBtn}
-                onPress={toggleMusicPlayPause}
-                activeOpacity={0.85}
-              >
-                {loadingMusicStream ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-                ) : (
-                  <Feather
-                    name={isMusicPlaying ? "pause" : "play"}
-                    size={28}
-                    color="#FFFFFF"
-                    style={{ marginLeft: isMusicPlaying ? 0 : 2 }}
-                  />
-                )}
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={playNextMusicTrack}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                <Feather name="skip-forward" size={28} color="#FFFFFF" />
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={() => {
-                  triggerHaptic('selection');
-                  setIsMusicRepeat(prev => !prev);
-                  showToast(!isMusicRepeat ? "Repeat On 🔁" : "Repeat Off");
-                }}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                <Feather name="repeat" size={20} color={isMusicRepeat ? "#e50914" : "rgba(255,255,255,0.5)"} />
-              </TouchableOpacity>
-            </View>
-
-            {/* Bottom Stream Quality Badge */}
-            <View style={styles.musicFullFooterBadgeRow}>
-              <Feather name="disc" size={13} color="#e50914" />
-              <Text style={styles.musicFullFooterBadgeText}>
-                1080p HQ Audio Stream • Pure Zero Ads
-              </Text>
-            </View>
-
-            {/* Slide-Up Queue Drawer */}
-            {showMusicQueueModal && (
-              <View style={styles.musicQueueOverlay}>
-                <View style={styles.musicQueueHeaderRow}>
-                  <Text style={styles.musicQueueHeading}>Up Next in Queue ({musicQueue.length})</Text>
-                  <TouchableOpacity onPress={() => setShowMusicQueueModal(false)}>
-                    <Feather name="x" size={20} color="#FFFFFF" />
-                  </TouchableOpacity>
-                </View>
-                <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 220 }}>
-                  {musicQueue.map((qTrack, qIdx) => {
-                    const isCur = activeMusicTrack?.subject_id === qTrack.subject_id;
-                    const qInfo = parseMusicTrackInfo(qTrack.name);
-                    return (
-                      <TouchableOpacity
-                        key={`queue-item-${qTrack.subject_id || qIdx}`}
-                        style={[styles.musicQueueItemRow, isCur && styles.musicQueueItemRowActive]}
-                        onPress={() => playMusicTrack(qTrack, musicQueue)}
-                      >
-                        <Text style={[styles.musicQueueItemIndex, isCur && { color: '#e50914' }]}>
-                          {qIdx + 1}
-                        </Text>
-                        <SafeImage uri={qTrack.poster_url} style={styles.musicQueueItemThumb} resizeMode="cover" />
-                        <View style={{ flex: 1, marginLeft: 10 }}>
-                          <Text style={[styles.musicQueueItemTitle, isCur && { color: '#e50914' }]} numberOfLines={1}>
-                            {qInfo.title}
-                          </Text>
-                          <Text style={styles.musicQueueItemArtist} numberOfLines={1}>
-                            {qInfo.artist}
-                          </Text>
-                        </View>
-                        {isCur && <Feather name={isMusicPlaying ? "volume-2" : "pause"} size={16} color="#e50914" />}
-                      </TouchableOpacity>
-                    );
-                  })}
-                </ScrollView>
-              </View>
-            )}
-          </LinearGradient>
-        )}
-      </Modal>
 
       {/* ==================================================== */}
       {/* FLOATING TOAST NOTIFICATION                          */}
@@ -12815,676 +12556,260 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     backgroundColor: 'rgba(255, 255, 255, 0.08)',
   },
-  // ─── Spotify Red Music Screen & Player Styles ─────────────────────────
-  musicTrackRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#13131a',
-    borderRadius: 10,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.05)',
-  },
-  musicTrackRowActive: {
-    backgroundColor: '#201014',
-    borderColor: 'rgba(229, 9, 20, 0.4)',
-  },
-  musicTrackRank: {
-    width: 24,
-    fontSize: 12,
-    fontWeight: '800',
-    color: '#666677',
-    textAlign: 'center',
-    marginRight: 8,
-  },
-  musicTrackThumbWrapper: {
-    width: 44,
-    height: 44,
-    borderRadius: 8,
-    overflow: 'hidden',
-    position: 'relative',
-  },
-  musicTrackThumb: {
-    width: '100%',
-    height: '100%',
-  },
-  musicTrackPlayingPill: {
+  // ─── Instagram-Style 9:16 Shots Feed Styles ───────────────────────────
+  shotsTopHeader: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
-    bottom: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    zIndex: 100,
+  },
+  shotsBrandRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  shotsBrandText: {
+    color: '#FFFFFF',
+    fontSize: 20,
+    fontWeight: '900',
+    letterSpacing: -0.5,
+  },
+  shotsLiveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#e50914',
+    marginLeft: 6,
+  },
+  shotsFilterTabsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 18,
+  },
+  shotsFilterTabBtn: {
+    alignItems: 'center',
+    paddingVertical: 4,
+    position: 'relative',
+  },
+  shotsFilterTabText: {
+    color: 'rgba(255, 255, 255, 0.6)',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  shotsFilterTabTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '900',
+  },
+  shotsFilterTabUnderline: {
+    position: 'absolute',
+    bottom: -2,
+    width: 18,
+    height: 2.5,
+    borderRadius: 2,
+    backgroundColor: '#e50914',
+  },
+  shotsHelpBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(0, 0, 0, 0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  shotsBufferingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+  },
+  shotsHeartBurst: {
+    position: 'absolute',
+    top: '40%',
+    left: '50%',
+    marginLeft: -45,
+    marginTop: -45,
+    width: 90,
+    height: 90,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#e50914',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.6,
+    shadowRadius: 16,
+    elevation: 10,
+  },
+  shotsPlayPauseIndicator: {
+    position: 'absolute',
+    top: '45%',
+    left: '50%',
+    marginLeft: -35,
+    marginTop: -35,
+    width: 70,
+    height: 70,
+    borderRadius: 35,
     backgroundColor: 'rgba(0, 0, 0, 0.55)',
     alignItems: 'center',
     justifyContent: 'center',
-    flexDirection: 'row',
-    gap: 2,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
   },
-  musicPlayingBar: {
-    width: 3,
-    height: 12,
+  shotsRightColumn: {
+    position: 'absolute',
+    right: 12,
+    bottom: 96,
+    alignItems: 'center',
+    gap: 16,
+    zIndex: 20,
+  },
+  shotsAvatarContainer: {
+    position: 'relative',
+    marginBottom: 4,
+  },
+  shotsAvatarImg: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 2,
+    borderColor: '#e50914',
+  },
+  shotsAvatarBadge: {
+    position: 'absolute',
+    bottom: -4,
+    alignSelf: 'center',
+    width: 18,
+    height: 18,
+    borderRadius: 9,
     backgroundColor: '#e50914',
-    borderRadius: 2,
-  },
-  musicTrackMeta: {
-    flex: 1,
-    marginLeft: 12,
-    marginRight: 8,
-  },
-  musicTrackName: {
-    color: '#f0f0f5',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  musicTrackArtist: {
-    color: '#888899',
-    fontSize: 12,
-    fontWeight: '500',
-    marginTop: 2,
-  },
-  musicTrackLikeBtn: {
-    padding: 8,
-  },
-  musicTrackPlayCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: 4,
   },
-  musicScreenContainer: {
-    flex: 1,
-    backgroundColor: '#0a0a0c',
-    paddingHorizontal: 16,
-  },
-  musicHeaderRow: {
-    flexDirection: 'row',
+  shotsActionBtn: {
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 16,
+    gap: 3,
+  },
+  shotsActionIconCircle: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: 'rgba(0, 0, 0, 0.45)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  shotsActionCount: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '700',
+    textShadowColor: 'rgba(0, 0, 0, 0.8)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+  shotsVinylContainer: {
     marginTop: 4,
   },
-  musicHeaderTitle: {
-    fontSize: 28,
-    fontWeight: '900',
-    color: '#ffffff',
-    letterSpacing: -0.5,
+  shotsVinylRing: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#111111',
+    borderWidth: 2.5,
+    borderColor: '#333333',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.5,
+    shadowRadius: 4,
   },
-  musicHeaderSubtitle: {
+  shotsVinylCenter: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#e50914',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  shotsBottomOverlay: {
+    position: 'absolute',
+    left: 14,
+    bottom: 96,
+    right: 80,
+    zIndex: 20,
+  },
+  shotsAuthorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+    gap: 6,
+  },
+  shotsAuthorText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '800',
+    textShadowColor: 'rgba(0, 0, 0, 0.8)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+  shotsVerifiedBadge: {
+    width: 15,
+    height: 15,
+    borderRadius: 7.5,
+    backgroundColor: '#e50914',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  shotsEpisodeBadge: {
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  shotsEpisodeText: {
+    color: '#FFFFFF',
     fontSize: 10,
     fontWeight: '800',
-    color: '#e50914',
-    letterSpacing: 1.2,
-    marginTop: 2,
   },
-  musicHeaderLikedBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.12)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  musicSearchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#16161c',
-    borderWidth: 1,
-    borderColor: 'rgba(229, 9, 20, 0.35)',
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    height: 46,
-    marginBottom: 14,
-  },
-  musicSearchInput: {
-    flex: 1,
-    color: '#ffffff',
+  shotsTitleText: {
+    color: '#FFFFFF',
     fontSize: 14,
-    fontWeight: '500',
-    paddingVertical: 0,
-  },
-  musicGenreChipsScroll: {
-    paddingBottom: 14,
-    gap: 8,
-  },
-  musicGenreChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: '#18181f',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-  },
-  musicGenreChipActive: {
-    backgroundColor: '#e50914',
-    borderColor: '#ff2a34',
-  },
-  musicGenreChipText: {
-    color: '#a0a0ab',
-    fontSize: 12,
     fontWeight: '600',
+    lineHeight: 19,
+    marginBottom: 4,
+    textShadowColor: 'rgba(0, 0, 0, 0.8)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
-  musicGenreChipTextActive: {
-    color: '#ffffff',
-    fontWeight: '800',
-  },
-  musicSearchResultsSection: {
-    marginTop: 10,
-    marginBottom: 20,
-  },
-  musicSectionHeading: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#ffffff',
-    letterSpacing: -0.3,
-  },
-  musicEmptySearchBox: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 48,
-    paddingHorizontal: 20,
-  },
-  musicEmptySearchTitle: {
-    color: '#ffffff',
-    fontSize: 16,
+  shotsTagsText: {
+    color: '#e50914',
+    fontSize: 12,
     fontWeight: '700',
-    marginTop: 12,
-  },
-  musicEmptySearchSub: {
-    color: '#888899',
-    fontSize: 13,
-    textAlign: 'center',
-    marginTop: 6,
-    lineHeight: 18,
-  },
-  musicTrackListContainer: {
-    marginTop: 10,
-    gap: 8,
-  },
-  musicHeroBanner: {
-    height: 160,
-    borderRadius: 16,
-    overflow: 'hidden',
-    marginBottom: 20,
-    backgroundColor: '#16080a',
-    borderWidth: 1,
-    borderColor: 'rgba(229, 9, 20, 0.3)',
-  },
-  musicHeroGradient: {
-    flex: 1,
-    padding: 16,
-    justifyContent: 'center',
-    backgroundColor: 'rgba(229, 9, 20, 0.12)',
-  },
-  musicHeroContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  musicHeroImage: {
-    width: 100,
-    height: 100,
-    borderRadius: 12,
-    backgroundColor: '#222',
-  },
-  musicHeroInfo: {
-    flex: 1,
-    marginLeft: 16,
-    justifyContent: 'center',
-  },
-  musicHeroTag: {
-    backgroundColor: '#e50914',
-    alignSelf: 'flex-start',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 4,
     marginBottom: 6,
   },
-  musicHeroTagText: {
-    color: '#ffffff',
-    fontSize: 9,
-    fontWeight: '900',
-    letterSpacing: 0.8,
+  shotsAudioTickerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
-  musicHeroTitle: {
-    color: '#ffffff',
-    fontSize: 17,
-    fontWeight: '800',
-    lineHeight: 21,
-  },
-  musicHeroArtist: {
-    color: '#bbbbcc',
-    fontSize: 13,
+  shotsAudioTickerText: {
+    color: 'rgba(255, 255, 255, 0.85)',
+    fontSize: 12,
     fontWeight: '500',
-    marginTop: 3,
-  },
-  musicHeroBtnRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 10,
-    gap: 12,
-  },
-  musicHeroPlayBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#e50914',
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 20,
-    gap: 6,
-  },
-  musicHeroPlayBtnText: {
-    color: '#ffffff',
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  musicHeroTrackCount: {
-    color: '#888899',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  musicQuickGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-    marginBottom: 24,
-  },
-  musicQuickCard: {
-    width: '48%',
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#181822',
-    borderRadius: 8,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.05)',
-    paddingRight: 8,
-  },
-  musicQuickCardActive: {
-    borderColor: '#e50914',
-    backgroundColor: '#221115',
-  },
-  musicQuickCardImg: {
-    width: 52,
-    height: 52,
-  },
-  musicQuickCardTitle: {
     flex: 1,
-    color: '#f0f0f5',
-    fontSize: 12,
-    fontWeight: '700',
-    marginHorizontal: 10,
   },
-  musicQuickPlayBadge: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  musicSection: {
-    marginBottom: 24,
-  },
-  musicSectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-  },
-  musicSectionSubBadge: {
-    color: '#e50914',
-    fontSize: 11,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  musicHorizontalScroll: {
-    gap: 14,
-    paddingRight: 16,
-  },
-  musicCard: {
-    width: 140,
-    backgroundColor: '#14141c',
-    borderRadius: 12,
-    padding: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.04)',
-  },
-  musicCardActive: {
-    borderColor: '#e50914',
-    backgroundColor: '#1f1014',
-  },
-  musicCardImgWrapper: {
-    width: 120,
-    height: 120,
-    borderRadius: 8,
-    overflow: 'hidden',
-    position: 'relative',
-  },
-  musicCardImg: {
-    width: '100%',
-    height: '100%',
-  },
-  musicCardPlayOverlay: {
+  shotsProgressTrack: {
     position: 'absolute',
-    bottom: 6,
-    right: 6,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#e50914',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 6,
-    elevation: 4,
-  },
-  musicCardPlayOverlayActive: {
-    backgroundColor: '#ff2a34',
-  },
-  musicCardTitle: {
-    color: '#ffffff',
-    fontSize: 13,
-    fontWeight: '700',
-    marginTop: 8,
-  },
-  musicCardArtist: {
-    color: '#888899',
-    fontSize: 11,
-    fontWeight: '500',
-    marginTop: 2,
-  },
-  musicMiniPlayerWrapper: {
-    position: Platform.OS === 'web' ? 'fixed' : 'absolute',
-    bottom: Platform.OS === 'web' ? 76 : 74,
-    left: 12,
-    right: 12,
-    zIndex: 99998,
-    alignItems: 'center',
-  },
-  musicMiniPlayerContainer: {
-    width: '100%',
-    maxWidth: 540,
-    backgroundColor: 'rgba(20, 12, 14, 0.96)',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(229, 9, 20, 0.4)',
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.5,
-    shadowRadius: 12,
-    elevation: 12,
-  },
-  musicMiniProgressTrack: {
+    bottom: 0,
+    left: 0,
+    right: 0,
     height: 2.5,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    width: '100%',
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    zIndex: 50,
   },
-  musicMiniProgressFill: {
+  shotsProgressFill: {
     height: '100%',
     backgroundColor: '#e50914',
-  },
-  musicMiniInnerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-  },
-  musicMiniThumb: {
-    width: 40,
-    height: 40,
-    borderRadius: 6,
-    backgroundColor: '#222',
-  },
-  musicMiniMeta: {
-    flex: 1,
-    marginLeft: 10,
-    marginRight: 8,
-  },
-  musicMiniTitle: {
-    color: '#ffffff',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  musicMiniArtist: {
-    color: '#e50914',
-    fontSize: 11,
-    fontWeight: '600',
-    marginTop: 1,
-  },
-  musicMiniActionBtn: {
-    padding: 7,
-  },
-  musicMiniPlayBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: '#e50914',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginHorizontal: 4,
-  },
-  musicFullContainer: {
-    flex: 1,
-    backgroundColor: '#0c0709',
-    paddingHorizontal: 24,
-    justifyContent: 'space-between',
-  },
-  musicFullHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-  },
-  musicFullHeaderBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  musicFullHeaderTag: {
-    color: '#888899',
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 1.2,
-    textAlign: 'center',
-  },
-  musicFullHeaderMix: {
-    color: '#ffffff',
-    fontSize: 13,
-    fontWeight: '700',
-    textAlign: 'center',
-    marginTop: 2,
-  },
-  musicFullArtworkContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginVertical: 20,
-    position: 'relative',
-  },
-  musicFullArtworkGlow: {
-    width: 280,
-    height: 280,
-    borderRadius: 20,
-    shadowColor: '#e50914',
-    shadowOffset: { width: 0, height: 16 },
-    shadowOpacity: 0.45,
-    shadowRadius: 36,
-    elevation: 20,
-    backgroundColor: '#1a0a0e',
-    position: 'relative',
-  },
-  musicFullArtwork: {
-    width: 280,
-    height: 280,
-    borderRadius: 20,
-  },
-  musicFullStreamLoadingOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.65)',
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  musicFullStreamLoadingText: {
-    color: '#e50914',
-    fontSize: 12,
-    fontWeight: '700',
-    marginTop: 8,
-  },
-  musicFullMetaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-  },
-  musicFullTitle: {
-    color: '#ffffff',
-    fontSize: 20,
-    fontWeight: '900',
-    letterSpacing: -0.3,
-  },
-  musicFullArtist: {
-    color: '#a0a0b2',
-    fontSize: 14,
-    fontWeight: '600',
-    marginTop: 4,
-  },
-  musicFullLikeBtn: {
-    padding: 8,
-  },
-  musicProgressBarTouch: {
-    paddingVertical: 10,
-  },
-  musicProgressBg: {
-    height: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    borderRadius: 2,
-    overflow: 'hidden',
-  },
-  musicProgressFill: {
-    height: '100%',
-    backgroundColor: '#e50914',
-  },
-  musicTimeRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 4,
-    marginBottom: 12,
-  },
-  musicTimeText: {
-    color: '#777788',
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  musicControlsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginVertical: 8,
-  },
-  musicPlayBigBtn: {
-    width: 68,
-    height: 68,
-    borderRadius: 34,
-    backgroundColor: '#e50914',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#e50914',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.5,
-    shadowRadius: 16,
-    elevation: 8,
-  },
-  musicFullFooterBadgeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    marginTop: 12,
-  },
-  musicFullFooterBadgeText: {
-    color: '#666677',
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 1.5,
-    textTransform: 'uppercase',
-  },
-  musicQueueOverlay: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    top: 120,
-    backgroundColor: '#100a0d',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(229, 9, 20, 0.3)',
-    zIndex: 10,
-  },
-  musicQueueHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.08)',
-  },
-  musicQueueHeading: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '800',
-  },
-  musicQueueItemRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.04)',
-  },
-  musicQueueItemRowActive: {
-    backgroundColor: 'rgba(229, 9, 20, 0.12)',
-    borderRadius: 8,
-    paddingHorizontal: 6,
-  },
-  musicQueueItemIndex: {
-    width: 24,
-    color: '#666677',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  musicQueueItemThumb: {
-    width: 40,
-    height: 40,
-    borderRadius: 6,
-    marginHorizontal: 8,
-  },
-  musicQueueItemTitle: {
-    color: '#ffffff',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  musicQueueItemArtist: {
-    color: '#888899',
-    fontSize: 11,
-    fontWeight: '500',
-    marginTop: 1,
   },
 });
 
