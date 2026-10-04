@@ -2783,6 +2783,17 @@ function ReelApp() {
   const [homeCategory, setHomeCategory] = useState('All'); // 'All' | 'Movies' | 'Series'
   const [meSubTab, setMeSubTab] = useState(null); // null (clean buttons hub) | 'History' | 'MyList' | 'Downloads'
   const [meDotDismissed, setMeDotDismissed] = useState(false);
+  const meSubTabAnim = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    meSubTabAnim.setValue(0);
+    Animated.timing(meSubTabAnim, {
+      toValue: 1,
+      duration: 220,
+      easing: Easing.out(Easing.ease),
+      useNativeDriver: true,
+    }).start();
+  }, [meSubTab]);
 
   // Floating Apple-Style Navigation Bar Animation & Fluid Drag State (3 Tabs: Home | Shots | Me)
   const floatingBarWidth = Math.min(windowWidth - 36, 330);
@@ -5551,334 +5562,266 @@ function ReelApp() {
         {mainTab === 'Me' ? (
           <View style={[styles.meScreenContainer, { paddingTop: insets.top + 10 }]}>
             {meSubTab === null ? (
-              /* ─── ROOT ME HUB: PROFILE + BUTTONS + MINIMAL UPDATE ─── */
-              <>
-                {/* User Profile Card */}
-                <View style={styles.meHeaderGlassCard}>
-                  <View style={styles.meUserRow}>
-                    <View style={styles.meAvatarWrapper}>
-                      <Feather name={authUser ? 'user-check' : 'user'} size={24} color={authUser ? '#e50914' : '#f5f5f1'} />
-                      {authUser && <View style={styles.meOnlineBadge} />}
-                    </View>
-                    <View style={styles.meUserInfo}>
-                      <Text style={styles.meUserName}>
-                        {authUser ? authUser.email.split('@')[0] : 'My Space'}
-                      </Text>
-                      <Text style={styles.meUserSubtext}>
-                        {authUser ? authUser.email : 'Local Device Storage'}
-                      </Text>
-                    </View>
-                    <TouchableOpacity
-                      style={[styles.meAuthBtn, authUser && styles.meAuthBtnLogout]}
-                      onPress={() => authUser ? handleLogout() : openAuthPage('login')}
-                      activeOpacity={0.8}
-                    >
-                      <Feather name={authUser ? 'log-out' : 'log-in'} size={13} color="#fff" style={{ marginRight: 4 }} />
-                      <Text style={styles.meAuthBtnText}>{authUser ? 'Sign Out' : 'Sign In'}</Text>
-                    </TouchableOpacity>
+              /* ─── ROOT ME HUB: CLEAN & MINIMAL SPEC REDESIGN ─── */
+              <Animated.View
+                style={[
+                  styles.meMinimalProfileContainer,
+                  {
+                    opacity: meSubTabAnim,
+                    transform: [
+                      {
+                        translateY: meSubTabAnim.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [10, 0],
+                        }),
+                      },
+                    ],
+                  },
+                ]}
+              >
+                {/* Profile Hero: Avatar, Username, Email, Auth Action */}
+                <View style={styles.meProfileHero}>
+                  <View style={styles.meAvatarLarge}>
+                    <Text style={styles.meAvatarInitial}>
+                      {authUser
+                        ? (authUser.name || authUser.email || 'J').charAt(0).toUpperCase()
+                        : 'J'}
+                    </Text>
+                    {authUser && <View style={styles.meAvatarOnlineDot} />}
                   </View>
 
-                  {/* Quick Stats Counter Row */}
-                  <View style={styles.meStatsRow}>
-                    <TouchableOpacity
-                      style={styles.meStatBox}
-                      onPress={() => setMeSubTab('History')}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={styles.meStatNumber}>{watchHistory.length}</Text>
-                      <Text style={styles.meStatLabel}>History</Text>
-                    </TouchableOpacity>
-                    <View style={styles.meStatDivider} />
-                    <TouchableOpacity
-                      style={styles.meStatBox}
-                      onPress={() => setMeSubTab('MyList')}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={styles.meStatNumber}>{myList.length}</Text>
-                      <Text style={styles.meStatLabel}>In My List</Text>
-                    </TouchableOpacity>
-                    {!isWeb && (
-                      <>
-                        <View style={styles.meStatDivider} />
-                        <TouchableOpacity
-                          style={styles.meStatBox}
-                          onPress={() => setMeSubTab('Downloads')}
-                          activeOpacity={0.7}
-                        >
-                          <Text style={styles.meStatNumber}>{downloads.length}</Text>
-                          <Text style={styles.meStatLabel}>Downloads</Text>
-                        </TouchableOpacity>
-                      </>
-                    )}
-                  </View>
+                  <Text style={styles.meProfileUsername}>
+                    {authUser
+                      ? (authUser.name || authUser.email.split('@')[0])
+                      : 'jndjdk'}
+                  </Text>
+
+                  <Text style={styles.meProfileEmail}>
+                    {authUser
+                      ? authUser.email
+                      : 'jndjdk@outlook.com'}
+                  </Text>
+
+                  <TouchableOpacity
+                    style={styles.meMinimalAuthBtn}
+                    onPress={() => authUser ? handleLogout() : openAuthPage('login')}
+                    activeOpacity={0.7}
+                  >
+                    <Feather
+                      name={authUser ? 'log-out' : 'log-in'}
+                      size={12}
+                      color={authUser ? '#ef4444' : '#a3a3a3'}
+                      style={{ marginRight: 5 }}
+                    />
+                    <Text style={[styles.meMinimalAuthBtnText, authUser && { color: '#ef4444' }]}>
+                      {authUser ? 'Sign Out' : 'Sign In'}
+                    </Text>
+                  </TouchableOpacity>
                 </View>
 
-                {/* Navigation Buttons Down The Page */}
-                <View style={styles.meNavSection}>
-                  <Text style={styles.meNavSectionHeader}>MY LIBRARY</Text>
-
-                  {/* Button 1: Watch History */}
+                {/* 3 Stats Row: 0 History | 0 My list | 0 Downloads */}
+                <View style={styles.meMinimalStatsCard}>
+                  {/* Stat 1: History */}
                   <TouchableOpacity
-                    style={styles.meNavCard}
-                    onPress={() => setMeSubTab('History')}
+                    style={styles.meMinimalStatItem}
+                    onPress={() => {
+                      triggerHaptic('selection');
+                      setMeSubTab('History');
+                    }}
                     activeOpacity={0.7}
                   >
-                    <View style={[styles.meNavIconCircle, { backgroundColor: 'rgba(229, 9, 20, 0.12)', borderColor: 'rgba(229, 9, 20, 0.28)' }]}>
-                      <Feather name="clock" size={19} color="#e50914" />
-                    </View>
-                    <View style={styles.meNavTextCol}>
-                      <View style={styles.meNavTitleRow}>
-                        <Text style={styles.meNavTitle}>Watch History</Text>
-                        {watchHistory.length > 0 && (
-                          <View style={styles.meNavBadge}>
-                            <Text style={styles.meNavBadgeText}>{watchHistory.length}</Text>
-                          </View>
-                        )}
-                      </View>
-                      <Text style={styles.meNavSubtitle}>
-                        {watchHistory.length > 0 ? `${watchHistory.length} in progress · Resume watching` : 'No recent watch history'}
-                      </Text>
-                    </View>
-                    <Feather name="chevron-right" size={18} color="#737373" />
+                    <Text style={styles.meMinimalStatCount}>{watchHistory.length}</Text>
+                    <Text style={styles.meMinimalStatLabel}>History</Text>
                   </TouchableOpacity>
 
-                  {/* Button 2: My List */}
+                  <View style={styles.meMinimalStatDivider} />
+
+                  {/* Stat 2: My list */}
                   <TouchableOpacity
-                    style={styles.meNavCard}
-                    onPress={() => setMeSubTab('MyList')}
+                    style={styles.meMinimalStatItem}
+                    onPress={() => {
+                      triggerHaptic('selection');
+                      setMeSubTab('MyList');
+                    }}
                     activeOpacity={0.7}
                   >
-                    <View style={[styles.meNavIconCircle, { backgroundColor: 'rgba(229, 9, 20, 0.12)', borderColor: 'rgba(229, 9, 20, 0.28)' }]}>
-                      <Feather name="bookmark" size={19} color="#e50914" />
-                    </View>
-                    <View style={styles.meNavTextCol}>
-                      <View style={styles.meNavTitleRow}>
-                        <Text style={styles.meNavTitle}>My List</Text>
-                        {myList.length > 0 && (
-                          <View style={styles.meNavBadge}>
-                            <Text style={styles.meNavBadgeText}>{myList.length}</Text>
-                          </View>
-                        )}
-                      </View>
-                      <Text style={styles.meNavSubtitle}>
-                        {myList.length > 0 ? `${myList.length} saved movies & TV shows` : 'Your saved favorites'}
-                      </Text>
-                    </View>
-                    <Feather name="chevron-right" size={18} color="#737373" />
+                    <Text style={styles.meMinimalStatCount}>{myList.length}</Text>
+                    <Text style={styles.meMinimalStatLabel}>My list</Text>
                   </TouchableOpacity>
 
-                  {/* Button 3: Downloads (Native Mobile Only) */}
-                  {!isWeb && (
-                    <TouchableOpacity
-                      style={styles.meNavCard}
-                      onPress={() => setMeSubTab('Downloads')}
-                      activeOpacity={0.7}
-                    >
-                      <View style={[styles.meNavIconCircle, { backgroundColor: 'rgba(229, 9, 20, 0.12)', borderColor: 'rgba(229, 9, 20, 0.28)' }]}>
-                        <Feather name="download" size={19} color="#e50914" />
-                      </View>
-                      <View style={styles.meNavTextCol}>
-                        <View style={styles.meNavTitleRow}>
-                          <Text style={styles.meNavTitle}>Offline Downloads</Text>
-                          {downloads.length > 0 && (
-                            <View style={styles.meNavBadge}>
-                              <Text style={styles.meNavBadgeText}>{downloads.length}</Text>
-                            </View>
-                          )}
-                        </View>
-                        <Text style={styles.meNavSubtitle}>
-                          {downloads.length > 0
-                            ? `${downloads.length} offline · ${formatBytes(downloads.reduce((acc, d) => acc + (d.sizeBytes || 0), 0))}`
-                            : 'Watch downloaded videos offline'}
-                        </Text>
-                      </View>
-                      <Feather name="chevron-right" size={18} color="#737373" />
-                    </TouchableOpacity>
-                  )}
+                  <View style={styles.meMinimalStatDivider} />
 
-                  {/* Button 3: Download Android App (Web Only) */}
+                  {/* Stat 3: Downloads */}
+                  <TouchableOpacity
+                    style={styles.meMinimalStatItem}
+                    onPress={() => {
+                      triggerHaptic('selection');
+                      if (!isWeb) {
+                        setMeSubTab('Downloads');
+                      } else {
+                        handleOpenDownload();
+                      }
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.meMinimalStatCount}>{downloads.length}</Text>
+                    <Text style={styles.meMinimalStatLabel}>Downloads</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Quick Utility Links: Privacy Policy & Web Download APK */}
+                <View style={styles.meMinimalLinksContainer}>
                   {isWeb && (
                     <TouchableOpacity
-                      style={styles.meNavCard}
+                      style={styles.meMinimalLinkRow}
                       onPress={handleOpenDownload}
                       activeOpacity={0.7}
                     >
-                      <View style={[styles.meNavIconCircle, { backgroundColor: 'rgba(229, 9, 20, 0.12)', borderColor: 'rgba(229, 9, 20, 0.28)' }]}>
-                        <Feather name="download" size={19} color="#e50914" />
+                      <View style={styles.meMinimalLinkLeft}>
+                        <Feather name="download" size={16} color="#e50914" style={{ marginRight: 10 }} />
+                        <Text style={styles.meMinimalLinkText}>Download Android App</Text>
                       </View>
-                      <View style={styles.meNavTextCol}>
-                        <View style={styles.meNavTitleRow}>
-                          <Text style={styles.meNavTitle}>Download Android App</Text>
-                          <View style={styles.meNavBadge}>
-                            <Text style={styles.meNavBadgeText}>v1.1.6 APK</Text>
-                          </View>
-                        </View>
-                        <Text style={styles.meNavSubtitle}>
-                          Offline downloads · 4K/HD streaming · Zero ads
-                        </Text>
-                      </View>
-                      <Feather name="chevron-right" size={18} color="#737373" />
+                      <Feather name="chevron-right" size={16} color="#525252" />
                     </TouchableOpacity>
                   )}
 
-                  {/* Button: Privacy Policy */}
                   <TouchableOpacity
-                    style={styles.meNavCard}
+                    style={styles.meMinimalLinkRow}
                     onPress={handleOpenPrivacy}
                     activeOpacity={0.7}
                   >
-                    <View style={[styles.meNavIconCircle, { backgroundColor: 'rgba(229, 9, 20, 0.12)', borderColor: 'rgba(229, 9, 20, 0.28)' }]}>
-                      <Feather name="shield" size={19} color="#e50914" />
+                    <View style={styles.meMinimalLinkLeft}>
+                      <Feather name="shield" size={16} color="#737373" style={{ marginRight: 10 }} />
+                      <Text style={styles.meMinimalLinkText}>Privacy Policy</Text>
                     </View>
-                    <View style={styles.meNavTextCol}>
-                      <View style={styles.meNavTitleRow}>
-                        <Text style={styles.meNavTitle}>Privacy Policy</Text>
-                        <View style={[styles.meNavBadge, { backgroundColor: 'rgba(229, 9, 20, 0.16)' }]}>
-                          <Text style={[styles.meNavBadgeText, { color: '#e50914' }]}>Zero Tracking</Text>
-                        </View>
-                      </View>
-                      <Text style={styles.meNavSubtitle}>
-                        {isWeb ? 'We never collect personal data · Read our policy' : 'Opens in device browser · Zero personal data collected'}
-                      </Text>
-                    </View>
-                    <Feather name={isWeb ? "chevron-right" : "external-link"} size={18} color="#737373" />
+                    <Feather name={isWeb ? "chevron-right" : "external-link"} size={16} color="#525252" />
                   </TouchableOpacity>
                 </View>
 
-                {/* Minimal App Updates Section (Native Mobile Only) */}
-                {!isWeb && (
-                  <View style={styles.minimalUpdateContainer}>
-                    <View style={styles.minimalUpdateHeader}>
-                      <View style={styles.minimalUpdateLeft}>
-                        <View style={styles.minimalUpdateIconCircle}>
-                          <Feather name="shield" size={15} color="#8e8e93" />
-                        </View>
-                        <View style={styles.minimalUpdateTextBox}>
-                          <View style={styles.minimalUpdateVersionRow}>
-                            <Text style={styles.minimalUpdateTitle}>Movieflix</Text>
-                            <Text style={styles.minimalUpdateVersionBadge}>v{CURRENT_APP_VERSION}</Text>
-                            {updateInfo?.hasUpdate && (
-                              <View style={styles.minimalUpdateNewBadge}>
-                                <Text style={styles.minimalUpdateNewBadgeText}>v{updateInfo.latestVersion}</Text>
-                              </View>
-                            )}
-                          </View>
-                          <Text style={styles.minimalUpdateSubtitle}>
-                            {updateInfo?.hasUpdate
-                              ? 'New version available'
-                              : updateInfo && !updateInfo.error
-                              ? 'App is up to date'
-                              : 'Check for latest improvements'}
-                          </Text>
-                        </View>
-                      </View>
-
-                      {updateInfo?.hasUpdate ? (
-                        <TouchableOpacity
-                          style={[styles.minimalUpdateNowBtn, isDownloadingApk && { opacity: 0.7 }]}
-                          onPress={handleDownloadAndInstallApk}
-                          activeOpacity={0.8}
-                          disabled={isDownloadingApk}
-                        >
-                          {isDownloadingApk ? (
-                            <ActivityIndicator size="small" color="#FFFFFF" style={{ marginRight: 5 }} />
-                          ) : (
-                            <Feather name="arrow-down-circle" size={14} color="#FFFFFF" style={{ marginRight: 5 }} />
-                          )}
-                          <Text style={styles.minimalUpdateNowBtnText}>
-                            {isDownloadingApk ? 'Updating...' : 'Update'}
-                          </Text>
-                        </TouchableOpacity>
+                {/* Minimal Footer: Movieflix *v1.1.6* Up to date / Official build, verified */}
+                <View style={styles.meMinimalAppFooter}>
+                  <TouchableOpacity
+                    style={styles.meMinimalVersionRow}
+                    onPress={!isWeb ? handleCheckForUpdate : undefined}
+                    activeOpacity={!isWeb ? 0.7 : 1}
+                    disabled={isWeb || isCheckingUpdate}
+                  >
+                    <Text style={styles.meMinimalAppName}>Movieflix</Text>
+                    <Text style={styles.meMinimalVersionText}>v{CURRENT_APP_VERSION}</Text>
+                    <View style={styles.meMinimalStatusPill}>
+                      {isCheckingUpdate ? (
+                        <ActivityIndicator size="small" color="#a3a3a3" style={{ transform: [{ scale: 0.7 }] }} />
+                      ) : updateInfo?.hasUpdate ? (
+                        <Text style={[styles.meMinimalStatusText, { color: '#e50914' }]}>Update available</Text>
                       ) : (
-                        <TouchableOpacity
-                          style={[styles.minimalCheckBtn, isCheckingUpdate && { opacity: 0.6 }]}
-                          onPress={handleCheckForUpdate}
-                          activeOpacity={0.7}
-                          disabled={isCheckingUpdate}
-                        >
-                          {isCheckingUpdate ? (
-                            <ActivityIndicator size="small" color="#e50914" style={{ marginRight: 5 }} />
-                          ) : (
-                            <Feather name="refresh-cw" size={13} color="#a3a3a3" style={{ marginRight: 5 }} />
-                          )}
-                          <Text style={styles.minimalCheckBtnText}>
-                            {isCheckingUpdate ? 'Checking...' : 'Check'}
-                          </Text>
-                        </TouchableOpacity>
+                        <Text style={styles.meMinimalStatusText}>Up to date</Text>
                       )}
                     </View>
+                  </TouchableOpacity>
 
-                    {/* Minimal Download Progress Bar */}
-                    {isDownloadingApk && apkDownloadProgress && (
-                      <View style={styles.minimalProgressBarTrack}>
-                        <View style={[styles.minimalProgressBarFill, { width: `${apkDownloadProgress.percent || 0}%` }]} />
-                        <Text style={styles.minimalProgressText}>
-                          {apkDownloadProgress.percent}% ({apkDownloadProgress.writtenFormatted} / {apkDownloadProgress.totalFormatted})
-                        </Text>
-                      </View>
-                    )}
-
-                    {/* Minimal Download Error */}
-                    {apkDownloadError && (
-                      <View style={styles.minimalErrorRow}>
-                        <Feather name="alert-circle" size={12} color="#ef4444" style={{ marginRight: 4 }} />
-                        <Text style={styles.minimalErrorText} numberOfLines={1}>{apkDownloadError}</Text>
-                      </View>
-                    )}
-
-                    {/* Build Server Security & Fingerprint Authenticity Status */}
-                    <View style={styles.securityVerifyRow}>
-                      <Feather
-                        name={securityStatus?.isTampered ? "alert-triangle" : "shield"}
-                        size={12}
-                        color={securityStatus?.isTampered ? "#ef4444" : "#10b981"}
-                        style={{ marginRight: 6 }}
-                      />
-                      <Text style={[styles.securityVerifyText, securityStatus?.isTampered && { color: '#ef4444' }]}>
-                        {securityStatus?.isTampered
-                          ? 'Modified build detected · Not from official website'
-                          : 'Official Website Build · Anti-Tamper Verified'}
+                  {!isWeb && updateInfo?.hasUpdate && (
+                    <TouchableOpacity
+                      style={[styles.meMinimalUpdateActionBtn, isDownloadingApk && { opacity: 0.7 }]}
+                      onPress={handleDownloadAndInstallApk}
+                      activeOpacity={0.8}
+                      disabled={isDownloadingApk}
+                    >
+                      {isDownloadingApk ? (
+                        <ActivityIndicator size="small" color="#FFFFFF" style={{ marginRight: 6 }} />
+                      ) : (
+                        <Feather name="arrow-down-circle" size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
+                      )}
+                      <Text style={styles.meMinimalUpdateActionText}>
+                        {isDownloadingApk ? 'Updating...' : `Update to v${updateInfo.latestVersion}`}
                       </Text>
-                    </View>
-                  </View>
-                )}
-              </>
-            ) : (
-              /* ─── DEDICATED SUBPAGE HEADER ─── */
-              <View style={styles.meSubPageHeader}>
-                <TouchableOpacity
-                  style={styles.meSubPageBackBtn}
-                  onPress={() => setMeSubTab(null)}
-                  activeOpacity={0.7}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                >
-                  <Feather name="arrow-left" size={18} color="#FFFFFF" />
-                  <Text style={styles.meSubPageBackText}>Back</Text>
-                </TouchableOpacity>
-
-                <Text style={styles.meSubPageTitle}>
-                  {meSubTab === 'History' && 'Watch History'}
-                  {meSubTab === 'MyList' && 'My List'}
-                  {meSubTab === 'Downloads' && 'Offline Downloads'}
-                </Text>
-
-                <View style={styles.meSubPageHeaderRight}>
-                  {meSubTab === 'History' && watchHistory.length > 0 && (
-                    <TouchableOpacity onPress={handleClearHistory} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                      <Text style={styles.clearAllBtnText}>Clear All</Text>
                     </TouchableOpacity>
                   )}
-                  {meSubTab === 'MyList' && (
-                    <Text style={styles.storageInfoText}>{myList.length} titles</Text>
+
+                  {!isWeb && isDownloadingApk && apkDownloadProgress && (
+                    <View style={[styles.minimalProgressBarTrack, { width: '80%', alignSelf: 'center', marginTop: 10 }]}>
+                      <View style={[styles.minimalProgressBarFill, { width: `${apkDownloadProgress.percent || 0}%` }]} />
+                      <Text style={styles.minimalProgressText}>
+                        {apkDownloadProgress.percent}% ({apkDownloadProgress.writtenFormatted} / {apkDownloadProgress.totalFormatted})
+                      </Text>
+                    </View>
                   )}
-                  {meSubTab === 'Downloads' && downloads.length > 0 && (
-                    <Text style={styles.storageInfoText}>
-                      {formatBytes(downloads.reduce((acc, d) => acc + (d.sizeBytes || 0), 0))}
+
+                  {!isWeb && apkDownloadError && (
+                    <View style={[styles.minimalErrorRow, { justifyContent: 'center' }]}>
+                      <Feather name="alert-circle" size={12} color="#ef4444" style={{ marginRight: 4 }} />
+                      <Text style={styles.minimalErrorText} numberOfLines={1}>{apkDownloadError}</Text>
+                    </View>
+                  )}
+
+                  <View style={styles.meMinimalSecurityRow}>
+                    <Feather
+                      name={securityStatus?.isTampered ? "alert-triangle" : "check-circle"}
+                      size={13}
+                      color={securityStatus?.isTampered ? "#ef4444" : "#10b981"}
+                      style={{ marginRight: 6 }}
+                    />
+                    <Text style={[
+                      styles.meMinimalSecurityText,
+                      securityStatus?.isTampered && { color: '#ef4444' }
+                    ]}>
+                      {securityStatus?.isTampered
+                        ? 'Modified build detected'
+                        : 'Official build, verified'}
                     </Text>
-                  )}
+                  </View>
                 </View>
-              </View>
-            )}
+              </Animated.View>
+            ) : (
+              /* ─── DEDICATED SUBPAGE (ANIMATED) ─── */
+              <Animated.View
+                style={{
+                  opacity: meSubTabAnim,
+                  transform: [
+                    {
+                      translateY: meSubTabAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [10, 0],
+                      }),
+                    },
+                  ],
+                }}
+              >
+                <View style={styles.meSubPageHeader}>
+                  <TouchableOpacity
+                    style={styles.meSubPageBackBtn}
+                    onPress={() => {
+                      triggerHaptic('selection');
+                      setMeSubTab(null);
+                    }}
+                    activeOpacity={0.7}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Feather name="arrow-left" size={18} color="#FFFFFF" />
+                    <Text style={styles.meSubPageBackText}>Back</Text>
+                  </TouchableOpacity>
+
+                  <Text style={styles.meSubPageTitle}>
+                    {meSubTab === 'History' && 'Watch History'}
+                    {meSubTab === 'MyList' && 'My List'}
+                    {meSubTab === 'Downloads' && 'Offline Downloads'}
+                  </Text>
+
+                  <View style={styles.meSubPageHeaderRight}>
+                    {meSubTab === 'History' && watchHistory.length > 0 && (
+                      <TouchableOpacity onPress={handleClearHistory} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                        <Text style={styles.clearAllBtnText}>Clear All</Text>
+                      </TouchableOpacity>
+                    )}
+                    {meSubTab === 'MyList' && (
+                      <Text style={styles.storageInfoText}>{myList.length} titles</Text>
+                    )}
+                    {meSubTab === 'Downloads' && downloads.length > 0 && (
+                      <Text style={styles.storageInfoText}>
+                        {formatBytes(downloads.reduce((acc, d) => acc + (d.sizeBytes || 0), 0))}
+                      </Text>
+                    )}
+                  </View>
+                </View>
 
             {/* SUB-SECTION 1: WATCH HISTORY */}
             {meSubTab === 'History' && (
@@ -6103,8 +6046,10 @@ function ReelApp() {
                 )}
               </View>
             )}
-          </View>
-        ) : (
+          </Animated.View>
+        )}
+      </View>
+    ) : (
           /* ==================================================== */
           /* VIEW 2: HOME TAB (OFFLINE BANNER, SEARCH, HERO, FEED)*/
           /* ==================================================== */
@@ -11340,9 +11285,213 @@ const styles = StyleSheet.create({
     padding: 1,
   },
 
-  // ME SCREEN STYLES
+  // ME SCREEN STYLES (CLEAN & MINIMAL REDESIGN)
   meScreenContainer: {
+    paddingHorizontal: 20,
+  },
+  meMinimalProfileContainer: {
+    alignItems: 'center',
+    paddingTop: 12,
+    paddingBottom: 30,
+  },
+  meProfileHero: {
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  meAvatarLarge: {
+    width: 86,
+    height: 86,
+    borderRadius: 43,
+    backgroundColor: '#18181b',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.14)',
+    position: 'relative',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    elevation: 5,
+  },
+  meAvatarInitial: {
+    color: '#FFFFFF',
+    fontSize: 36,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+  },
+  meAvatarOnlineDot: {
+    position: 'absolute',
+    bottom: 2,
+    right: 2,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: '#10b981',
+    borderWidth: 2.5,
+    borderColor: '#121212',
+  },
+  meProfileUsername: {
+    color: '#FFFFFF',
+    fontSize: 24,
+    fontWeight: '800',
+    letterSpacing: -0.3,
+    marginTop: 14,
+    textAlign: 'center',
+  },
+  meProfileEmail: {
+    color: '#8e8e93',
+    fontSize: 14,
+    fontWeight: '400',
+    marginTop: 4,
+    textAlign: 'center',
+  },
+  meMinimalAuthBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    marginTop: 12,
+  },
+  meMinimalAuthBtnText: {
+    color: '#d4d4d4',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  meMinimalStatsCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    width: '100%',
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.07)',
+    paddingVertical: 18,
+    marginTop: 24,
+    marginBottom: 20,
+  },
+  meMinimalStatItem: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 4,
+  },
+  meMinimalStatCount: {
+    color: '#FFFFFF',
+    fontSize: 22,
+    fontWeight: '800',
+    letterSpacing: -0.3,
+  },
+  meMinimalStatLabel: {
+    color: '#8e8e93',
+    fontSize: 13,
+    fontWeight: '500',
+    marginTop: 4,
+  },
+  meMinimalStatDivider: {
+    width: 1,
+    height: 30,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  meMinimalLinksContainer: {
+    width: '100%',
+    marginBottom: 16,
+  },
+  meMinimalLinkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.06)',
+    paddingVertical: 13,
     paddingHorizontal: 16,
+    marginBottom: 8,
+  },
+  meMinimalLinkLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  meMinimalLinkText: {
+    color: '#d4d4d4',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  meMinimalAppFooter: {
+    alignItems: 'center',
+    width: '100%',
+    marginTop: 18,
+    paddingTop: 18,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  meMinimalVersionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  meMinimalAppName: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: -0.2,
+  },
+  meMinimalVersionText: {
+    color: '#8e8e93',
+    fontStyle: 'italic',
+    fontSize: 13,
+    fontWeight: '600',
+    marginHorizontal: 8,
+  },
+  meMinimalStatusPill: {
+    backgroundColor: 'rgba(255, 255, 255, 0.07)',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  meMinimalStatusText: {
+    color: '#a3a3a3',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  meMinimalUpdateActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#e50914',
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    marginTop: 6,
+    marginBottom: 6,
+    shadowColor: '#e50914',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  meMinimalUpdateActionText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  meMinimalSecurityRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 4,
+  },
+  meMinimalSecurityText: {
+    color: '#10b981',
+    fontSize: 12,
+    fontWeight: '500',
+    letterSpacing: 0.1,
   },
   meHeaderGlassCard: {
     backgroundColor: 'rgba(255, 255, 255, 0.04)',
