@@ -1117,8 +1117,8 @@ const INITIAL_SHOTS = [
     rating: "7.9",
     total_episodes: 37,
     author: "@DramaBox",
-    likes: 0,
-    shares: 0,
+    likes: 1420,
+    shares: 210,
     se: 1,
     ep: 1,
   },
@@ -1131,8 +1131,8 @@ const INITIAL_SHOTS = [
     rating: "7.2",
     total_episodes: 28,
     author: "@NetShort",
-    likes: 0,
-    shares: 0,
+    likes: 2850,
+    shares: 390,
     se: 1,
     ep: 1,
   },
@@ -1145,8 +1145,8 @@ const INITIAL_SHOTS = [
     rating: "7.8",
     total_episodes: 24,
     author: "@DramaBox",
-    likes: 0,
-    shares: 0,
+    likes: 3410,
+    shares: 520,
     se: 1,
     ep: 1,
   },
@@ -1159,8 +1159,8 @@ const INITIAL_SHOTS = [
     rating: "7.9",
     total_episodes: 30,
     author: "@ShortMax",
-    likes: 0,
-    shares: 0,
+    likes: 980,
+    shares: 140,
     se: 1,
     ep: 1,
   },
@@ -1173,8 +1173,8 @@ const INITIAL_SHOTS = [
     rating: "7.1",
     total_episodes: 18,
     author: "@ReelShort",
-    likes: 0,
-    shares: 0,
+    likes: 1760,
+    shares: 260,
     se: 1,
     ep: 1,
   },
@@ -1187,8 +1187,8 @@ const INITIAL_SHOTS = [
     rating: "7.6",
     total_episodes: 32,
     author: "@DramaBox",
-    likes: 0,
-    shares: 0,
+    likes: 4210,
+    shares: 680,
     se: 1,
     ep: 1,
   },
@@ -1201,8 +1201,8 @@ const INITIAL_SHOTS = [
     rating: "7.7",
     total_episodes: 20,
     author: "@NetShort",
-    likes: 0,
-    shares: 0,
+    likes: 890,
+    shares: 130,
     se: 1,
     ep: 1,
   },
@@ -1215,8 +1215,8 @@ const INITIAL_SHOTS = [
     rating: "7.0",
     total_episodes: 16,
     author: "@GoodShort",
-    likes: 0,
-    shares: 0,
+    likes: 2150,
+    shares: 310,
     se: 1,
     ep: 1,
   },
@@ -1229,8 +1229,8 @@ const INITIAL_SHOTS = [
     rating: "7.1",
     total_episodes: 25,
     author: "@ReelShort",
-    likes: 0,
-    shares: 0,
+    likes: 1640,
+    shares: 240,
     se: 1,
     ep: 1,
   },
@@ -1243,8 +1243,8 @@ const INITIAL_SHOTS = [
     rating: "7.7",
     total_episodes: 22,
     author: "@ShortMax",
-    likes: 0,
-    shares: 0,
+    likes: 3120,
+    shares: 480,
     se: 1,
     ep: 1,
   }
@@ -1407,21 +1407,16 @@ function buildPureHtmlShotsPage({ initialShots, apiBase, isMuted, targetShortId 
       transform: scale(0.92);
       background: rgba(0, 0, 0, 0.65);
     }
-    .header-brand {
+    .header-logo-wrap {
       display: flex;
       align-items: center;
-      gap: 7px;
-      font-size: 17px;
-      font-weight: 800;
-      letter-spacing: -0.3px;
-      text-shadow: 0 1px 4px rgba(0,0,0,0.8);
+      height: 28px;
     }
-    .live-dot {
-      width: 6px;
-      height: 6px;
-      border-radius: 3px;
-      background: #e50914;
-      box-shadow: 0 0 8px #e50914;
+    .header-logo-wrap svg {
+      height: 24px;
+      width: auto;
+      max-width: 130px;
+      display: block;
     }
     .right-actions {
       position: absolute;
@@ -1560,15 +1555,48 @@ function buildPureHtmlShotsPage({ initialShots, apiBase, isMuted, targetShortId 
       position: absolute;
       top: 50%;
       left: 50%;
-      transform: translate(-50%, -50%) scale(0);
+      transform: translate(-50%, -50%) scale(0) rotate(-15deg);
       pointer-events: none;
-      z-index: 30;
+      z-index: 60;
       opacity: 0;
-      transition: transform 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.3s ease;
+      filter: drop-shadow(0 0 24px rgba(229, 9, 20, 0.95));
+      transition: transform 0.42s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.32s ease;
     }
     .heart-burst.pop {
-      transform: translate(-50%, -50%) scale(1.35);
+      transform: translate(-50%, -50%) scale(1.4) rotate(0deg);
       opacity: 1;
+    }
+    .hud-2x {
+      position: absolute;
+      top: 72px;
+      left: 50%;
+      transform: translateX(-50%) translateY(-8px) scale(0.92);
+      background: rgba(0, 0, 0, 0.78);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      border-radius: 20px;
+      padding: 6px 16px;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 13px;
+      font-weight: 800;
+      color: #ffffff;
+      letter-spacing: 0.4px;
+      opacity: 0;
+      pointer-events: none;
+      z-index: 80;
+      transition: opacity 0.2s ease, transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.7);
+    }
+    .hud-2x.active {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0) scale(1);
+    }
+    .hud-2x svg {
+      color: #e50914;
+      fill: #e50914;
     }
     .play-pause-hud {
       position: absolute;
@@ -1621,10 +1649,31 @@ function buildPureHtmlShotsPage({ initialShots, apiBase, isMuted, targetShortId 
       <button class="header-btn" id="backBtn" aria-label="Back">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
       </button>
-      <div class="header-brand">
-        <span style="color: #e50914;">Movieflix</span>
-        <span>Shots</span>
-        <div class="live-dot"></div>
+      <div class="header-logo-wrap">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="72 -26 2048 472" width="1024" height="236" role="img" aria-label="MovieFlix" xmlns:c2pa="http://c2pa.org/manifest"><metadata><c2pa:manifest>AAAWgmp1bWIAAAAeanVtZGMycGEAEQAQgAAAqgA4m3EDYzJwYQAAABZcanVtYgAAAEdqdW1kYzJtYQARABCAAACqADibcQN1cm46YzJwYTozOTI4NTdiYy0zN2Q2LTQ4Y2UtYWQzMy01Njc3NGVlZDVkYTUAAAADl2p1bWIAAAApanVtZGMyYXMAEQAQgAAAqgA4m3EDYzJwYS5hc3NlcnRpb25zAAAAALxqdW1iAAAARGp1bWRjYm9yABEAEIAAAKoAOJtxE2MycGEuaW5ncmVkaWVudC52MwAAAAAYYzJzaM/EOGXP2/2qbhl2EQMgprMAAABwY2JvcqNpZGM6Zm9ybWF0bWltYWdlL3N2Zyt4bWxqaW5zdGFuY2VJRHgseG1wOmlpZDo1MWJiNmM2MC1hMTlkLTRiNWItYTRjOC0yZDczYmI1M2Y1Y2RscmVsYXRpb25zaGlwaHBhcmVudE9mAAAB4mp1bWIAAABBanVtZGNib3IAEQAQgAAAqgA4m3ETYzJwYS5hY3Rpb25zLnYyAAAAABhjMnNogEoyPLuY/5P/icumHErlYQAAAZljYm9yomdhY3Rpb25zgqJmYWN0aW9ua2MycGEub3BlbmVkanBhcmFtZXRlcnOha2luZ3JlZGllbnRzgaJjdXJseC1zZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmluZ3JlZGllbnQudjNkaGFzaFggn110B4O8KHTJP/qNrr87sksc7B5eiqmQHpsvIbOHvOykZmFjdGlvbngdY29tLmFudGhyb3BpYy5jbGF1ZGUucHJvdmlkZWRqcGFyYW1ldGVyc6F4H2NvbS5hbnRocm9waWMub3JpZ2luLWNvbmZpZGVuY2VndW5rbm93bmtkZXNjcmlwdGlvbnhmQ2xhdWRlIHByb3ZpZGVkIHRoaXMgZmlsZSBhdCB0aGUgcmVxdWVzdCBvZiBhIHVzZXIgYW5kIG1heSBoYXZlIGNyZWF0ZWQgb3IgbW9kaWZpZWQgdGhlIGZpbGUgY29udGVudHMubXNvZnR3YXJlQWdlbnShZG5hbWVmQ2xhdWRlcmFsbEFjdGlvbnNJbmNsdWRlZPUAAADIanVtYgAAAEBqdW1kY2JvcgARABCAAACqADibcRNjMnBhLmhhc2guZGF0YQAAAAAYYzJzaMe1b8HPDv7vDWWj55MNpU4AAACAY2JvcqVjYWxnZnNoYTI1NmNwYWRNAAAAAAAAAAAAAAAAAGRoYXNoWCAEfsVCZqxvTPWIJfRYLXhCqWzp15CGEmE2IaexNPKyNmRuYW1lbmp1bWJmIG1hbmlmZXN0amV4Y2x1c2lvbnOBomVzdGFydBi9Zmxlbmd0aBkeBAAAAj5qdW1iAAAAJ2p1bWRjMmNsABEAEIAAAKoAOJtxA2MycGEuY2xhaW0udjIAAAACD2Nib3KlY2FsZ2ZzaGEyNTZpc2lnbmF0dXJleE1zZWxmI2p1bWJmPS9jMnBhL3VybjpjMnBhOjM5Mjg1N2JjLTM3ZDYtNDhjZS1hZDMzLTU2Nzc0ZWVkNWRhNS9jMnBhLnNpZ25hdHVyZWppbnN0YW5jZUlEeCx4bXA6aWlkOmY3OTkzZDExLTcwYWItNDJjNi1hZjU5LTliOGVjYmEzYzRiNnJjcmVhdGVkX2Fzc2VydGlvbnODomN1cmx4LXNlbGYjanVtYmY9YzJwYS5hc3NlcnRpb25zL2MycGEuaW5ncmVkaWVudC52M2RoYXNoWCCfXXQHg7wodMk/+o2uvzuySxzsHl6KqZAemy8hs4e87KJjdXJseCpzZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmFjdGlvbnMudjJkaGFzaFggHJ8pKA5tDYfvg+uAunh6JmtxKRu6s+YlfLB3e748EdqiY3VybHgpc2VsZiNqdW1iZj1jMnBhLmFzc2VydGlvbnMvYzJwYS5oYXNoLmRhdGFkaGFzaFgg0ORc840IT346tRPJH3gJYtShCiE38jlmB4TsEpf30ht0Y2xhaW1fZ2VuZXJhdG9yX2luZm+jZG5hbWVvQW50aHJvcGljIEZpbGVzZ3ZlcnNpb25lMS4wLjBrc3BlY1ZlcnNpb25lMi40LjAAABA4anVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABAIY2JvctKEWQISogEmGCFZAgowggIGMIIBjaADAgECAhRA5aAK7sI50L64g/oGQgU9Z1UTADAKBggqhkjOPQQDAzBJMRcwFQYDVQQKEw5BbnRocm9waWMsIFBCQzEuMCwGA1UEAxMlQW50aHJvcGljIENvbnRlbnQgQ3JlZGVudGlhbHMgUm9vdCBDQTAeFw0yNjA4MDcxODQzNTZaFw0yODA4MDYxOTQzNTZaMEQxFzAVBgNVBAoTDkFudGhyb3BpYywgUEJDMSkwJwYDVQQDEyBBbnRocm9waWMgQ2xhdWRlIENvbnRlbnQgU2lnbmluZzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJh6CmvLUBgFFNU0vUKlOVtE6djd17L5SuwX0LemFisBM3dkd/3cyjxFA3Qo5S46fX0/ihY0VZ7mfb9KF703t5OjWDBWMA4GA1UdDwEB/wQEAwIHgDAVBgNVHSUEDjAMBgorBgEEAYPoXgIBMAwGA1UdEwEB/wQCMAAwHwYDVR0jBBgwFoAUzlHiBIFOZFsj+OPEz5o+nMHXXMIwCgYIKoZIzj0EAwMDZwAwZAIwMXMdFJ4BetLLVY7ORuE9noqbbAZOZn/aArXyTwFAZfKrPzxF2vPoJNf1+UCdg1XGAjBwX1zd9WGqYkqmL5SFqw1QySjr1zJfpJM9+1rdDwSPLMOPOjKuiXjoU/pUUeG9RwmhY3BhZFkNngAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPZYQO7DryQpQ3ntirWb9q/1POhVajOsDbytPotjBi/ZwmlB/45NOMkfyxDejaRQvLgQxoeea++sQGtTSm1If6fEcwA=</c2pa:manifest></metadata><title>MovieFlix</title><defs>
+<clipPath id="mClip"><path d="M131.0 14.0L228.9 14.0Q234.0 14.0 236.6 18.4L309.2 141.3Q312.0 146.0 314.5 141.1L375.5 19.0Q378.0 14.0 383.6 14.0L481.0 14.0Q490.0 14.0 490.0 23.0L490.0 397.0Q490.0 406.0 481.0 406.0L387.0 406.0Q378.0 406.0 378.0 397.0L378.0 271.0Q378.0 258.0 372.3 269.7L314.2 389.1Q306.0 406.0 298.0 389.0L239.7 265.1Q234.0 253.0 234.0 266.4L234.0 397.0Q234.0 406.0 225.0 406.0L131.0 406.0Q122.0 406.0 122.0 397.0L122.0 23.0Q122.0 14.0 131.0 14.0Z"/></clipPath>
+<clipPath id="xClip"><path d="M1839.2 38.0L1903.8 38.0Q1909.0 38.0 1911.1 42.8L1945.3 120.9Q1948.0 127.2 1950.7 120.9L1984.9 42.8Q1987.0 38.0 1992.2 38.0L2056.8 38.0Q2069.0 38.0 2064.1 49.2L1989.5 219.8Q1989.0 221.0 1989.5 222.2L2064.1 392.8Q2069.0 404.0 2056.8 404.0L1992.2 404.0Q1987.0 404.0 1984.9 399.2L1950.7 321.1Q1948.0 314.8 1945.3 321.1L1911.1 399.2Q1909.0 404.0 1903.8 404.0L1839.2 404.0Q1827.0 404.0 1831.9 392.8L1906.5 222.2Q1907.0 221.0 1906.5 219.8L1831.9 49.2Q1827.0 38.0 1839.2 38.0Z"/></clipPath>
+<clipPath id="logoClip"><path d="M131.0 14.0L228.9 14.0Q234.0 14.0 236.6 18.4L309.2 141.3Q312.0 146.0 314.5 141.1L375.5 19.0Q378.0 14.0 383.6 14.0L481.0 14.0Q490.0 14.0 490.0 23.0L490.0 397.0Q490.0 406.0 481.0 406.0L387.0 406.0Q378.0 406.0 378.0 397.0L378.0 271.0Q378.0 258.0 372.3 269.7L314.2 389.1Q306.0 406.0 298.0 389.0L239.7 265.1Q234.0 253.0 234.0 266.4L234.0 397.0Q234.0 406.0 225.0 406.0L131.0 406.0Q122.0 406.0 122.0 397.0L122.0 23.0Q122.0 14.0 131.0 14.0Z"/><path fill-rule="evenodd" d="M584 34H692A66 66 0 0 1 758 100V322A66 66 0 0 1 692 388H584A66 66 0 0 1 518 322V100A66 66 0 0 1 584 34ZM626 102H650A20 20 0 0 1 670 122V298A20 20 0 0 1 650 318H626A20 20 0 0 1 606 298V122A20 20 0 0 1 626 102Z"/><path d="M769.9 38.0L835.5 38.0Q842.0 38.0 843.3 44.4L875.1 197.8Q878.0 212.0 880.9 197.8L912.7 44.4Q914.0 38.0 920.5 38.0L986.0 38.0Q996.0 38.0 993.8 47.8L923.4 360.8Q922.0 367.0 915.6 367.0L838.4 367.0Q832.0 367.0 830.6 360.7L762.1 47.7Q760.0 38.0 769.9 38.0Z"/><path d="M1020.0 38.0L1092.0 38.0Q1099.0 38.0 1099.0 45.0L1099.0 348.0Q1099.0 355.0 1092.0 355.0L1020.0 355.0Q1013.0 355.0 1013.0 348.0L1013.0 45.0Q1013.0 38.0 1020.0 38.0Z"/><path d="M1130.0 38.0L1302.0 38.0Q1309.0 38.0 1309.0 45.0L1309.0 92.0Q1309.0 99.0 1302.0 99.0L1212.0 99.0Q1209.0 99.0 1209.0 102.0L1209.0 154.0Q1209.0 157.0 1212.0 157.0L1278.0 157.0Q1285.0 157.0 1285.0 164.0L1285.0 212.0Q1285.0 219.0 1278.0 219.0L1212.0 219.0Q1209.0 219.0 1209.0 222.0L1209.0 291.0Q1209.0 294.0 1212.0 294.0L1305.0 294.0Q1312.0 294.0 1312.0 301.0L1312.0 348.0Q1312.0 355.0 1305.0 355.0L1130.0 355.0Q1123.0 355.0 1123.0 348.0L1123.0 45.0Q1123.0 38.0 1130.0 38.0Z"/><path d="M1341.0 38.0L1509.0 38.0Q1516.0 38.0 1516.0 45.0L1516.0 92.0Q1516.0 99.0 1509.0 99.0L1423.0 99.0Q1420.0 99.0 1420.0 102.0L1420.0 154.0Q1420.0 157.0 1423.0 157.0L1486.0 157.0Q1493.0 157.0 1493.0 164.0L1493.0 212.0Q1493.0 219.0 1486.0 219.0L1423.0 219.0Q1420.0 219.0 1420.0 222.0L1420.0 348.0Q1420.0 355.0 1413.0 355.0L1341.0 355.0Q1334.0 355.0 1334.0 348.0L1334.0 45.0Q1334.0 38.0 1341.0 38.0Z"/><path d="M1541.0 38.0L1613.0 38.0Q1620.0 38.0 1620.0 45.0L1620.0 300.0Q1620.0 303.0 1623.0 303.0L1691.0 303.0Q1698.0 303.0 1698.0 310.0L1698.0 359.0Q1698.0 366.0 1691.0 366.0L1541.0 366.0Q1534.0 366.0 1534.0 359.0L1534.0 45.0Q1534.0 38.0 1541.0 38.0Z"/><path d="M1731.0 38.0L1803.0 38.0Q1810.0 38.0 1810.0 45.0L1810.0 374.0Q1810.0 381.0 1803.0 381.0L1731.0 381.0Q1724.0 381.0 1724.0 374.0L1724.0 45.0Q1724.0 38.0 1731.0 38.0Z"/><path d="M1839.2 38.0L1903.8 38.0Q1909.0 38.0 1911.1 42.8L1945.3 120.9Q1948.0 127.2 1950.7 120.9L1984.9 42.8Q1987.0 38.0 1992.2 38.0L2056.8 38.0Q2069.0 38.0 2064.1 49.2L1989.5 219.8Q1989.0 221.0 1989.5 222.2L2064.1 392.8Q2069.0 404.0 2056.8 404.0L1992.2 404.0Q1987.0 404.0 1984.9 399.2L1950.7 321.1Q1948.0 314.8 1945.3 321.1L1911.1 399.2Q1909.0 404.0 1903.8 404.0L1839.2 404.0Q1827.0 404.0 1831.9 392.8L1906.5 222.2Q1907.0 221.0 1906.5 219.8L1831.9 49.2Q1827.0 38.0 1839.2 38.0Z"/></clipPath>
+<linearGradient id="shine" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".5" stop-color="#fff" stop-opacity=".38"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+</defs><g>
+<g clip-path="url(#mClip)">
+<path fill="#B20000" d="M122 14L234 14L234 406L122 406Z"/>
+<path fill="#B20000" d="M378 14L490 14L490 406L378 406Z"/>
+<path fill="#CA0000" d="M378 14L490 14L378 258L300 258L300 158L312 146Z"/>
+<path fill="#F10405" d="M122 14L234 14L378 258L306 406Z"/>
+</g>
+<path fill="#D40000" fill-rule="evenodd" d="M584 34H692A66 66 0 0 1 758 100V322A66 66 0 0 1 692 388H584A66 66 0 0 1 518 322V100A66 66 0 0 1 584 34ZM626 102H650A20 20 0 0 1 670 122V298A20 20 0 0 1 650 318H626A20 20 0 0 1 606 298V122A20 20 0 0 1 626 102Z"/>
+<path fill="#D40000" d="M769.9 38.0L835.5 38.0Q842.0 38.0 843.3 44.4L875.1 197.8Q878.0 212.0 880.9 197.8L912.7 44.4Q914.0 38.0 920.5 38.0L986.0 38.0Q996.0 38.0 993.8 47.8L923.4 360.8Q922.0 367.0 915.6 367.0L838.4 367.0Q832.0 367.0 830.6 360.7L762.1 47.7Q760.0 38.0 769.9 38.0Z"/>
+<path fill="#D40000" d="M1020.0 38.0L1092.0 38.0Q1099.0 38.0 1099.0 45.0L1099.0 348.0Q1099.0 355.0 1092.0 355.0L1020.0 355.0Q1013.0 355.0 1013.0 348.0L1013.0 45.0Q1013.0 38.0 1020.0 38.0Z"/>
+<path fill="#D40000" d="M1130.0 38.0L1302.0 38.0Q1309.0 38.0 1309.0 45.0L1309.0 92.0Q1309.0 99.0 1302.0 99.0L1212.0 99.0Q1209.0 99.0 1209.0 102.0L1209.0 154.0Q1209.0 157.0 1212.0 157.0L1278.0 157.0Q1285.0 157.0 1285.0 164.0L1285.0 212.0Q1285.0 219.0 1278.0 219.0L1212.0 219.0Q1209.0 219.0 1209.0 222.0L1209.0 291.0Q1209.0 294.0 1212.0 294.0L1305.0 294.0Q1312.0 294.0 1312.0 301.0L1312.0 348.0Q1312.0 355.0 1305.0 355.0L1130.0 355.0Q1123.0 355.0 1123.0 348.0L1123.0 45.0Q1123.0 38.0 1130.0 38.0Z"/>
+<path fill="#D40000" d="M1341.0 38.0L1509.0 38.0Q1516.0 38.0 1516.0 45.0L1516.0 92.0Q1516.0 99.0 1509.0 99.0L1423.0 99.0Q1420.0 99.0 1420.0 102.0L1420.0 154.0Q1420.0 157.0 1423.0 157.0L1486.0 157.0Q1493.0 157.0 1493.0 164.0L1493.0 212.0Q1493.0 219.0 1486.0 219.0L1423.0 219.0Q1420.0 219.0 1420.0 222.0L1420.0 348.0Q1420.0 355.0 1413.0 355.0L1341.0 355.0Q1334.0 355.0 1334.0 348.0L1334.0 45.0Q1334.0 38.0 1341.0 38.0Z"/>
+<path fill="#D40000" d="M1541.0 38.0L1613.0 38.0Q1620.0 38.0 1620.0 45.0L1620.0 300.0Q1620.0 303.0 1623.0 303.0L1691.0 303.0Q1698.0 303.0 1698.0 310.0L1698.0 359.0Q1698.0 366.0 1691.0 366.0L1541.0 366.0Q1534.0 366.0 1534.0 359.0L1534.0 45.0Q1534.0 38.0 1541.0 38.0Z"/>
+<path fill="#D40000" d="M1731.0 38.0L1803.0 38.0Q1810.0 38.0 1810.0 45.0L1810.0 374.0Q1810.0 381.0 1803.0 381.0L1731.0 381.0Q1724.0 381.0 1724.0 374.0L1724.0 45.0Q1724.0 38.0 1731.0 38.0Z"/>
+<g>
+<path fill="#DC0000" d="M1839.2 38.0L1903.8 38.0Q1909.0 38.0 1911.1 42.8L1945.3 120.9Q1948.0 127.2 1950.7 120.9L1984.9 42.8Q1987.0 38.0 1992.2 38.0L2056.8 38.0Q2069.0 38.0 2064.1 49.2L1989.5 219.8Q1989.0 221.0 1989.5 222.2L2064.1 392.8Q2069.0 404.0 2056.8 404.0L1992.2 404.0Q1987.0 404.0 1984.9 399.2L1950.7 321.1Q1948.0 314.8 1945.3 321.1L1911.1 399.2Q1909.0 404.0 1903.8 404.0L1839.2 404.0Q1827.0 404.0 1831.9 392.8L1906.5 222.2Q1907.0 221.0 1906.5 219.8L1831.9 49.2Q1827.0 38.0 1839.2 38.0Z"/>
+<g clip-path="url(#xClip)"><path fill="#B30000" d="M1989 221L2069 404L1987 404L1948 314.788Z"/></g>
+</g>
+</g></svg>
       </div>
     </div>
     <button class="header-btn" id="muteBtn" aria-label="Mute">
@@ -1689,11 +1738,66 @@ function buildPureHtmlShotsPage({ initialShots, apiBase, isMuted, targetShortId 
         return String(num);
       }
 
+      var localLikedIds = {};
+      try {
+        localLikedIds = JSON.parse(localStorage.getItem('mf_liked_shots') || '{}');
+      } catch (_) {}
+
+      function getDeviceId() {
+        var dId = null;
+        try { dId = localStorage.getItem('mf_device_id'); } catch (_) {}
+        if (!dId) {
+          dId = 'dev_' + Math.random().toString(36).substring(2, 10) + Date.now().toString(36);
+          try { localStorage.setItem('mf_device_id', dId); } catch (_) {}
+        }
+        return dId;
+      }
+
+      var deviceId = getDeviceId();
+
+      async function fetchLikesForShots(shotList) {
+        if (!shotList || shotList.length === 0) return;
+        var ids = shotList.map(function(s) { return String(s.subject_id || s.id); });
+        try {
+          var res = await fetch(API_BASE + '/api/auth?action=batch-shot-likes&device_id=' + encodeURIComponent(deviceId) + '&shot_ids=' + encodeURIComponent(ids.join(',')));
+          var data = await res.json();
+          if (data && data.status === 'success') {
+            var counts = data.counts || {};
+            var userLiked = new Set(data.user_liked_ids || []);
+
+            for (var i = 0; i < shots.length; i++) {
+              var s = shots[i];
+              var sId = String(s.subject_id || s.id);
+              if (counts[sId] !== undefined) {
+                s.likesCount = (s.likes || 450) + counts[sId];
+              }
+              if (userLiked.has(sId) || Boolean(localLikedIds[sId])) {
+                s.liked = true;
+                localLikedIds[sId] = true;
+              }
+              var slideEl = feed.children[i];
+              if (slideEl) {
+                var cEl = slideEl.querySelector('.like-count');
+                if (cEl) cEl.textContent = formatCount(s.likesCount);
+                var lBtn = slideEl.querySelector('.like-btn');
+                if (lBtn) {
+                  if (s.liked) lBtn.classList.add('liked');
+                  else lBtn.classList.remove('liked');
+                }
+              }
+            }
+            try { localStorage.setItem('mf_liked_shots', JSON.stringify(localLikedIds)); } catch (_) {}
+          }
+        } catch (e) {
+          console.warn('Batch likes fetch error:', e);
+        }
+      }
+
       function createSlideElement(item, idx) {
         item.currentEp = item.ep || 1;
         item.total_episodes = item.total_episodes || 12;
-        item.likesCount = item.likes || 0;
-        item.liked = false;
+        item.likesCount = item.likes || 450;
+        item.liked = Boolean(localLikedIds[String(item.subject_id || item.id)]);
 
         var slide = document.createElement('div');
         slide.className = 'slide';
@@ -1708,11 +1812,20 @@ function buildPureHtmlShotsPage({ initialShots, apiBase, isMuted, targetShortId 
             '<div class="gradient-overlay"></div>' +
             '<div class="buffer-spinner"></div>' +
             '<div class="play-pause-hud"></div>' +
+            '<div class="hud-2x">' +
+              '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">' +
+                '<polygon points="13 19 22 12 13 5 13 19"></polygon>' +
+                '<polygon points="2 19 11 12 2 5 2 19"></polygon>' +
+              '</svg>' +
+              '<span>2X Speed</span>' +
+            '</div>' +
             '<div class="heart-burst">' +
-              '<svg width="90" height="90" viewBox="0 0 24 24" fill="#e50914" stroke="#e50914" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>' +
+              '<svg width="104" height="104" viewBox="0 0 24 24" fill="#e50914" stroke="#ffffff" stroke-width="1.5">' +
+                '<path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>' +
+              '</svg>' +
             '</div>' +
             '<div class="right-actions">' +
-              '<button class="action-btn like-btn" aria-label="Like">' +
+              '<button class="action-btn like-btn' + (item.liked ? ' liked' : '') + '" aria-label="Like">' +
                 '<div class="action-icon-circle">' +
                   '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>' +
                 '</div>' +
@@ -1751,6 +1864,7 @@ function buildPureHtmlShotsPage({ initialShots, apiBase, isMuted, targetShortId 
         var poster = slide.querySelector('.poster-img');
         var spinner = slide.querySelector('.buffer-spinner');
         var hud = slide.querySelector('.play-pause-hud');
+        var hud2x = slide.querySelector('.hud-2x');
         var progressFill = slide.querySelector('.progress-bar-fill');
         var likeBtn = slide.querySelector('.like-btn');
         var likeCountEl = slide.querySelector('.like-count');
@@ -1789,15 +1903,41 @@ function buildPureHtmlShotsPage({ initialShots, apiBase, isMuted, targetShortId 
           item.liked = !item.liked;
           item.likesCount = Math.max(0, item.likesCount + (item.liked ? 1 : -1));
           likeCountEl.textContent = formatCount(item.likesCount);
+
+          var sId = String(item.subject_id || item.id);
           if (item.liked) {
             likeBtn.classList.add('liked');
+            localLikedIds[sId] = true;
           } else {
             likeBtn.classList.remove('liked');
+            delete localLikedIds[sId];
           }
+          try {
+            localStorage.setItem('mf_liked_shots', JSON.stringify(localLikedIds));
+          } catch (_) {}
+
           postToNative({
             type: 'like',
-            shotId: item.subject_id || item.id,
+            shotId: sId,
             liked: item.liked
+          });
+
+          // Sync to backend API (supports registered users & guests)
+          fetch(API_BASE + '/api/auth', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: item.liked ? 'like-shot' : 'unlike-shot',
+              shot_id: sId,
+              device_id: deviceId
+            })
+          }).then(function(r) { return r.json(); }).then(function(data) {
+            if (data && data.status === 'success' && typeof data.likes_count === 'number') {
+              item.likesCount = (item.likes || 450) + data.likes_count;
+              likeCountEl.textContent = formatCount(item.likesCount);
+            }
+          }).catch(function(e) {
+            console.warn('Backend like sync error:', e);
           });
         }
 
@@ -1831,43 +1971,145 @@ function buildPureHtmlShotsPage({ initialShots, apiBase, isMuted, targetShortId 
           changeEp(1);
         });
 
-        var lastTapTime = 0;
-        slide.addEventListener('click', function(e) {
-          if (e.target.closest('button')) return;
-          var now = Date.now();
-          if (now - lastTapTime < 280) {
-            heartBurst.classList.add('pop');
-            setTimeout(function() { heartBurst.classList.remove('pop'); }, 400);
-            if (!item.liked) toggleLike();
-          } else {
-            if (video.paused) {
-              video.play().catch(function() {});
-              hud.innerHTML = playSvg;
-            } else {
-              video.pause();
-              hud.innerHTML = pauseSvg;
-            }
-            hud.classList.add('show');
-            setTimeout(function() { hud.classList.remove('show'); }, 600);
-          }
-          lastTapTime = now;
-        });
+        function triggerHeartPop() {
+          heartBurst.classList.remove('pop');
+          void heartBurst.offsetWidth;
+          heartBurst.classList.add('pop');
+          setTimeout(function() {
+            heartBurst.classList.remove('pop');
+          }, 450);
 
+          if (!item.liked) {
+            toggleLike();
+          }
+          postToNative({ type: 'haptic', style: 'selection' });
+        }
+
+        function togglePlayPause() {
+          if (video.paused) {
+            video.play().catch(function() {});
+            hud.innerHTML = playSvg;
+          } else {
+            video.pause();
+            hud.innerHTML = pauseSvg;
+          }
+          hud.classList.add('show');
+          setTimeout(function() { hud.classList.remove('show'); }, 600);
+        }
+
+        var lastTapTime = 0;
+        var singleTapTimer = null;
+        var longPressTimer = null;
+        var is2xActive = false;
         var touchStartX = 0;
         var touchStartY = 0;
+        var touchMoved = false;
+
         slide.addEventListener('touchstart', function(e) {
+          if (e.target.closest('button')) return;
           touchStartX = e.touches[0].clientX;
           touchStartY = e.touches[0].clientY;
+          touchMoved = false;
+
+          // Long press 2X speed timer (380ms)
+          longPressTimer = setTimeout(function() {
+            if (!touchMoved) {
+              is2xActive = true;
+              video.playbackRate = 2.0;
+              hud2x.classList.add('active');
+              postToNative({ type: 'haptic', style: 'selection' });
+            }
+          }, 380);
+        }, { passive: true });
+
+        slide.addEventListener('touchmove', function(e) {
+          var dx = e.touches[0].clientX - touchStartX;
+          var dy = e.touches[0].clientY - touchStartY;
+          if (Math.abs(dx) > 10 || Math.abs(dy) > 10) {
+            touchMoved = true;
+            if (longPressTimer) {
+              clearTimeout(longPressTimer);
+              longPressTimer = null;
+            }
+            if (is2xActive) {
+              is2xActive = false;
+              video.playbackRate = 1.0;
+              hud2x.classList.remove('active');
+            }
+          }
         }, { passive: true });
 
         slide.addEventListener('touchend', function(e) {
-          var dx = e.changedTouches[0].clientX - touchStartX;
-          var dy = e.changedTouches[0].clientY - touchStartY;
-          if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy) * 1.5) {
-            if (dx < 0) changeEp(1);
-            else changeEp(-1);
+          if (longPressTimer) {
+            clearTimeout(longPressTimer);
+            longPressTimer = null;
+          }
+
+          if (is2xActive) {
+            is2xActive = false;
+            video.playbackRate = 1.0;
+            hud2x.classList.remove('active');
+            return;
+          }
+
+          if (touchMoved) {
+            var dx = e.changedTouches[0].clientX - touchStartX;
+            var dy = e.changedTouches[0].clientY - touchStartY;
+            if (Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+              if (dx < 0) changeEp(1);
+              else changeEp(-1);
+            }
+            return;
+          }
+
+          if (e.target.closest('button')) return;
+
+          var now = Date.now();
+          if (now - lastTapTime < 290) {
+            if (singleTapTimer) {
+              clearTimeout(singleTapTimer);
+              singleTapTimer = null;
+            }
+            lastTapTime = 0;
+            triggerHeartPop();
+          } else {
+            lastTapTime = now;
+            singleTapTimer = setTimeout(function() {
+              togglePlayPause();
+              singleTapTimer = null;
+            }, 260);
           }
         }, { passive: true });
+
+        slide.addEventListener('dblclick', function(e) {
+          if (e.target.closest('button')) return;
+          triggerHeartPop();
+        });
+
+        // Desktop mouse hold for 2X speed
+        var mousePressTimer = null;
+        var mouse2xActive = false;
+        slide.addEventListener('mousedown', function(e) {
+          if (e.target.closest('button')) return;
+          mouse2xActive = false;
+          mousePressTimer = setTimeout(function() {
+            mouse2xActive = true;
+            video.playbackRate = 2.0;
+            hud2x.classList.add('active');
+          }, 380);
+        });
+
+        slide.addEventListener('mouseup', function(e) {
+          if (mousePressTimer) {
+            clearTimeout(mousePressTimer);
+            mousePressTimer = null;
+          }
+          if (mouse2xActive) {
+            mouse2xActive = false;
+            video.playbackRate = 1.0;
+            hud2x.classList.remove('active');
+          }
+        });
       }
 
       function renderFeed() {
@@ -1877,6 +2119,7 @@ function buildPureHtmlShotsPage({ initialShots, apiBase, isMuted, targetShortId 
           feed.appendChild(slide);
           observer.observe(slide);
         }
+        fetchLikesForShots(shots);
       }
 
       var observer = new IntersectionObserver(function(entries) {
@@ -1992,6 +2235,7 @@ function buildPureHtmlShotsPage({ initialShots, apiBase, isMuted, targetShortId 
               feed.appendChild(newSlide);
               observer.observe(newSlide);
             }
+            fetchLikesForShots(newItems);
           } else {
             hasMore = false;
           }
@@ -7365,8 +7609,6 @@ function ReelApp() {
                   <View style={styles.floatingNavDownloadBadge}>
                     <AnimatedDownloadSpinner size={9} color="#FFFFFF" />
                   </View>
-                ) : !meDotDismissed && mainTab !== 'Me' && myList.length > 0 ? (
-                  <View style={styles.floatingNavBadgeDot} />
                 ) : null}
               </View>
               <Text

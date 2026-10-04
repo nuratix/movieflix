@@ -284,6 +284,12 @@ export default async function handler(req, res) {
         const shots = rawItems.map((item, idx) => {
           const author = authors[(idx + (page * 3)) % authors.length];
           const totalEps = item.total_episodes || item.episodes_count || (12 + ((idx * 7) % 28));
+          const sId = String(item.subject_id || idx);
+          let hashVal = 0;
+          for (let c = 0; c < sId.length; c++) hashVal = ((hashVal << 5) - hashVal) + sId.charCodeAt(c);
+          const baseLikes = 450 + (Math.abs(hashVal) % 4500);
+          const baseShares = Math.floor(baseLikes / 7);
+
           return {
             id: `shot-${item.subject_id || idx}-p${page}`,
             subject_id: item.subject_id,
@@ -292,8 +298,8 @@ export default async function handler(req, res) {
             poster_url: item.poster_url,
             rating: item.rating || '7.8',
             author,
-            likes: 0,
-            shares: 0,
+            likes: baseLikes,
+            shares: baseShares,
             total_episodes: totalEps,
             se: 1,
             ep: 1,
