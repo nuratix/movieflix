@@ -1267,92 +1267,163 @@ function selectShotStreamQuality(sources, quality) {
   return match || sources[0];
 }
 
-function DedicatedShotPlayer({
-  videoStreamUrl,
-  isMuted,
-  isActive,
-  isTabActive,
-  isPausedByUser,
-  is2xActive,
-  onTimeUpdate,
-  playerRef,
-}) {
-  const videoSource = useMemo(() => buildVideoSource(videoStreamUrl), [videoStreamUrl]);
-
-  const player = useVideoPlayer(videoSource, (p) => {
-    try {
-      p.loop = true;
-      p.muted = isMuted;
-      p.timeUpdateEventInterval = 0.1;
-      if (isActive && isTabActive && !isPausedByUser) {
-        p.play();
-      }
-    } catch (e) {
-      console.warn('[DedicatedShotPlayer] setup note:', e);
+function buildHtmlShotPlayerSource(videoUrl, posterUrl, isMuted, shouldAutoPlay) {
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      -webkit-touch-callout: none;
+      -webkit-user-select: none;
+      user-select: none;
     }
-  });
-
-  useEffect(() => {
-    if (playerRef) {
-      playerRef.current = player;
+    html, body {
+      width: 100%;
+      height: 100%;
+      background: #000000;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
-    return () => {
-      if (playerRef && playerRef.current === player) {
-        playerRef.current = null;
+    video {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      background: #000000;
+      display: block;
+    }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
+</head>
+<body>
+  <video
+    id="player"
+    playsinline
+    webkit-playsinline
+    x5-playsinline
+    preload="auto"
+    loop
+    poster="${posterUrl || ''}"
+    ${isMuted ? 'muted' : ''}
+    ${shouldAutoPlay ? 'autoplay' : ''}
+  ></video>
+
+  <script>
+    (function() {
+      var v = document.getElementById('player');
+      var url = ${JSON.stringify(videoUrl || '')};
+      var shouldPlay = ${shouldAutoPlay ? 'true' : 'false'};
+      v.muted = ${isMuted ? 'true' : 'false'};
+
+      function post(type, payload) {
+        if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
+          window.ReactNativeWebView.postMessage(JSON.stringify(Object.assign({ type: type }, payload || {})));
+        }
       }
-    };
-  }, [player, playerRef]);
 
-  useEffect(() => {
-    if (!player) return;
-    try {
-      if (isActive && isTabActive && !isPausedByUser) {
-        player.play();
-      } else {
-        player.pause();
+      function loadAndPlay(src) {
+        if (!src) return;
+        if (window.hlsInstance) {
+          try { window.hlsInstance.destroy(); } catch (e) {}
+          window.hlsInstance = null;
+        }
+
+        if (src.indexOf('.m3u8') !== -1 && !v.canPlayType('application/vnd.apple.mpegurl')) {
+          if (typeof Hls !== 'undefined' && Hls.isSupported()) {
+            var hls = new Hls({ enableWorker: false });
+            hls.loadSource(src);
+            hls.attachMedia(v);
+            window.hlsInstance = hls;
+            hls.on(Hls.Events.MANIFEST_PARSED, function() {
+              if (shouldPlay) {
+                v.play().catch(function() {});
+              }
+            });
+          } else {
+            v.src = src;
+            if (shouldPlay) v.play().catch(function() {});
+          }
+        } else {
+          v.src = src;
+          if (shouldPlay) {
+            var p = v.play();
+            if (p && p.catch) {
+              p.catch(function() {
+                if (!v.muted) {
+                  v.muted = true;
+                  v.play().catch(function() {});
+                  post('mutedAutoPlay', {});
+                }
+              });
+            }
+          }
+        }
       }
-    } catch (_) {}
-  }, [player, isActive, isTabActive, isPausedByUser]);
 
-  useEffect(() => {
-    if (!player) return;
-    try {
-      player.muted = isMuted;
-    } catch (_) {}
-  }, [player, isMuted]);
+      loadAndPlay(url);
 
-  useEffect(() => {
-    if (!player) return;
-    try {
-      player.playbackRate = is2xActive ? 2.0 : 1.0;
-    } catch (_) {}
-  }, [player, is2xActive]);
+      v.addEventListener('timeupdate', function() {
+        post('timeUpdate', { currentTime: v.currentTime, duration: v.duration || 0 });
+      });
 
-  useEffect(() => {
-    if (!player) return;
-    const sub = player.addListener?.('timeUpdate', ({ currentTime }) => {
-      onTimeUpdate?.(currentTime, player.duration || 0);
-    });
-    return () => {
-      sub?.remove?.();
-    };
-  }, [player, onTimeUpdate]);
+      v.addEventListener('playing', function() {
+        post('statusChange', { status: 'playing', duration: v.duration || 0 });
+      });
 
-  return (
-    <VideoView
-      style={[
-        StyleSheet.absoluteFill,
-        Platform.OS === 'web'
-          ? { width: '100%', height: '100%', objectFit: 'contain' }
-          : { width: '100%', height: '100%' },
-      ]}
-      player={player}
-      nativeControls={false}
-      allowsFullscreen={false}
-      contentFit="contain"
-      surfaceType={Platform.OS === 'android' ? 'textureView' : 'surfaceView'}
-    />
-  );
+      v.addEventListener('pause', function() {
+        post('statusChange', { status: 'paused', duration: v.duration || 0 });
+      });
+
+      v.addEventListener('loadeddata', function() {
+        post('statusChange', { status: 'loaded', duration: v.duration || 0 });
+        if (shouldPlay && v.paused) {
+          v.play().catch(function() {});
+        }
+      });
+
+      v.addEventListener('canplay', function() {
+        if (shouldPlay && v.paused) {
+          v.play().catch(function() {});
+        }
+      });
+
+      v.addEventListener('error', function() {
+        post('error', { message: 'Video error' });
+      });
+
+      window.playVideo = function() {
+        shouldPlay = true;
+        v.play().catch(function() {});
+      };
+
+      window.pauseVideo = function() {
+        shouldPlay = false;
+        v.pause();
+      };
+
+      window.setMuted = function(muted) {
+        v.muted = Boolean(muted);
+      };
+
+      window.setPlaybackRate = function(rate) {
+        v.playbackRate = Number(rate) || 1.0;
+      };
+
+      window.seekTo = function(seconds) {
+        if (typeof seconds === 'number' && !isNaN(seconds) && isFinite(seconds)) {
+          v.currentTime = seconds;
+        }
+      };
+    })();
+  </script>
+</body>
+</html>`;
 }
 
 function ShotItem({
@@ -1527,9 +1598,109 @@ function ShotItem({
     }
   }, [videoQuality, currentEp]);
 
-  // Dedicated hardware video player ref and duration
-  const activePlayerRef = useRef(null);
+  // HTML5 Video Player references and duration
+  const webViewRef = useRef(null);
+  const webVideoRef = useRef(null);
   const videoDurationRef = useRef(0);
+  const currentTimeRef = useRef(0);
+
+  // Memoize HTML source for current stream
+  const htmlShotSource = useMemo(() => {
+    return buildHtmlShotPlayerSource(
+      videoStreamUrl,
+      item.poster_url,
+      isMuted,
+      isActive && isTabActive && !isPausedByUser
+    );
+  }, [videoStreamUrl, item.poster_url, isMuted, isActive, isTabActive, isPausedByUser, currentEp]);
+
+  // Handle messages from HTML5 player inside WebView
+  const handleWebViewMessage = useCallback((event) => {
+    try {
+      const data = JSON.parse(event.nativeEvent.data);
+      if (data.type === 'timeUpdate') {
+        if (typeof data.currentTime === 'number') {
+          currentTimeRef.current = data.currentTime;
+        }
+        if (typeof data.duration === 'number' && data.duration > 0) {
+          videoDurationRef.current = data.duration;
+        }
+        if (!isScrubbingRef.current && videoDurationRef.current > 0) {
+          setPlaybackProgress(Math.min(1, Math.max(0, currentTimeRef.current / videoDurationRef.current)));
+        }
+      } else if (data.type === 'statusChange') {
+        if (typeof data.duration === 'number' && data.duration > 0) {
+          videoDurationRef.current = data.duration;
+        }
+      }
+    } catch (_) {}
+  }, []);
+
+  // Web platform Hls.js fallback if running in browser
+  useEffect(() => {
+    if (Platform.OS !== 'web' || !webVideoRef.current || !videoStreamUrl) return;
+    const v = webVideoRef.current;
+    const src = (typeof videoStreamUrl === 'string' && (videoStreamUrl.startsWith('http://') || videoStreamUrl.startsWith('https://')))
+      ? `/api/proxy?url=${encodeURIComponent(videoStreamUrl)}`
+      : videoStreamUrl;
+
+    if (src.includes('.m3u8') && !v.canPlayType('application/vnd.apple.mpegurl') && typeof window !== 'undefined' && window.Hls && window.Hls.isSupported()) {
+      const hls = new window.Hls();
+      hls.loadSource(src);
+      hls.attachMedia(v);
+      return () => {
+        try { hls.destroy(); } catch (_) {}
+      };
+    } else {
+      v.src = src;
+    }
+  }, [videoStreamUrl]);
+
+  // Synchronize play / pause state
+  useEffect(() => {
+    const shouldPlay = isActive && isTabActive && !isPausedByUser;
+    if (Platform.OS === 'web') {
+      if (webVideoRef.current) {
+        if (shouldPlay) {
+          webVideoRef.current.play?.().catch?.(() => {});
+        } else {
+          webVideoRef.current.pause?.();
+        }
+      }
+    } else {
+      if (webViewRef.current) {
+        if (shouldPlay) {
+          webViewRef.current.injectJavaScript('window.playVideo && window.playVideo(); true;');
+        } else {
+          webViewRef.current.injectJavaScript('window.pauseVideo && window.pauseVideo(); true;');
+        }
+      }
+    }
+  }, [isActive, isTabActive, isPausedByUser]);
+
+  // Synchronize mute state
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      if (webVideoRef.current) {
+        webVideoRef.current.muted = isMuted;
+      }
+    } else {
+      webViewRef.current?.injectJavaScript(`window.setMuted && window.setMuted(${isMuted ? 'true' : 'false'}); true;`);
+    }
+  }, [isMuted]);
+
+  // Reset 2x speed when item becomes inactive
+  useEffect(() => {
+    if (!isActive) {
+      if (Platform.OS === 'web') {
+        if (webVideoRef.current) webVideoRef.current.playbackRate = 1.0;
+      } else {
+        webViewRef.current?.injectJavaScript('window.setPlaybackRate && window.setPlaybackRate(1.0); true;');
+      }
+      setIs2xActive(false);
+      isHolding2x.current = false;
+    }
+  }, [isActive]);
 
   // Long press 2X fast-forward handlers
   const handleLongPress = () => {
@@ -1537,10 +1708,10 @@ function ShotItem({
     isHolding2x.current = true;
     setIs2xActive(true);
     triggerHaptic?.('impactMedium');
-    if (activePlayerRef.current) {
-      try {
-        activePlayerRef.current.playbackRate = 2.0;
-      } catch (_) {}
+    if (Platform.OS === 'web') {
+      if (webVideoRef.current) webVideoRef.current.playbackRate = 2.0;
+    } else {
+      webViewRef.current?.injectJavaScript('window.setPlaybackRate && window.setPlaybackRate(2.0); true;');
     }
   };
 
@@ -1548,10 +1719,10 @@ function ShotItem({
     if (isHolding2x.current) {
       isHolding2x.current = false;
       setIs2xActive(false);
-      if (activePlayerRef.current) {
-        try {
-          activePlayerRef.current.playbackRate = 1.0;
-        } catch (_) {}
+      if (Platform.OS === 'web') {
+        if (webVideoRef.current) webVideoRef.current.playbackRate = 1.0;
+      } else {
+        webViewRef.current?.injectJavaScript('window.setPlaybackRate && window.setPlaybackRate(1.0); true;');
       }
     }
   };
@@ -1566,18 +1737,14 @@ function ShotItem({
       const ratio = Math.max(0, Math.min(1, relativeX / curVideoWidth));
       setPlaybackProgress(ratio);
 
-      const p = activePlayerRef.current;
-      if (p) {
-        const dur = typeof p.duration === 'number' && p.duration > 0 ? p.duration : videoDurationRef.current;
-        if (dur > 0) {
-          const targetTime = ratio * dur;
-          try {
-            p.currentTime = targetTime;
-          } catch (_) {
-            try {
-              p.seekBy?.(targetTime - (p.currentTime || 0));
-            } catch (__) {}
-          }
+      const dur = videoDurationRef.current || 0;
+      if (dur > 0) {
+        const targetTime = ratio * dur;
+        currentTimeRef.current = targetTime;
+        if (Platform.OS === 'web') {
+          if (webVideoRef.current) webVideoRef.current.currentTime = targetTime;
+        } else {
+          webViewRef.current?.injectJavaScript(`window.seekTo && window.seekTo(${targetTime}); true;`);
         }
       }
     };
@@ -1699,14 +1866,22 @@ function ShotItem({
     triggerHaptic?.('selection');
     const willPause = !isPausedByUser;
     setIsPausedByUser(willPause);
-    if (activePlayerRef.current) {
-      try {
+    if (Platform.OS === 'web') {
+      if (webVideoRef.current) {
         if (willPause) {
-          activePlayerRef.current.pause();
+          webVideoRef.current.pause?.();
         } else {
-          activePlayerRef.current.play();
+          webVideoRef.current.play?.().catch?.(() => {});
         }
-      } catch (_) {}
+      }
+    } else {
+      if (webViewRef.current) {
+        if (willPause) {
+          webViewRef.current.injectJavaScript('window.pauseVideo && window.pauseVideo(); true;');
+        } else {
+          webViewRef.current.injectJavaScript('window.playVideo && window.playVideo(); true;');
+        }
+      }
     }
     setShowPlayPauseAnim(true);
     playPauseAnim.setValue(1);
@@ -1778,33 +1953,74 @@ function ShotItem({
       >
         {/* 9:16 Video Player or High-Res Poster */}
         <View style={StyleSheet.absoluteFillObject}>
-          {/* Base Layer: High-Res Poster ALWAYS rendered so screen is NEVER black */}
-          <SafeImage
-            uri={item.poster_url}
-            style={[StyleSheet.absoluteFill, { width: '100%', height: '100%' }]}
-            resizeMode="contain"
-          />
-
-          {/* Dedicated Hardware Video Player Stream (Expo Video Player, identical to movies player) */}
-          {Boolean(videoStreamUrl && isActive) && (
-            <DedicatedShotPlayer
-              key={`shot-video-${currentEp}-${videoStreamUrl}`}
-              videoStreamUrl={videoStreamUrl}
-              isMuted={isMuted}
-              isActive={isActive}
-              isTabActive={isTabActive}
-              isPausedByUser={isPausedByUser}
-              is2xActive={is2xActive}
-              onTimeUpdate={(currentTime, duration) => {
-                if (duration > 0) {
-                  videoDurationRef.current = duration;
-                }
-                if (!isScrubbingRef.current && duration > 0) {
-                  setPlaybackProgress(Math.min(1, Math.max(0, currentTime / duration)));
-                }
-              }}
-              playerRef={activePlayerRef}
+          {/* While stream is loading or not active, display High-Res Poster */}
+          {(!videoStreamUrl || !isActive) && (
+            <SafeImage
+              uri={item.poster_url}
+              style={[StyleSheet.absoluteFill, { width: '100%', height: '100%' }]}
+              resizeMode="contain"
             />
+          )}
+
+          {/* HTML5 Video Player Stream (WebView on Native APK / iOS, <video> on Web) */}
+          {Boolean(videoStreamUrl && isActive) && (
+            <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
+              {Platform.OS === 'web' ? (
+                <video
+                  ref={webVideoRef}
+                  src={
+                    typeof videoStreamUrl === 'string' && (videoStreamUrl.startsWith('http://') || videoStreamUrl.startsWith('https://'))
+                      ? `/api/proxy?url=${encodeURIComponent(videoStreamUrl)}`
+                      : videoStreamUrl
+                  }
+                  poster={item.poster_url}
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'contain',
+                    backgroundColor: '#000000',
+                    display: 'block',
+                    pointerEvents: 'none',
+                  }}
+                  playsInline
+                  loop
+                  muted={isMuted}
+                  autoPlay={isActive && isTabActive && !isPausedByUser}
+                  onTimeUpdate={(e) => {
+                    const cur = e.target.currentTime;
+                    const dur = e.target.duration;
+                    if (dur > 0) videoDurationRef.current = dur;
+                    if (!isScrubbingRef.current && dur > 0) {
+                      setPlaybackProgress(Math.min(1, Math.max(0, cur / dur)));
+                    }
+                  }}
+                />
+              ) : (
+                <WebView
+                  ref={webViewRef}
+                  key={`shot-wv-${currentEp}-${videoStreamUrl}`}
+                  source={{
+                    html: htmlShotSource,
+                    baseUrl: 'https://netfilm.world/',
+                  }}
+                  style={[StyleSheet.absoluteFill, { backgroundColor: '#000000' }]}
+                  containerStyle={{ backgroundColor: '#000000' }}
+                  allowsInlineMediaPlayback={true}
+                  mediaPlaybackRequiresUserAction={false}
+                  javaScriptEnabled={true}
+                  domStorageEnabled={true}
+                  mixedContentMode="always"
+                  androidLayerType="hardware"
+                  allowsFullscreenVideo={false}
+                  originWhitelist={['*']}
+                  scrollEnabled={false}
+                  bounces={false}
+                  overScrollMode="never"
+                  pointerEvents="none"
+                  onMessage={handleWebViewMessage}
+                />
+              )}
+            </View>
           )}
 
           {/* Tap area to pause/play (single tap), double-tap to like, and long-press for 2X speed */}
