@@ -342,12 +342,19 @@ const buildVideoSource = (url) => {
     return { uri: url };
   }
 
-  // Route remote HTTP/HTTPS video streams through reverse proxy to bypass CDN anti-hotlink 429 restrictions
-  const proxyBase = Platform.OS === 'web' ? '' : API_BASE;
-  const proxiedUri = `${proxyBase}/api/proxy?url=${encodeURIComponent(url)}`;
+  // Web browsers have CORS & forbidden header restrictions (cannot set Referer from client JS),
+  // so Web MUST stream through our reverse proxy /api/proxy.
+  // Native Android/iOS (ExoPlayer/AVPlayer) CAN send custom Referer/Origin headers directly to the CDN!
+  // Android ExoPlayer strictly requires Content-Length on byte-range requests, which Vercel edge proxy chunks/drops.
+  // Therefore, on Native platforms (Android/iOS), pass the direct CDN URL with Referer & Origin headers.
+  if (Platform.OS === 'web' && typeof url === 'string' && (url.startsWith('http://') || url.startsWith('https://'))) {
+    return {
+      uri: `/api/proxy?url=${encodeURIComponent(url)}`,
+    };
+  }
 
   return {
-    uri: proxiedUri,
+    uri: url,
     headers: {
       'Referer': 'https://netfilm.world/',
       'Origin': 'https://netfilm.world',
@@ -1272,6 +1279,7 @@ function ShotItem({
   const [isPausedByUser, setIsPausedByUser] = useState(false);
   const [showPlayPauseAnim, setShowPlayPauseAnim] = useState(false);
   const [showHeartAnim, setShowHeartAnim] = useState(false);
+  const [showEpModal, setShowEpModal] = useState(false);
   const [playbackProgress, setPlaybackProgress] = useState(0);
   const epStreamsCache = useRef({});
 
@@ -1391,22 +1399,23 @@ function ShotItem({
     }
   });
 
-  // Synchronously update player when videoStreamUrl arrives
+  // Synchronously update player when videoStreamUrl changes (guarded to avoid redundant replace calls)
+  const currentStreamUrlRef = useRef(videoStreamUrl);
   useEffect(() => {
-    if (player && videoStreamUrl) {
-      try {
-        const src = buildVideoSource(videoStreamUrl);
-        if (typeof player.replace === 'function') {
-          player.replace(src);
-        }
-        if (isActive && isTabActive && !isPausedByUser) {
-          player.play();
-        }
-      } catch (e) {
-        console.warn('[Shots] player.replace note:', e);
+    if (!player || !videoStreamUrl) return;
+    if (currentStreamUrlRef.current === videoStreamUrl) return;
+    currentStreamUrlRef.current = videoStreamUrl;
+    try {
+      if (typeof player.replace === 'function') {
+        player.replace(buildVideoSource(videoStreamUrl));
       }
+      if (isActive && isTabActive && !isPausedByUser) {
+        player.play();
+      }
+    } catch (e) {
+      console.warn('[Shots] player.replace note:', e);
     }
-  }, [player, videoStreamUrl, isActive, isTabActive, isPausedByUser]);
+  }, [player, videoStreamUrl]);
 
   // Keep playback state synchronized
   useEffect(() => {
@@ -1458,48 +1467,35 @@ function ShotItem({
         triggerHaptic?.('selection');
         showToast?.(`Playing Episode ${prev} of ${totalEpisodes}`);
       } else {
-        showToast?.(`First episode reached`);
+        setShowEpModal(true);
+        showToast?.(`All ${totalEpisodes} Episodes`);
       }
     }
   };
 
-  // Touch tracking for swipe gestures & tap interactions
-  const touchStartX = useRef(0);
-  const touchStartY = useRef(0);
-  const touchStartTime = useRef(0);
-
-  const handleTouchStart = (e) => {
-    const t = e.nativeEvent;
-    touchStartX.current = t.pageX || t.clientX || 0;
-    touchStartY.current = t.pageY || t.clientY || 0;
-    touchStartTime.current = Date.now();
-  };
-
-  const handleTouchEnd = (e) => {
-    const t = e.nativeEvent;
-    const endX = t.pageX || t.clientX || 0;
-    const endY = t.pageY || t.clientY || 0;
-    const dx = endX - touchStartX.current;
-    const dy = endY - touchStartY.current;
-    const dt = Date.now() - touchStartTime.current;
-
-    // Detect horizontal swipe across episodes: |dx| > 38 and horizontal dominance
-    if (Math.abs(dx) > 38 && Math.abs(dx) > Math.abs(dy) * 1.25 && dt < 700) {
-      if (dx < 0) {
-        // Swiped Left -> Next Episode
-        handleSwipeEpisode('next');
-      } else {
-        // Swiped Right -> Previous Episode (or user can swipe right to see episodes)
-        handleSwipeEpisode('prev');
-      }
-      return;
-    }
-
-    // Tap detected
-    if (Math.abs(dx) < 15 && Math.abs(dy) < 15) {
-      handleScreenPress();
-    }
-  };
+  // PanResponder for smooth, high-precision horizontal swipe across episodes
+  // Strictly ignores vertical gestures so parent FlatList vertical scrolling remains silky smooth
+  const panResponder = useMemo(() => {
+    return PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onStartShouldSetPanResponderCapture: () => false,
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        return Math.abs(gestureState.dx) > 18 && Math.abs(gestureState.dx) > Math.abs(gestureState.dy) * 1.5;
+      },
+      onMoveShouldSetPanResponderCapture: (_, gestureState) => {
+        return Math.abs(gestureState.dx) > 18 && Math.abs(gestureState.dx) > Math.abs(gestureState.dy) * 1.5;
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        if (Math.abs(gestureState.dx) > 25) {
+          if (gestureState.dx < 0) {
+            handleSwipeEpisode('next');
+          } else {
+            handleSwipeEpisode('prev');
+          }
+        }
+      },
+    });
+  }, [currentEp, totalEpisodes]);
 
   // Double tap to like handling
   const lastTapRef = useRef(0);
@@ -1608,27 +1604,36 @@ function ShotItem({
       )}
 
       {/* 9:16 Vertical Video Frame (Full screen on mobile, centered 9:16 on desktop) */}
-      <View style={{ width: videoWidth, height: containerHeight, backgroundColor: '#050505', position: 'relative', overflow: 'hidden' }}>
+      <View
+        style={{ width: videoWidth, height: containerHeight, backgroundColor: '#050505', position: 'relative', overflow: 'hidden' }}
+        {...panResponder.panHandlers}
+      >
         {/* 9:16 Video Player or High-Res Poster */}
-        <View
-          style={StyleSheet.absoluteFillObject}
-          onTouchStart={handleTouchStart}
-          onTouchEnd={handleTouchEnd}
-        >
-          {videoStreamUrl && isActive ? (
+        <View style={StyleSheet.absoluteFillObject}>
+          {/* Base Layer: High-Res Poster ALWAYS rendered so screen is NEVER black */}
+          <SafeImage
+            uri={item.poster_url}
+            style={StyleSheet.absoluteFillObject}
+            resizeMode="cover"
+          />
+
+          {/* Video Player Stream */}
+          {videoStreamUrl && isActive && (
             <VideoView
               player={player}
               style={StyleSheet.absoluteFillObject}
               contentFit="cover"
               nativeControls={false}
-            />
-          ) : (
-            <SafeImage
-              uri={item.poster_url}
-              style={StyleSheet.absoluteFillObject}
-              resizeMode="cover"
+              pointerEvents="none"
             />
           )}
+
+          {/* Tap area to pause/play (single tap) and double-tap to like */}
+          <TouchableOpacity
+            activeOpacity={1}
+            onPress={handleScreenPress}
+            style={StyleSheet.absoluteFillObject}
+          />
 
           {/* Ambient Dark Gradient for UI Readability */}
           <LinearGradient
@@ -1810,6 +1815,47 @@ function ShotItem({
             {item.title}
           </Text>
 
+          {/* ── Episode Selector & Dot Indicators in Clean Correct Place ── */}
+          {totalEpisodes > 1 && (
+            <View style={styles.shotsEpisodeBar} pointerEvents="box-none">
+              <TouchableOpacity
+                style={[styles.shotsEpArrowBtn, currentEp <= 1 && styles.shotsEpArrowDisabled]}
+                onPress={() => handleSwipeEpisode('prev')}
+                disabled={currentEp <= 1}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                activeOpacity={0.7}
+              >
+                <Feather name="chevron-left" size={15} color={currentEp <= 1 ? "rgba(255,255,255,0.25)" : "#FFFFFF"} />
+              </TouchableOpacity>
+
+              <View style={styles.shotsEpDotsRow}>
+                {renderEpisodeDots()}
+              </View>
+
+              <TouchableOpacity
+                style={[styles.shotsEpArrowBtn, currentEp >= totalEpisodes && styles.shotsEpArrowDisabled]}
+                onPress={() => handleSwipeEpisode('next')}
+                disabled={currentEp >= totalEpisodes}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                activeOpacity={0.7}
+              >
+                <Feather name="chevron-right" size={15} color={currentEp >= totalEpisodes ? "rgba(255,255,255,0.25)" : "#FFFFFF"} />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.shotsEpBadgePill}
+                onPress={() => setShowEpModal(true)}
+                activeOpacity={0.75}
+                hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+              >
+                <Text style={styles.shotsEpBadgeText}>EP {currentEp}/{totalEpisodes}</Text>
+                <Feather name="grid" size={10} color="#FFFFFF" style={{ marginLeft: 4 }} />
+              </TouchableOpacity>
+
+              <Text style={styles.shotsEpSwipeHint}>Swipe ↔</Text>
+            </View>
+          )}
+
           <Text style={styles.shotsTagsText}>
             #shots #reels #dramabox #vertical916 #trending
           </Text>
@@ -1822,44 +1868,78 @@ function ShotItem({
           </View>
         </View>
 
-        {/* ── Episode Selector & Dot Indicators (If Short has Multiple Episodes) ── */}
-        {totalEpisodes > 1 && (
-          <View style={styles.shotsEpisodeBar} pointerEvents="box-none">
-            <TouchableOpacity
-              style={[styles.shotsEpArrowBtn, currentEp <= 1 && styles.shotsEpArrowDisabled]}
-              onPress={() => handleSwipeEpisode('prev')}
-              disabled={currentEp <= 1}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Feather name="chevron-left" size={14} color={currentEp <= 1 ? "rgba(255,255,255,0.25)" : "#FFFFFF"} />
-            </TouchableOpacity>
-
-            <View style={styles.shotsEpDotsRow}>
-              {renderEpisodeDots()}
-            </View>
-
-            <TouchableOpacity
-              style={[styles.shotsEpArrowBtn, currentEp >= totalEpisodes && styles.shotsEpArrowDisabled]}
-              onPress={() => handleSwipeEpisode('next')}
-              disabled={currentEp >= totalEpisodes}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Feather name="chevron-right" size={14} color={currentEp >= totalEpisodes ? "rgba(255,255,255,0.25)" : "#FFFFFF"} />
-            </TouchableOpacity>
-
-            <View style={styles.shotsEpBadgePill}>
-              <Text style={styles.shotsEpBadgeText}>EP {currentEp}/{totalEpisodes}</Text>
-            </View>
-
-            <Text style={styles.shotsEpSwipeHint}>Swipe ↔</Text>
-          </View>
-        )}
-
         {/* ── Bottom Red Progress Bar ── */}
         <View style={styles.shotsProgressTrack}>
           <View style={[styles.shotsProgressFill, { width: `${playbackProgress * 100}%` }]} />
         </View>
       </View>
+
+      {/* ── Episodes Grid Bottom Sheet Modal ── */}
+      <Modal
+        visible={showEpModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowEpModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.shotsModalBackdrop}
+          activeOpacity={1}
+          onPress={() => setShowEpModal(false)}
+        >
+          <View style={styles.shotsModalSheet} onStartShouldSetResponder={() => true}>
+            <View style={styles.shotsModalHeader}>
+              <View style={styles.shotsModalDragIndicator} />
+              <View style={styles.shotsModalHeaderRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.shotsModalTitle} numberOfLines={1}>{item.title}</Text>
+                  <Text style={styles.shotsModalSubtitle}>Select Episode (Total {totalEpisodes})</Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() => setShowEpModal(false)}
+                  style={styles.shotsModalCloseBtn}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <Feather name="x" size={20} color="#FFFFFF" />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <ScrollView
+              contentContainerStyle={styles.shotsEpGridContainer}
+              showsVerticalScrollIndicator={false}
+            >
+              {Array.from({ length: totalEpisodes }, (_, i) => i + 1).map((ep) => {
+                const isSelected = ep === currentEp;
+                return (
+                  <TouchableOpacity
+                    key={`ep-grid-btn-${ep}`}
+                    style={[
+                      styles.shotsEpGridBtn,
+                      isSelected && styles.shotsEpGridBtnActive,
+                    ]}
+                    onPress={() => {
+                      triggerHaptic?.('selection');
+                      setCurrentEp(ep);
+                      setShowEpModal(false);
+                      showToast?.(`Playing Episode ${ep}`);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Text
+                      style={[
+                        styles.shotsEpGridBtnText,
+                        isSelected && styles.shotsEpGridBtnTextActive,
+                      ]}
+                    >
+                      {ep}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
@@ -13097,19 +13177,16 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   shotsEpisodeBar: {
-    position: 'absolute',
-    bottom: 74,
-    left: 16,
-    right: 76,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    backgroundColor: 'rgba(0, 0, 0, 0.72)',
     paddingVertical: 5,
     paddingHorizontal: 8,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.15)',
-    zIndex: 80,
+    borderColor: 'rgba(255, 255, 255, 0.18)',
+    marginVertical: 6,
+    alignSelf: 'flex-start',
   },
   shotsEpArrowBtn: {
     padding: 3,
@@ -13136,9 +13213,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#e50914',
   },
   shotsEpBadgePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: 'rgba(229, 9, 20, 0.35)',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
     borderRadius: 8,
     marginLeft: 4,
   },
@@ -13151,7 +13230,84 @@ const styles = StyleSheet.create({
     color: 'rgba(255, 255, 255, 0.55)',
     fontSize: 9,
     fontWeight: '600',
-    marginLeft: 5,
+    marginLeft: 6,
+  },
+  shotsModalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    justifyContent: 'flex-end',
+  },
+  shotsModalSheet: {
+    backgroundColor: '#161616',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 36,
+    maxHeight: '65%',
+    borderWidth: 1,
+    borderColor: '#262626',
+  },
+  shotsModalDragIndicator: {
+    width: 38,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    alignSelf: 'center',
+    marginBottom: 12,
+  },
+  shotsModalHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  shotsModalTitle: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  shotsModalSubtitle: {
+    color: '#999999',
+    fontSize: 12,
+    marginTop: 2,
+  },
+  shotsModalCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  shotsEpGridContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    paddingBottom: 24,
+  },
+  shotsEpGridBtn: {
+    width: '18%',
+    aspectRatio: 1.25,
+    borderRadius: 8,
+    backgroundColor: '#222222',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#333333',
+  },
+  shotsEpGridBtnActive: {
+    backgroundColor: '#e50914',
+    borderColor: '#e50914',
+  },
+  shotsEpGridBtnText: {
+    color: '#CCCCCC',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  shotsEpGridBtnTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '900',
   },
   shotsFooterLoader: {
     height: 90,
