@@ -1296,6 +1296,11 @@ function DedicatedShotPlayer({
     if (playerRef) {
       playerRef.current = player;
     }
+    return () => {
+      if (playerRef && playerRef.current === player) {
+        playerRef.current = null;
+      }
+    };
   }, [player, playerRef]);
 
   useEffect(() => {
@@ -1335,12 +1340,17 @@ function DedicatedShotPlayer({
 
   return (
     <VideoView
-      style={StyleSheet.absoluteFillObject}
+      style={[
+        StyleSheet.absoluteFill,
+        Platform.OS === 'web'
+          ? { width: '100%', height: '100%', objectFit: 'contain' }
+          : { width: '100%', height: '100%' },
+      ]}
       player={player}
       nativeControls={false}
       allowsFullscreen={false}
       contentFit="contain"
-      pointerEvents="none"
+      surfaceType={Platform.OS === 'android' ? 'textureView' : 'surfaceView'}
     />
   );
 }
@@ -1750,7 +1760,7 @@ function ShotItem({
   const isLetterboxed = containerWidth > videoWidth;
 
   return (
-    <View style={{ width: containerWidth, height: containerHeight, backgroundColor: '#000000', alignItems: 'center', justifyContent: 'center', position: 'relative', overflow: 'hidden' }}>
+    <View style={{ width: containerWidth, height: containerHeight, backgroundColor: '#000000', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
       {/* Desktop Ambient Blurred Backdrop */}
       {isLetterboxed && (
         <SafeImage
@@ -1763,7 +1773,7 @@ function ShotItem({
 
       {/* 9:16 Vertical Video Frame (Full screen on mobile, centered 9:16 on desktop) */}
       <View
-        style={{ width: videoWidth, height: containerHeight, backgroundColor: '#050505', position: 'relative', overflow: 'hidden' }}
+        style={{ width: videoWidth, height: containerHeight, backgroundColor: '#050505', position: 'relative' }}
         {...panResponder.panHandlers}
       >
         {/* 9:16 Video Player or High-Res Poster */}
@@ -1771,7 +1781,7 @@ function ShotItem({
           {/* Base Layer: High-Res Poster ALWAYS rendered so screen is NEVER black */}
           <SafeImage
             uri={item.poster_url}
-            style={StyleSheet.absoluteFillObject}
+            style={[StyleSheet.absoluteFill, { width: '100%', height: '100%' }]}
             resizeMode="contain"
           />
 
@@ -1804,12 +1814,12 @@ function ShotItem({
             onLongPress={handleLongPress}
             onPressOut={handlePressOut}
             delayLongPress={220}
-            style={StyleSheet.absoluteFillObject}
+            style={[StyleSheet.absoluteFill, { zIndex: 2 }]}
           />
 
           {/* Long Press 2X Speed HUD Indicator */}
           {is2xActive && (
-            <View style={styles.shots2xHUD} pointerEvents="none">
+            <View style={[styles.shots2xHUD, { zIndex: 3 }]} pointerEvents="none">
               <Feather name="fast-forward" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
               <Text style={styles.shots2xHUDText}>2X Speed</Text>
             </View>
@@ -1819,13 +1829,13 @@ function ShotItem({
           <LinearGradient
             colors={['rgba(0,0,0,0.35)', 'transparent', 'rgba(0,0,0,0.4)', 'rgba(0,0,0,0.88)']}
             locations={[0, 0.25, 0.65, 1]}
-            style={StyleSheet.absoluteFillObject}
+            style={[StyleSheet.absoluteFill, { zIndex: 3 }]}
             pointerEvents="none"
           />
 
           {/* Loading Spinner while buffering or switching episodes */}
           {isLoadingStream && (
-            <View style={styles.shotsBufferingOverlay} pointerEvents="none">
+            <View style={[styles.shotsBufferingOverlay, { zIndex: 4 }]} pointerEvents="none">
               <ActivityIndicator size="large" color="#e50914" />
               <Text style={styles.shotsBufferingText}>
                 Loading Ep {currentEp}...
