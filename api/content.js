@@ -103,6 +103,8 @@ export default async function handler(req, res) {
     else if (urlPath.includes('/api/movies')) endpoint = 'movies';
     else if (urlPath.includes('/api/tv-series')) endpoint = 'tv-series';
     else if (urlPath.includes('/api/animation')) endpoint = 'animation';
+    else if (urlPath.includes('/api/music/search')) endpoint = 'music-search';
+    else if (urlPath.includes('/api/music')) endpoint = 'music';
     else if (urlPath.includes('/api/search')) endpoint = 'search';
     else if (urlPath.includes('/api/detail')) endpoint = 'detail';
     else if (urlPath.includes('/captions')) endpoint = 'captions';
@@ -136,6 +138,22 @@ export default async function handler(req, res) {
       const page = Math.max(1, parseInt(query.page, 10) || 1);
       targetUrl = `${UPSTREAM_BASE}/animation?page=${page}`;
       cacheKey = `catalog:animation:p${page}`;
+      break;
+    }
+    case 'music': {
+      const page = Math.max(1, parseInt(query.page, 10) || 1);
+      targetUrl = `${UPSTREAM_BASE}/music?page=${page}`;
+      cacheKey = `catalog:music:p${page}`;
+      break;
+    }
+    case 'music-search': {
+      const q = (query.q || '').slice(0, 100).trim();
+      if (!q) {
+        return res.status(400).json({ error: 'Missing or empty search query "q".' });
+      }
+      const page = Math.max(1, parseInt(query.page, 10) || 1);
+      targetUrl = `${UPSTREAM_BASE}/music/search?q=${encodeURIComponent(q)}&page=${page}`;
+      cacheKey = `music:search:${q.toLowerCase()}:p${page}`;
       break;
     }
     case 'search': {
@@ -199,7 +217,7 @@ export default async function handler(req, res) {
     }
     default: {
       return res.status(400).json({
-        error: 'Invalid or unsupported endpoint. Supported endpoints: home, movies, tv-series, animation, search, detail, dubs, metadata, stream, captions.',
+        error: 'Invalid or unsupported endpoint. Supported endpoints: home, movies, tv-series, animation, music, music-search, search, detail, dubs, metadata, stream, captions.',
       });
     }
   }

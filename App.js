@@ -2317,7 +2317,7 @@ function ReelApp() {
       const seasons = resource?.seasons || [];
 
       // Extract and parse available audio dubs and sibling languages
-      const rawDubs = data?.dubs || subject?.dubs || [];
+      const rawDubs = data?.dubs || data?.deep_metadata?.dubs || subject?.dubs || [];
       const parsedDubs = Array.isArray(rawDubs) ? rawDubs.map((d) => {
         const subId = String(d.subjectId || d.subject_id || d.id || '');
         const slug = String(d.detailPath || d.detail_path || d.slug || '');
@@ -2346,6 +2346,10 @@ function ReelApp() {
         };
       }) : [];
 
+      // Extract and parse multi-language subtitles list
+      const rawSubs = data?.subtitles || data?.deep_metadata?.subtitles || (typeof subject?.subtitles === 'string' ? subject.subtitles.split(',').map(s => s.trim()).filter(Boolean) : []);
+      const parsedSubs = Array.isArray(rawSubs) ? rawSubs.map(s => typeof s === 'string' ? s.trim() : (s.lanName || s.lan || '')).filter(Boolean) : [];
+
       // A title is strictly a series if subjectType == 2 OR it has multiple seasons/episodes
       const isRealSeries = (subject?.subjectType === 2) ||
         (seasons.length > 1) ||
@@ -2358,6 +2362,8 @@ function ReelApp() {
         resource,
         seasons,
         dubs: parsedDubs,
+        subtitles: parsedSubs,
+        audios: data?.deep_metadata?.audios || subject?.audios || null,
         isSeries: Boolean(isRealSeries),
       };
       setDetailData(mergedData);
@@ -2367,7 +2373,7 @@ function ReelApp() {
       }
 
       // Merge newly resolved fields back into detailMovie so title/poster/dubs/etc. are fully loaded
-      setDetailMovie((prev) => normalizeMovie({ ...(prev || {}), ...subject, ...mergedData, dubs: parsedDubs, slug: movie.slug }));
+      setDetailMovie((prev) => normalizeMovie({ ...(prev || {}), ...subject, ...mergedData, dubs: parsedDubs, subtitles: parsedSubs, slug: movie.slug }));
 
       // Update URL with confirmed prefix if series vs movie was determined
       if (syncHistory && Platform.OS === 'web') {
@@ -2569,6 +2575,18 @@ function ReelApp() {
               if (key && !seenLans.has(key)) {
                 seenLans.add(key);
                 allCaptions.push(c);
+              }
+            }
+          }
+
+          // Fallback to parsed metadata subtitles if captions endpoint returned empty
+          if (allCaptions.length === 0) {
+            const rawSubs = Array.isArray(movie.subtitles) ? movie.subtitles : (Array.isArray(detailData?.subtitles) ? detailData.subtitles : []);
+            for (const s of rawSubs) {
+              const key = typeof s === 'string' ? s : (s.lanName || s.lan);
+              if (key && !seenLans.has(key)) {
+                seenLans.add(key);
+                allCaptions.push(typeof s === 'string' ? { lan: key.toLowerCase().slice(0, 3), lanName: key, url: null } : s);
               }
             }
           }
@@ -5170,6 +5188,20 @@ function ReelApp() {
                     {Math.floor(detailData.durationSeconds / 60)}m
                   </Text>
                 ) : null}
+
+                {Array.isArray(detailData?.dubs) && detailData.dubs.filter(d => d.type === 0).length > 1 ? (
+                  <View style={[styles.metaGlassPill, { borderColor: 'rgba(229, 9, 20, 0.4)', backgroundColor: 'rgba(229, 9, 20, 0.15)' }]}>
+                    <Text style={[styles.metaGlassPillText, { color: '#ff6b6b' }]}>
+                      {detailData.dubs.filter(d => d.type === 0).length} Dubs
+                    </Text>
+                  </View>
+                ) : (Array.isArray(detailData?.subtitles) && detailData.subtitles.length > 0 ? (
+                  <View style={[styles.metaGlassPill, { borderColor: 'rgba(70, 211, 105, 0.4)', backgroundColor: 'rgba(70, 211, 105, 0.15)' }]}>
+                    <Text style={[styles.metaGlassPillText, { color: '#46d369' }]}>
+                      {detailData.subtitles.length} Subtitles
+                    </Text>
+                  </View>
+                ) : null)}
               </View>
             </View>
 
@@ -5239,6 +5271,16 @@ function ReelApp() {
                     </View>
                   )}
 
+                  {/* Single Audio Info (if not multiple dubs) */}
+                  {Boolean(detailData?.audios) && (!Array.isArray(detailData?.dubs) || detailData.dubs.filter(d => d.type === 0).length <= 1) && (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 12, marginBottom: 2 }}>
+                      <Feather name="volume-2" size={12} color="#a3a3a3" style={{ marginRight: 6 }} />
+                      <Text style={{ fontSize: 12, color: '#a3a3a3' }}>
+                        Audio: <Text style={{ color: '#ffffff', fontWeight: '600' }}>{detailData.audios}</Text>
+                      </Text>
+                    </View>
+                  )}
+
                   {/* Available Audio Dubs (Hindi, French, Spanish, Tamil, Telugu, etc.) */}
                   {Array.isArray(detailData?.dubs) && detailData.dubs.filter(d => d.type === 0).length > 1 && (
                     <View style={styles.detailDubsSection}>
@@ -5277,6 +5319,36 @@ function ReelApp() {
                             <Feather name="volume-2" size={11} color="#FFFFFF" style={{ marginRight: 5 }} />
                             <Text style={styles.detailDubPillText}>{dub.label}</Text>
                           </TouchableOpacity>
+                        ))}
+                      </ScrollView>
+                    </View>
+                  )}
+
+                  {/* Available Multi-Language Subtitles */}
+                  {Array.isArray(detailData?.subtitles) && detailData.subtitles.length > 0 && (
+                    <View style={styles.detailDubsSection}>
+                      <View style={styles.detailDubsHeaderRow}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                          <MaterialIcons name="subtitles" size={13} color="#46d369" style={{ marginRight: 6 }} />
+                          <Text style={styles.detailDubsHeading}>Available Subtitles</Text>
+                        </View>
+                        <Text style={[styles.detailDubsCountBadge, { borderColor: 'rgba(70, 211, 105, 0.35)', color: '#46d369', backgroundColor: 'rgba(70, 211, 105, 0.12)' }]}>
+                          {detailData.subtitles.length} Languages
+                        </Text>
+                      </View>
+                      <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={styles.detailDubsScroll}
+                      >
+                        {detailData.subtitles.map((subLan, sIdx) => (
+                          <View
+                            key={`detail-sub-${sIdx}`}
+                            style={[styles.detailDubPill, { borderColor: 'rgba(70, 211, 105, 0.25)', backgroundColor: 'rgba(255, 255, 255, 0.06)' }]}
+                          >
+                            <MaterialIcons name="closed-caption" size={11} color="#46d369" style={{ marginRight: 5 }} />
+                            <Text style={styles.detailDubPillText}>{subLan}</Text>
+                          </View>
                         ))}
                       </ScrollView>
                     </View>
