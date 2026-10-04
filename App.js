@@ -1275,7 +1275,6 @@ function DedicatedShotPlayer({
   isPausedByUser,
   is2xActive,
   onTimeUpdate,
-  onVideoReady,
   playerRef,
 }) {
   const videoSource = useMemo(() => buildVideoSource(videoStreamUrl), [videoStreamUrl]);
@@ -1338,12 +1337,10 @@ function DedicatedShotPlayer({
     <VideoView
       style={StyleSheet.absoluteFillObject}
       player={player}
-      surfaceType={Platform.OS === 'android' ? 'textureView' : 'surfaceView'}
-      useExoShutter={true}
       nativeControls={false}
       allowsFullscreen={false}
       contentFit="contain"
-      onFirstFrameRender={onVideoReady}
+      pointerEvents="none"
     />
   );
 }
@@ -1376,16 +1373,10 @@ function ShotItem({
   const [playbackProgress, setPlaybackProgress] = useState(0);
   const [isScrubbing, setIsScrubbing] = useState(false);
   const [is2xActive, setIs2xActive] = useState(false);
-  const [isVideoReady, setIsVideoReady] = useState(false);
   const isScrubbingRef = useRef(false);
   const isHolding2x = useRef(false);
   const epStreamsCache = useRef({});
   const epSourcesCache = useRef({});
-
-  // Reset video readiness state on episode or video stream change
-  useEffect(() => {
-    setIsVideoReady(false);
-  }, [currentEp, videoStreamUrl]);
 
   // Compute real dynamic video quality label
   const activeQualityLabel = useMemo(() => {
@@ -1777,14 +1768,12 @@ function ShotItem({
       >
         {/* 9:16 Video Player or High-Res Poster */}
         <View style={StyleSheet.absoluteFillObject}>
-          {/* Base Layer: High-Res Poster displayed until video is actively rendering */}
-          <View style={[StyleSheet.absoluteFillObject, { opacity: isVideoReady ? 0 : 1 }]} pointerEvents="none">
-            <SafeImage
-              uri={item.poster_url}
-              style={StyleSheet.absoluteFillObject}
-              resizeMode="contain"
-            />
-          </View>
+          {/* Base Layer: High-Res Poster ALWAYS rendered so screen is NEVER black */}
+          <SafeImage
+            uri={item.poster_url}
+            style={StyleSheet.absoluteFillObject}
+            resizeMode="contain"
+          />
 
           {/* Dedicated Hardware Video Player Stream (Expo Video Player, identical to movies player) */}
           {Boolean(videoStreamUrl && isActive) && (
@@ -1804,7 +1793,6 @@ function ShotItem({
                   setPlaybackProgress(Math.min(1, Math.max(0, currentTime / duration)));
                 }
               }}
-              onVideoReady={() => setIsVideoReady(true)}
               playerRef={activePlayerRef}
             />
           )}
@@ -7922,7 +7910,6 @@ function MovieflixIntroLoadingScreen({
         <VideoView
           style={StyleSheet.absoluteFill}
           player={introPlayer}
-          surfaceType={Platform.OS === 'android' ? 'textureView' : 'surfaceView'}
           nativeControls={false}
           allowsFullscreen={false}
           contentFit="contain"
@@ -8901,11 +8888,13 @@ function ReelCustomPlayer({
       */}
       <VideoView
         ref={videoViewRef}
-        key={`main-video-${videoUrl}`}
-        style={StyleSheet.absoluteFillObject}
+        style={[
+          StyleSheet.absoluteFill,
+          Platform.OS === 'web'
+            ? { width: '100%', height: '100%', objectFit: contentFitMode }
+            : { width: '100%', height: '100%' },
+        ]}
         player={player}
-        surfaceType={Platform.OS === 'android' ? 'textureView' : 'surfaceView'}
-        useExoShutter={true}
         nativeControls={false}
         allowsFullscreen={false}
         allowsPictureInPicture={true}
