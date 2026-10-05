@@ -590,7 +590,7 @@ const SafeImage = React.memo(function SafeImage({ uri, style, resizeMode = 'cove
         contentFit={resizeMode === 'contain' ? 'contain' : (resizeMode || 'cover')}
         contentPosition={contentPosition}
         cachePolicy="memory-disk"
-        transition={150}
+        transition={0}
       />
     );
   }
@@ -630,7 +630,7 @@ const SafeImage = React.memo(function SafeImage({ uri, style, resizeMode = 'cove
           contentFit={resizeMode === 'contain' ? 'contain' : (resizeMode || 'cover')}
           contentPosition={contentPosition}
           cachePolicy="memory-disk"
-          transition={150}
+          transition={0}
         />
       );
     }
@@ -3109,28 +3109,22 @@ function ReelApp() {
     return () => clearInterval(interval);
   }, [homeCategory, isSearching, heroList.length]);
 
-  // Butter-smooth pure crossfade on hero poster change
-  const heroFadeAnim = useRef(new Animated.Value(1)).current;
-  const heroContentSlideAnim = useRef(new Animated.Value(0)).current;
+  // Dedicated per-image crossfade opacities for local hero posters in the back (zero delay, pure image dissolve)
+  const heroOpacities = useRef(
+    CURATED_HERO_ITEMS.map((_, i) => new Animated.Value(i === 0 ? 1 : 0))
+  ).current;
 
   useEffect(() => {
-    heroFadeAnim.setValue(0);
-    heroContentSlideAnim.setValue(6);
-
-    Animated.parallel([
-      Animated.timing(heroFadeAnim, {
-        toValue: 1,
-        duration: 500,
+    const activeIdx = heroIndex % CURATED_HERO_ITEMS.length;
+    const animations = CURATED_HERO_ITEMS.map((_, idx) =>
+      Animated.timing(heroOpacities[idx], {
+        toValue: idx === activeIdx ? 1 : 0,
+        duration: 650,
         easing: Easing.inOut(Easing.ease),
         useNativeDriver: true,
-      }),
-      Animated.timing(heroContentSlideAnim, {
-        toValue: 0,
-        duration: 420,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }),
-    ]).start();
+      })
+    );
+    Animated.parallel(animations).start();
   }, [heroIndex]);
 
   // Always load new content randomly without duplicates in explore grid
@@ -3493,14 +3487,13 @@ function ReelApp() {
         return res;
       };
 
-      // 1. Hero List (Curated hero items + Banner items from home)
-      const bannerItems = serverSectionMap['Banner'] || [];
-      const newHero = bannerItems.length > 0 ? dedupList([...bannerItems, ...CURATED_HERO_ITEMS]).slice(0, 8) : CURATED_HERO_ITEMS;
-      setHeroList(newHero);
+      // 1. Hero List (Curated local hero items: Wednesday, Squid Game, Money Heist, Demon Slayer)
+      setHeroList(CURATED_HERO_ITEMS);
 
-      // 2. Trending Now (Popular Movies)
+      // 2. Trending Now (Popular Movies + Banner items + Trending Now)
       const popMovies = serverSectionMap['Popular Movie'] || [];
-      const trendingPool = dedupList([...popMovies, ...TRENDING_NOW]);
+      const bannerItems = serverSectionMap['Banner'] || [];
+      const trendingPool = dedupList([...popMovies, ...bannerItems, ...TRENDING_NOW]);
       const newTrending = trendingPool.slice(0, 18);
       setTrendingNow(newTrending);
 
@@ -5049,7 +5042,7 @@ function ReelApp() {
   };
   // ─────────────────────────────────────────────────────────────────────────
 
-  const heroItem = heroList[heroIndex] || heroList[0];
+  const heroItem = heroList[heroIndex % (heroList.length || 1)] || heroList[0];
 
   // ─── NATIVE (APK) ONBOARDING & AUTH GATE ─────────────────────────────────
   if (Platform.OS !== 'web') {
@@ -5986,49 +5979,51 @@ function ReelApp() {
               {/* HERO BANNER SECTION (CLASSIC FULL-BLEED CINEMATIC BANNER) */}
               {heroItem && homeCategory === 'All' && (
                 <View style={styles.heroSection}>
-                  {/* Full-Bleed Animated Cinematic Poster Banner */}
-                  <Animated.View
-                    style={[
-                      StyleSheet.absoluteFillObject,
-                      {
-                        opacity: heroFadeAnim,
-                      },
-                    ]}
-                  >
-                    <SafeImage
-                      key={`hero-poster-${heroItem?.slug || heroIndex}`}
-                      uri={heroItem.poster_url}
-                      style={styles.heroPosterImage}
-                      resizeMode="cover"
-                      contentPosition="center"
-                    />
-                    {/* Top gradient for status bar / header clarity */}
-                    <LinearGradient
-                      colors={['rgba(10, 10, 10, 0.75)', 'rgba(10, 10, 10, 0.25)', 'transparent']}
-                      locations={[0, 0.35, 0.7]}
-                      style={styles.heroTopFade}
-                    />
-                    {/* Bottom gradient fade into page background */}
-                    <LinearGradient
-                      colors={['transparent', 'rgba(10, 10, 10, 0.3)', 'rgba(10, 10, 10, 0.85)', '#0a0a0a']}
-                      locations={[0, 0.45, 0.8, 1]}
-                      style={styles.heroBottomFade}
-                    />
-                  </Animated.View>
+                  {/* Full-Bleed Animated Local Poster Banner Layers (Only images animate in back) */}
+                  {CURATED_HERO_ITEMS.map((item, idx) => {
+                    const isCurrent = (heroIndex % CURATED_HERO_ITEMS.length) === idx;
+                    return (
+                      <Animated.View
+                        key={`hero-bg-${item.slug || idx}`}
+                        pointerEvents="none"
+                        style={[
+                          StyleSheet.absoluteFillObject,
+                          {
+                            opacity: heroOpacities[idx],
+                            zIndex: isCurrent ? 1 : 0,
+                          },
+                        ]}
+                      >
+                        <SafeImage
+                          uri={item.poster_url}
+                          style={styles.heroPosterImage}
+                          resizeMode="cover"
+                          contentPosition="center"
+                        />
+                      </Animated.View>
+                    );
+                  })}
+
+                  {/* Top gradient for status bar / header clarity */}
+                  <LinearGradient
+                    colors={['rgba(10, 10, 10, 0.75)', 'rgba(10, 10, 10, 0.25)', 'transparent']}
+                    locations={[0, 0.35, 0.7]}
+                    style={styles.heroTopFade}
+                    pointerEvents="none"
+                  />
+                  {/* Bottom gradient fade into page background */}
+                  <LinearGradient
+                    colors={['transparent', 'rgba(10, 10, 10, 0.3)', 'rgba(10, 10, 10, 0.85)', '#0a0a0a']}
+                    locations={[0, 0.45, 0.8, 1]}
+                    style={styles.heroBottomFade}
+                    pointerEvents="none"
+                  />
 
                   {/* Atmospheric Smoke & Mist Visual Effect */}
                   <HeroSmokeEffect />
 
-                  {/* Hero Information Overlaid At Bottom */}
-                  <Animated.View
-                    style={[
-                      styles.heroContent,
-                      {
-                        opacity: heroFadeAnim,
-                        transform: [{ translateY: heroContentSlideAnim }],
-                      },
-                    ]}
-                  >
+                  {/* Hero Information Overlaid At Bottom - Stable & Fixed, NO BOUNCE */}
+                  <View style={styles.heroContent}>
                     <Text numberOfLines={isDesktop ? 2 : 1} style={[styles.heroTitleText, !isDesktop && { fontSize: 20, marginBottom: 3 }]}>
                       {heroItem.name}
                     </Text>
@@ -6049,7 +6044,7 @@ function ReelApp() {
                       </Text>
                     )}
 
-                    {/* Hero Action Buttons */}
+                    {/* Hero Action Buttons - Rock solid, NO BOUNCE */}
                     <View style={styles.heroActionsRow}>
                       <TouchableOpacity
                         style={styles.heroPlayButton}
@@ -6086,22 +6081,22 @@ function ReelApp() {
                     </View>
 
                     {/* Carousel Indicator Dots */}
-                    {heroList.length > 1 && (
+                    {CURATED_HERO_ITEMS.length > 1 && (
                       <View style={styles.heroDotsContainer}>
-                        {heroList.slice(0, 8).map((_, idx) => (
+                        {CURATED_HERO_ITEMS.map((_, idx) => (
                           <TouchableOpacity
                             key={`hero-dot-${idx}`}
                             onPress={() => setHeroIndex(idx)}
                             style={[
                               styles.heroDot,
-                              (heroIndex % Math.min(heroList.length, 8)) === idx ? styles.heroDotActive : styles.heroDotInactive,
+                              (heroIndex % CURATED_HERO_ITEMS.length) === idx ? styles.heroDotActive : styles.heroDotInactive,
                             ]}
                             hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
                           />
                         ))}
                       </View>
                     )}
-                  </Animated.View>
+                  </View>
                 </View>
               )}
 
