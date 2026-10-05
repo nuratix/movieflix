@@ -81,16 +81,15 @@ jobs:
           draft: false
           prerelease: false
           body: |
-            ### 🎬 Movieflix v${{ steps.prepare_apk.outputs.version }} Official Release APK
+            ### 🎬 Movieflix v${{ steps.prepare_apk.outputs.version }} Official Production Release APK
 
-            Built automatically via **GitHub Actions Cloud**!
+            Official Production Build via **GitHub Actions Cloud**!
 
-            #### 🚀 What's New & Fixed in v${{ steps.prepare_apk.outputs.version }}:
-            * **Home Screen Widget Portrait Posters**: Bundled official high-definition portrait posters (Wednesday, Squid Game, Money Heist) with signature red ambient glow and zero cutoff.
-            * **Horizontal Season Scroll**: Season selection pill bar is now smoothly scrollable horizontally to easily browse all seasons.
-            * **"Me" Tab Notification Dot Fix**: Red indicator badge automatically and permanently dismisses when navigating to the Me tab.
-            * **In-App Updater Package Parsing Fix**: Hardened package integrity checks (>5MB) and direct CDN routing to ensure smooth updates without Android parsing errors.
-            * **EAS Updates Always-Check Channel**: Instant OTA sync configured for future seamless hotfixes.
+            #### 🚀 Release Notes (v${{ steps.prepare_apk.outputs.version }}):
+            * **Added Shorts**: Seamless 9:16 vertical short drama reels player with instant video playback, double-tap to like with floating heart animation, 2× fast-forward on long press, real database-synced likes, and share support.
+            * **Cleaned UI**: Refreshed navigation, official MovieFlix branding in header, removed mock counters, and polished edge-to-edge dark theme layout.
+            * **Revamped Homepage**: Ultra-smooth local hero poster background transitions (Wednesday, Squid Game, Money Heist, Demon Slayer), instant catalog loading with local caching, and stable hero action controls.
+            * **Zero Egress & Fast Delivery**: Direct CDN streaming architecture and optimized metadata caching.
           files: |
             output/movieflix-v${{ steps.prepare_apk.outputs.version }}.apk
         env:

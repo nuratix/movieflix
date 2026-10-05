@@ -5,10 +5,10 @@
 
 const GITHUB_OWNER = 'nuratix';
 const GITHUB_REPO = 'movieflix';
-const TARGET_VERSION = '1.1.6';
+const TARGET_VERSION = '1.1.7';
 
 /**
- * Compare two semver strings (e.g., "1.1.6" vs "1.1.5", or "v1.1.6" vs "1.1.5")
+ * Compare two semver strings (e.g., "1.1.7" vs "1.1.6", or "v1.1.7" vs "1.1.6")
  * Returns true if remoteVersion > currentVersion
  */
 function isNewerVersion(remoteVer, currentVer = TARGET_VERSION) {

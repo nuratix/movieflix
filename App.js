@@ -4331,8 +4331,8 @@ function ReelApp() {
       );
     } else if (isDownloadPageOpen) {
       updateWebMetaTags(
-        'Download MovieFlix APK v1.1.6 (Official) - Free Android Movies & TV App',
-        'Download official MovieFlix Android APK (v1.1.6). Stream and download unlimited 4K/1080p movies, TV series, anime, and shorts with multi-audio dubs and zero ads. 100% Safe & Verified.',
+        'Download MovieFlix APK v1.1.7 (Official) - Free Android Movies & TV App',
+        'Download official MovieFlix Android APK (v1.1.7). Stream and download unlimited 4K/1080p movies, TV series, anime, and shorts with multi-audio dubs and zero ads. 100% Safe & Verified.',
         'https://movieflix-pi-six.vercel.app/assets/og-banner.png',
         'https://movieflix-pi-six.vercel.app/download'
       );
@@ -4358,7 +4358,7 @@ function ReelApp() {
       updateWebMetaTags(title, desc, img, url);
     } else {
       updateWebMetaTags(
-        'MovieFlix - Watch & Download Free Movies, TV Series & Official APK (v1.1.6)',
+        'MovieFlix - Watch & Download Free Movies, TV Series & Official APK (v1.1.7)',
         'Stream and download thousands of HD movies, web series, Hindi dubbed blockbusters, and anime in 4K/1080p with zero ads. Download the official MovieFlix Android APK.',
         'https://movieflix-pi-six.vercel.app/assets/og-banner.png',
         'https://movieflix-pi-six.vercel.app/'
@@ -7691,7 +7691,7 @@ function ReelApp() {
                   Install Movieflix APK for a better experience
                 </Text>
                 <Text style={styles.webInstallSubtitle} numberOfLines={1}>
-                  Tap to download latest v1.1.6 · Faster stream · 0 ads
+                  Tap to download latest v1.1.7 · Faster stream · 0 ads
                 </Text>
               </View>
               <View style={styles.webInstallBtn}>

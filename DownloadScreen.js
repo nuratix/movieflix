@@ -57,8 +57,8 @@ export default function DownloadScreen({
   const isTablet = windowWidth >= 600 && windowWidth < 900;
 
   const [releaseInfo, setReleaseInfo] = useState({
-    version: '1.1.6',
-    tag: 'v1.1.6',
+    version: '1.1.7',
+    tag: 'v1.1.7',
     sizeFormatted: '98 MB',
     developer: 'movieflix',
     ageRating: '18+',

@@ -18,7 +18,7 @@ function getJwtSecret() {
   return secret;
 }
 
-const TARGET_VERSION = '1.1.6';
+const TARGET_VERSION = '1.1.7';
 
 // Rate limiting for APK downloads to prevent flooding
 const downloadRateLimitMap = new Map();
@@ -100,7 +100,7 @@ async function ensureTables(sql) {
         id SERIAL PRIMARY KEY,
         user_id INTEGER REFERENCES mf_users(id) ON DELETE SET NULL,
         user_email VARCHAR(255) NOT NULL,
-        version VARCHAR(50) DEFAULT '1.1.6',
+        version VARCHAR(50) DEFAULT '1.1.7',
         ip_address VARCHAR(100),
         user_agent TEXT,
         downloaded_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
