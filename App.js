@@ -1921,9 +1921,10 @@ function buildPureHtmlShotsPage({ initialShots, apiBase, isMuted, targetShortId,
 
         video.addEventListener('error', function(err) {
           console.warn('Video error on source:', video.src, err);
-          if (video.src && video.src.indexOf('/api/proxy?url=') !== -1 && item._rawUrl) {
-            console.log('Falling back to direct raw URL');
-            video.src = item._rawUrl;
+          if (video.src && video.src.indexOf('/api/proxy?url=') === -1 && item._rawUrl) {
+            console.log('Falling back to proxy URL');
+            var proxied = API_BASE + '/api/proxy?url=' + encodeURIComponent(item._rawUrl);
+            video.src = proxied;
             video.play().catch(function() {});
             return;
           }
@@ -2204,9 +2205,8 @@ function buildPureHtmlShotsPage({ initialShots, apiBase, isMuted, targetShortId,
           var raw = data && data.sources && data.sources[0] && data.sources[0].url;
           if (raw) {
             item._rawUrl = raw;
-            var proxied = API_BASE + '/api/proxy?url=' + encodeURIComponent(raw);
-            streamCache[key] = proxied;
-            return proxied;
+            streamCache[key] = raw;
+            return raw;
           }
         } catch (e) {
           console.warn('Fetch stream error:', e);
@@ -2501,7 +2501,7 @@ function ShotsFeedView({
         ref={webViewRef}
         source={{
           html: shotsHtml,
-          baseUrl: 'https://movieflix-pi-six.vercel.app',
+          baseUrl: 'https://netfilm.world',
         }}
         style={{ flex: 1, backgroundColor: '#000000' }}
         containerStyle={{ backgroundColor: '#000000' }}
