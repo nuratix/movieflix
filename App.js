@@ -2205,8 +2205,10 @@ function buildPureHtmlShotsPage({ initialShots, apiBase, isMuted, targetShortId,
           var raw = data && data.sources && data.sources[0] && data.sources[0].url;
           if (raw) {
             item._rawUrl = raw;
-            streamCache[key] = raw;
-            return raw;
+            var isWebBrowser = typeof window !== 'undefined' && (!window.ReactNativeWebView);
+            var streamUrl = isWebBrowser ? (API_BASE + '/api/proxy?url=' + encodeURIComponent(raw)) : raw;
+            streamCache[key] = streamUrl;
+            return streamUrl;
           }
         } catch (e) {
           console.warn('Fetch stream error:', e);
@@ -3109,22 +3111,25 @@ function ReelApp() {
     return () => clearInterval(interval);
   }, [homeCategory, isSearching, heroList.length]);
 
-  // Dedicated per-image crossfade opacities for local hero posters in the back (zero delay, pure image dissolve)
-  const heroOpacities = useRef(
-    CURATED_HERO_ITEMS.map((_, i) => new Animated.Value(i === 0 ? 1 : 0))
-  ).current;
+  // Smooth crossfade animation for local hero posters in the back
+  const [activeHeroIdx, setActiveHeroIdx] = useState(0);
+  const [prevHeroIdx, setPrevHeroIdx] = useState(null);
+  const heroFadeAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
-    const activeIdx = heroIndex % CURATED_HERO_ITEMS.length;
-    const animations = CURATED_HERO_ITEMS.map((_, idx) =>
-      Animated.timing(heroOpacities[idx], {
-        toValue: idx === activeIdx ? 1 : 0,
-        duration: 650,
-        easing: Easing.inOut(Easing.ease),
-        useNativeDriver: true,
-      })
-    );
-    Animated.parallel(animations).start();
+    const nextIdx = heroIndex % CURATED_HERO_ITEMS.length;
+    if (nextIdx === activeHeroIdx) return;
+    setPrevHeroIdx(activeHeroIdx);
+    setActiveHeroIdx(nextIdx);
+    heroFadeAnim.setValue(0);
+    Animated.timing(heroFadeAnim, {
+      toValue: 1,
+      duration: 500,
+      easing: Easing.inOut(Easing.ease),
+      useNativeDriver: Platform.OS !== 'web',
+    }).start(() => {
+      setPrevHeroIdx(null);
+    });
   }, [heroIndex]);
 
   // Always load new content randomly without duplicates in explore grid
@@ -4325,17 +4330,24 @@ function ReelApp() {
       );
     } else if (isDownloadPageOpen) {
       updateWebMetaTags(
-        'Download MovieFlix Android APK (v1.1.6) - Free Movies & TV Shows',
-        'Download the official MovieFlix Android app. Stream & download movies and series in 4K/1080p offline with zero ads.',
+        'Download MovieFlix APK v1.1.6 (Official) - Free Android Movies & TV App',
+        'Download official MovieFlix Android APK (v1.1.6). Stream and download unlimited 4K/1080p movies, TV series, anime, and shorts with multi-audio dubs and zero ads. 100% Safe & Verified.',
         'https://movieflix-pi-six.vercel.app/assets/og-banner.png',
         'https://movieflix-pi-six.vercel.app/download'
       );
     } else if (isPrivacyPageOpen) {
       updateWebMetaTags(
-        'Privacy Policy - MovieFlix',
-        'MovieFlix is built on zero tracking, zero personal data collection, and 100% user privacy. Read our transparent privacy policy.',
+        'Privacy Policy - MovieFlix Official Streaming Platform',
+        'Read the MovieFlix Privacy Policy. Learn about our strict zero-tracking principles, encrypted local storage, no-log guarantee, and user data protections.',
         'https://movieflix-pi-six.vercel.app/assets/og-banner.png',
         'https://movieflix-pi-six.vercel.app/privacy'
+      );
+    } else if (mainTab === 'Shots') {
+      updateWebMetaTags(
+        'MovieFlix Shorts - Endless 9:16 Vertical Short Dramas & Viral Reels',
+        'Watch trending vertical 9:16 short dramas, viral mini-episodes, romance reels, and thrilling cliffhangers on MovieFlix Shorts. Instant playback with zero buffering.',
+        'https://movieflix-pi-six.vercel.app/assets/og-banner.png',
+        'https://movieflix-pi-six.vercel.app/shorts'
       );
     } else if (detailMovie) {
       const title = `${detailMovie.name || 'Movie'} - Watch & Download Free on MovieFlix`;
@@ -4351,7 +4363,7 @@ function ReelApp() {
         'https://movieflix-pi-six.vercel.app/'
       );
     }
-  }, [isDownloadPageOpen, isPrivacyPageOpen, is404PageOpen, detailMovie]);
+  }, [isDownloadPageOpen, isPrivacyPageOpen, is404PageOpen, mainTab, detailMovie]);
 
   // 2. Handle Web Browser Back / Forward History (popstate)
   useEffect(() => {
@@ -5980,29 +5992,43 @@ function ReelApp() {
               {heroItem && homeCategory === 'All' && (
                 <View style={styles.heroSection}>
                   {/* Full-Bleed Animated Local Poster Banner Layers (Only images animate in back) */}
-                  {CURATED_HERO_ITEMS.map((item, idx) => {
-                    const isCurrent = (heroIndex % CURATED_HERO_ITEMS.length) === idx;
-                    return (
-                      <Animated.View
-                        key={`hero-bg-${item.slug || idx}`}
-                        pointerEvents="none"
-                        style={[
-                          StyleSheet.absoluteFillObject,
-                          {
-                            opacity: heroOpacities[idx],
-                            zIndex: isCurrent ? 1 : 0,
-                          },
-                        ]}
-                      >
-                        <SafeImage
-                          uri={item.poster_url}
-                          style={styles.heroPosterImage}
-                          resizeMode="cover"
-                          contentPosition="center"
-                        />
-                      </Animated.View>
-                    );
-                  })}
+                  {prevHeroIdx !== null && CURATED_HERO_ITEMS[prevHeroIdx] && (
+                    <View
+                      key={`hero-bg-prev-${prevHeroIdx}`}
+                      pointerEvents="none"
+                      style={[
+                        StyleSheet.absoluteFillObject,
+                        { zIndex: 0 },
+                      ]}
+                    >
+                      <SafeImage
+                        uri={CURATED_HERO_ITEMS[prevHeroIdx].poster_url}
+                        style={styles.heroPosterImage}
+                        resizeMode="cover"
+                        contentPosition="center"
+                      />
+                    </View>
+                  )}
+                  {CURATED_HERO_ITEMS[activeHeroIdx] && (
+                    <Animated.View
+                      key={`hero-bg-active-${activeHeroIdx}`}
+                      pointerEvents="none"
+                      style={[
+                        StyleSheet.absoluteFillObject,
+                        {
+                          opacity: heroFadeAnim,
+                          zIndex: 1,
+                        },
+                      ]}
+                    >
+                      <SafeImage
+                        uri={CURATED_HERO_ITEMS[activeHeroIdx].poster_url}
+                        style={styles.heroPosterImage}
+                        resizeMode="cover"
+                        contentPosition="center"
+                      />
+                    </Animated.View>
+                  )}
 
                   {/* Top gradient for status bar / header clarity */}
                   <LinearGradient

@@ -142,6 +142,20 @@ function getCorsOrigin(origin) {
   return 'https://movieflix-pi-six.vercel.app';
 }
 
+export function extractTargetUrl(reqUrl) {
+  if (!reqUrl) return null;
+  const idx = reqUrl.indexOf('url=');
+  if (idx === -1) return null;
+  const raw = reqUrl.slice(idx + 4);
+  try {
+    const decoded = decodeURIComponent(raw);
+    if (decoded.startsWith('http://') || decoded.startsWith('https://')) {
+      return decoded;
+    }
+  } catch (_) {}
+  return raw;
+}
+
 // ----------------------------------------------------
 // Edge Runtime Handler (Vercel Production)
 // ----------------------------------------------------
@@ -161,8 +175,7 @@ async function handleEdge(req) {
     });
   }
 
-  const { searchParams } = new URL(req.url);
-  const targetUrl = searchParams.get('url');
+  const targetUrl = extractTargetUrl(req.url);
 
   if (!targetUrl || !isSafeUrl(targetUrl)) {
     return new Response('Access denied: target URL is not in the approved media allowlist.', {
@@ -245,8 +258,7 @@ async function handleNode(req, res) {
     return;
   }
 
-  const parsedUrl = new URL(req.url, 'http://localhost');
-  const targetUrl = parsedUrl.searchParams.get('url');
+  const targetUrl = extractTargetUrl(req.url);
 
   if (!targetUrl || !isSafeUrl(targetUrl)) {
     res.statusCode = 403;

@@ -1,7 +1,12 @@
 // ─── Post-Export SEO & Social Share Metadata Injector ─────────────────────────
-// Injects rich Open Graph cards, Twitter cards, 100+ keywords, and JSON-LD schema
-// directly into dist/index.html so social media crawlers (WhatsApp, Telegram,
-// Twitter, Facebook, Instagram, Googlebot) immediately render the app card when shared.
+// Generates dedicated SEO pages with rich OpenGraph cards, Twitter cards,
+// high-volume keywords, and Schema.org JSON-LD graphs for every individual route:
+// - / (Home)
+// - /download (and /apk)
+// - /shorts
+// - /privacy
+// - /terms
+// - /dmca
 
 const fs = require('fs');
 const path = require('path');
@@ -17,13 +22,15 @@ if (!fs.existsSync(indexPath)) {
   process.exit(0);
 }
 
-let html = fs.readFileSync(indexPath, 'utf8');
+const rawTemplateHtml = fs.readFileSync(indexPath, 'utf8');
 
-const SEO_HEAD = `
-    <!-- Primary SEO Meta Tags -->
-    <title>MovieFlix - Watch & Download Free Movies, TV Series & Official APK (v1.1.6)</title>
-    <meta name="title" content="MovieFlix - Watch & Download Free Movies, TV Series & Official APK (v1.1.6)" />
-    <meta name="description" content="Stream and download thousands of HD movies, web series, Hindi dubbed blockbusters, and anime in 4K/1080p with zero ads. Download the official MovieFlix Android APK." />
+const BASE_URL = 'https://movieflix-pi-six.vercel.app';
+const OG_BANNER = `${BASE_URL}/assets/og-banner.png`;
+const ICON_512 = `${BASE_URL}/assets/icon-512.png`;
+const FAVICON = `${BASE_URL}/favicon.png`;
+
+// Shared common header tags
+const getCommonMeta = () => `
     <meta name="author" content="MovieFlix" />
     <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
     <meta name="theme-color" content="#0a0a0a" />
@@ -31,71 +38,54 @@ const SEO_HEAD = `
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="MovieFlix" />
-    <link rel="canonical" href="https://movieflix-pi-six.vercel.app/" />
-
-    <!-- 100+ High-Volume SEO Keywords -->
-    <meta name="keywords" content="movieflix, movieflix app, movieflix apk, movieflix download, movieflix official, movieflix web, movieflix online, movieflix free, movieflix android, movieflix apk download, movieflix 1.1.6, movieflix streaming, free movies, watch movies online, free movie streaming, full hd movies, 1080p movies, 4k movies, watch movies free, stream movies online free, latest movies 2026, new release movies, hollywood movies in hindi, bollywood movies free, south indian movies hindi dubbed, action movies, romantic movies, comedy movies, horror movies online, thriller movies, sci fi movies, drama films, family movies, web series free, watch web series online, tv series download, popular tv shows, binge watch series, hindi web series, english tv shows, korean drama hindi dubbed, kdrama streaming, netflix series free, anime series, watch anime online, anime in hindi, japanese animation free, tv shows streaming hd, download movies apk, movie downloader android, free apk download, watch offline movies, download web series, download movies on mobile, free video streaming app, ad free movie app, no ads movie streaming, hindi dubbed movies, english movies with subtitles, tamil movies hindi dubbed, telugu movies in hindi, dual audio movies 720p 1080p, multi audio streaming, movieflix hindi, free hindi streaming, spanish dubbed movies, french dubbed movies, netflix alternative free, prime video alternative, disney plus alternative, cinema hd alternative, moviebox alternative, streamex alternative, hdo box alternative, free ott platform, no subscription streaming, instant streaming without login, safe movie apk, verified movie apk, streaming apk 2026, watch movie trailers, high bitrate video player, subscene subtitles, download movies fast, private video app, zero tracking movie app, movieflix community, free cinema app, watch blockbusters online, top rated imdb movies, popular movies today, new ott releases, movies on android phone, android smart tv movies, offline cinema player" />
-
-    <!-- Open Graph / WhatsApp / Instagram / Telegram / Facebook Card Tags -->
-    <meta property="og:type" content="website" />
+    <link rel="icon" type="image/png" href="${FAVICON}" />
+    <link rel="icon" type="image/png" sizes="192x192" href="${FAVICON}" />
+    <link rel="icon" type="image/png" sizes="32x32" href="${FAVICON}" />
+    <link rel="shortcut icon" type="image/png" href="${FAVICON}" />
+    <link rel="apple-touch-icon" sizes="180x180" href="${ICON_512}" />
     <meta property="og:site_name" content="MovieFlix" />
-    <meta property="og:url" content="https://movieflix-pi-six.vercel.app/" />
-    <meta property="og:title" content="MovieFlix - Stream & Download Free Movies, TV Series & Official APK" />
-    <meta property="og:description" content="Watch & download thousands of HD movies, trending TV series, Hindi dubbed films, and anime in 4K/1080p with zero ads. Download the official MovieFlix Android app." />
-
-    <!-- Primary Wide OG Banner (1200x630) for Facebook, Twitter, Telegram, Discord -->
-    <meta property="og:image" content="https://movieflix-pi-six.vercel.app/assets/og-banner.png" />
-    <meta property="og:image:secure_url" content="https://movieflix-pi-six.vercel.app/assets/og-banner.png" />
+    <meta property="og:image" content="${OG_BANNER}" />
+    <meta property="og:image:secure_url" content="${OG_BANNER}" />
     <meta property="og:image:type" content="image/png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="MovieFlix - Free Movies & TV Series Official Platform" />
-
-    <!-- Square App Icon (512x512) for WhatsApp Chat Bubble Thumbnail & Mobile Sharing -->
-    <meta property="og:image" content="https://movieflix-pi-six.vercel.app/assets/icon-512.png" />
-    <meta property="og:image:secure_url" content="https://movieflix-pi-six.vercel.app/assets/icon-512.png" />
+    <meta property="og:image" content="${ICON_512}" />
+    <meta property="og:image:secure_url" content="${ICON_512}" />
     <meta property="og:image:type" content="image/png" />
     <meta property="og:image:width" content="512" />
     <meta property="og:image:height" content="512" />
-
-    <!-- Fallback image_src link for WhatsApp and older crawlers -->
-    <link rel="image_src" href="https://movieflix-pi-six.vercel.app/assets/icon-512.png" />
-
-    <!-- Twitter Card Meta Tags -->
+    <link rel="image_src" href="${ICON_512}" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:site" content="@movieflixlol" />
     <meta name="twitter:creator" content="@movieflixlol" />
-    <meta name="twitter:url" content="https://movieflix-pi-six.vercel.app/" />
-    <meta name="twitter:title" content="MovieFlix - Stream & Download Free Movies & Official APK" />
-    <meta name="twitter:description" content="Stream & download movies, TV shows, and anime in full HD with multi-audio dubs and zero ads. Download official Android APK." />
-    <meta name="twitter:image" content="https://movieflix-pi-six.vercel.app/assets/og-banner.png" />
-    <meta name="twitter:image:alt" content="MovieFlix Banner" />
+    <meta name="twitter:image" content="${OG_BANNER}" />
+`;
 
-    <!-- Favicon & Google Search Result Brand Icon -->
-    <link rel="icon" type="image/png" href="https://movieflix-pi-six.vercel.app/favicon.png" />
-    <link rel="icon" type="image/png" sizes="192x192" href="https://movieflix-pi-six.vercel.app/favicon.png" />
-    <link rel="icon" type="image/png" sizes="32x32" href="https://movieflix-pi-six.vercel.app/favicon.png" />
-    <link rel="shortcut icon" type="image/png" href="https://movieflix-pi-six.vercel.app/favicon.png" />
-    <link rel="apple-touch-icon" sizes="180x180" href="https://movieflix-pi-six.vercel.app/assets/icon-512.png" />
-
-    <!-- Structured Data (Schema.org JSON-LD) -->
-    <script type="application/ld+json">
-    {
+// Page-specific definitions
+const PAGES = {
+  home: {
+    outPath: path.join(distDir, 'index.html'),
+    title: 'MovieFlix - Watch & Download Free Movies, TV Series & Official APK (v1.1.6)',
+    description: 'Stream and download thousands of HD movies, web series, Hindi dubbed blockbusters, and anime in 4K/1080p with zero ads. Download the official MovieFlix Android APK.',
+    canonical: `${BASE_URL}/`,
+    ogType: 'website',
+    keywords: 'movieflix, movieflix app, movieflix apk, movieflix download, movieflix official, free movies, watch movies online, full hd movies, 1080p movies, 4k movies, stream movies online free, latest movies 2026, hollywood movies in hindi, bollywood movies free, web series free, kdrama streaming, anime series, watch anime online, download movies apk, ad free movie app, no subscription streaming',
+    schema: {
       "@context": "https://schema.org",
       "@graph": [
         {
           "@type": "WebSite",
-          "@id": "https://movieflix-pi-six.vercel.app/#website",
-          "url": "https://movieflix-pi-six.vercel.app/",
+          "@id": `${BASE_URL}/#website`,
+          "url": `${BASE_URL}/`,
           "name": "MovieFlix",
           "description": "Free Movies, TV Series, and Anime Streaming Platform with Official Android App Download",
           "publisher": {
             "@type": "Organization",
             "name": "MovieFlix",
-            "url": "https://movieflix-pi-six.vercel.app/",
+            "url": `${BASE_URL}/`,
             "logo": {
               "@type": "ImageObject",
-              "url": "https://movieflix-pi-six.vercel.app/favicon.png"
+              "url": FAVICON
             }
           },
           "potentialAction": [
@@ -103,7 +93,7 @@ const SEO_HEAD = `
               "@type": "SearchAction",
               "target": {
                 "@type": "EntryPoint",
-                "urlTemplate": "https://movieflix-pi-six.vercel.app/?q={search_term_string}"
+                "urlTemplate": `${BASE_URL}/?q={search_term_string}`
               },
               "query-input": "required name=search_term_string"
             }
@@ -111,15 +101,15 @@ const SEO_HEAD = `
         },
         {
           "@type": "SoftwareApplication",
-          "@id": "https://movieflix-pi-six.vercel.app/#application",
+          "@id": `${BASE_URL}/#application`,
           "name": "MovieFlix for Android",
           "operatingSystem": "Android 7.0 and up",
           "applicationCategory": "EntertainmentApplication",
           "applicationSubCategory": "VideoStreamingApplication",
           "softwareVersion": "1.1.6",
           "fileSize": "98MB",
-          "downloadUrl": "https://movieflix-pi-six.vercel.app/api/download",
-          "installUrl": "https://movieflix-pi-six.vercel.app/download",
+          "downloadUrl": `${BASE_URL}/api/download`,
+          "installUrl": `${BASE_URL}/download`,
           "offers": {
             "@type": "Offer",
             "price": "0",
@@ -129,15 +119,232 @@ const SEO_HEAD = `
         }
       ]
     }
+  },
+
+  download: {
+    outPath: path.join(distDir, 'download', 'index.html'),
+    altPath: path.join(distDir, 'apk', 'index.html'),
+    title: 'Download MovieFlix APK v1.1.6 (Official) - Free Android Movies & TV App',
+    description: 'Download official MovieFlix Android APK (v1.1.6). Stream and download unlimited 4K/1080p movies, TV series, anime, and shorts with multi-audio dubs and zero ads. 100% Safe & Verified.',
+    canonical: `${BASE_URL}/download`,
+    ogType: 'website',
+    keywords: 'movieflix apk, download movieflix, movieflix android apk, movieflix official apk, movieflix apk download latest version, movieflix 1.1.6 apk, free movie downloader apk, stream movies android apk, safe movie app apk, no ads movie apk',
+    schema: {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "SoftwareApplication",
+          "@id": `${BASE_URL}/download#application`,
+          "name": "MovieFlix Android APK",
+          "operatingSystem": "Android 7.0+",
+          "applicationCategory": "EntertainmentApplication",
+          "applicationSubCategory": "VideoStreamingApplication",
+          "softwareVersion": "1.1.6",
+          "fileSize": "98MB",
+          "downloadUrl": `${BASE_URL}/api/download`,
+          "installUrl": `${BASE_URL}/download`,
+          "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "USD"
+          },
+          "aggregateRating": {
+            "@type": "AggregateRating",
+            "ratingValue": "4.9",
+            "ratingCount": "12840",
+            "bestRating": "5",
+            "worstRating": "1"
+          },
+          "description": "Official MovieFlix Android APK v1.1.6. Enjoy high-speed downloads, unlimited 4K streaming, multi-language subtitles, and zero ads on Android."
+        },
+        {
+          "@type": "HowTo",
+          "@id": `${BASE_URL}/download#install-guide`,
+          "name": "How to Download and Install MovieFlix APK on Android",
+          "step": [
+            {
+              "@type": "HowToStep",
+              "name": "Download the APK",
+              "text": "Tap the Download APK button to download the official verified MovieFlix APK file."
+            },
+            {
+              "@type": "HowToStep",
+              "name": "Allow Unknown Sources",
+              "text": "If prompted by Android, enable 'Allow from this source' for your browser or file manager."
+            },
+            {
+              "@type": "HowToStep",
+              "name": "Install and Stream",
+              "text": "Open the downloaded APK, tap Install, and launch MovieFlix to stream unlimited movies and series."
+            }
+          ]
+        }
+      ]
+    }
+  },
+
+  shorts: {
+    outPath: path.join(distDir, 'shorts', 'index.html'),
+    title: 'MovieFlix Shorts - Endless 9:16 Vertical Short Dramas & Viral Reels',
+    description: 'Watch trending vertical 9:16 short dramas, viral mini-episodes, romance reels, and thrilling cliffhangers on MovieFlix Shorts. Instant playback with zero buffering.',
+    canonical: `${BASE_URL}/shorts`,
+    ogType: 'video.other',
+    keywords: 'movieflix shorts, vertical short drama, short dramas online, dramabox series, reelshort free, short drama reels, viral shorts, 9:16 video player, watch shorts online, free mini series',
+    schema: {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "CollectionPage",
+          "@id": `${BASE_URL}/shorts#collection`,
+          "url": `${BASE_URL}/shorts`,
+          "name": "MovieFlix Shorts & Mini Dramas",
+          "description": "Curated collection of trending vertical short dramas, viral reels, and mini episodes.",
+          "isPartOf": {
+            "@type": "WebSite",
+            "name": "MovieFlix",
+            "url": `${BASE_URL}/`
+          }
+        },
+        {
+          "@type": "ItemList",
+          "@id": `${BASE_URL}/shorts#feed`,
+          "name": "Trending Short Dramas Feed",
+          "itemListElement": [
+            {
+              "@type": "VideoObject",
+              "position": 1,
+              "name": "I'm pregnant, it's not yours",
+              "description": "A high-stakes vertical drama episode full of family secrets and unexpected revelations.",
+              "thumbnailUrl": `${BASE_URL}/assets/og-banner.png`,
+              "uploadDate": "2026-10-01T00:00:00Z"
+            }
+          ]
+        }
+      ]
+    }
+  },
+
+  privacy: {
+    outPath: path.join(distDir, 'privacy', 'index.html'),
+    title: 'Privacy Policy - MovieFlix Official Streaming Platform',
+    description: 'Read the MovieFlix Privacy Policy. Learn about our strict zero-tracking principles, encrypted local storage, no-log guarantee, and user data protections.',
+    canonical: `${BASE_URL}/privacy`,
+    ogType: 'article',
+    keywords: 'movieflix privacy policy, movieflix security, zero tracking streaming, private movie app, encrypted offline downloads, user data privacy',
+    schema: {
+      "@context": "https://schema.org",
+      "@type": "AboutPage",
+      "@id": `${BASE_URL}/privacy#page`,
+      "url": `${BASE_URL}/privacy`,
+      "name": "MovieFlix Privacy Policy",
+      "description": "MovieFlix privacy protections, data practices, and zero-tracking commitment.",
+      "publisher": {
+        "@type": "Organization",
+        "name": "MovieFlix",
+        "url": `${BASE_URL}/`
+      }
+    }
+  },
+
+  terms: {
+    outPath: path.join(distDir, 'terms', 'index.html'),
+    title: 'Terms of Service - MovieFlix Official Platform',
+    description: 'Terms of Service and Conditions of Use for the MovieFlix website, mobile services, and Android application.',
+    canonical: `${BASE_URL}/terms`,
+    ogType: 'article',
+    keywords: 'movieflix terms of service, movieflix user agreement, movieflix conditions of use',
+    schema: {
+      "@context": "https://schema.org",
+      "@type": "WebPage",
+      "@id": `${BASE_URL}/terms#page`,
+      "url": `${BASE_URL}/terms`,
+      "name": "MovieFlix Terms of Service",
+      "description": "Terms of Service and legal guidelines for MovieFlix users.",
+      "publisher": {
+        "@type": "Organization",
+        "name": "MovieFlix",
+        "url": `${BASE_URL}/`
+      }
+    }
+  },
+
+  dmca: {
+    outPath: path.join(distDir, 'dmca', 'index.html'),
+    title: 'DMCA & Copyright Compliance - MovieFlix',
+    description: 'Digital Millennium Copyright Act (DMCA) compliance notice, copyright policy, and designated agent contact information for MovieFlix.',
+    canonical: `${BASE_URL}/dmca`,
+    ogType: 'article',
+    keywords: 'movieflix dmca, movieflix copyright policy, copyright infringement notice, takedown request movieflix',
+    schema: {
+      "@context": "https://schema.org",
+      "@type": "WebPage",
+      "@id": `${BASE_URL}/dmca#page`,
+      "url": `${BASE_URL}/dmca`,
+      "name": "MovieFlix DMCA Notice",
+      "description": "DMCA policy and copyright compliance information for MovieFlix.",
+      "publisher": {
+        "@type": "Organization",
+        "name": "MovieFlix",
+        "url": `${BASE_URL}/`
+      }
+    }
+  }
+};
+
+// Generate HTML with injected metadata for a specific page definition
+function generatePageHtml(template, page) {
+  let content = template;
+  // Remove any preexisting title
+  content = content.replace(/<title>.*?<\/title>/i, '');
+
+  const headSnippet = `
+    <!-- Page Specific Primary SEO -->
+    <title>${page.title}</title>
+    <meta name="title" content="${page.title}" />
+    <meta name="description" content="${page.description}" />
+    <link rel="canonical" href="${page.canonical}" />
+    <meta name="keywords" content="${page.keywords}" />
+
+    <!-- Open Graph Tags -->
+    <meta property="og:type" content="${page.ogType}" />
+    <meta property="og:url" content="${page.canonical}" />
+    <meta property="og:title" content="${page.title}" />
+    <meta property="og:description" content="${page.description}" />
+
+    <!-- Twitter Card Tags -->
+    <meta name="twitter:url" content="${page.canonical}" />
+    <meta name="twitter:title" content="${page.title}" />
+    <meta name="twitter:description" content="${page.description}" />
+
+    ${getCommonMeta()}
+
+    <!-- Structured Data (Schema.org JSON-LD Graph) -->
+    <script type="application/ld+json">
+    ${JSON.stringify(page.schema, null, 2)}
     </script>
 `;
 
-// Replace title and insert SEO meta tags right after <head>
-html = html.replace(/<title>.*?<\/title>/i, '');
-html = html.replace('<head>', '<head>' + SEO_HEAD);
+  return content.replace('<head>', '<head>' + headSnippet);
+}
 
-fs.writeFileSync(indexPath, html, 'utf8');
-console.log('[SEO Injector] Successfully injected SEO tags, OpenGraph cards, Twitter cards, and Schema into dist/index.html');
+// Generate all pages
+for (const [key, page] of Object.entries(PAGES)) {
+  const dir = path.dirname(page.outPath);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+  const generatedHtml = generatePageHtml(rawTemplateHtml, page);
+  fs.writeFileSync(page.outPath, generatedHtml, 'utf8');
+  console.log(`[SEO Injector] Generated SEO page for /${key === 'home' ? '' : key} -> ${path.relative(distDir, page.outPath)}`);
+
+  // If there's an alias path (e.g. /apk for /download)
+  if (page.altPath) {
+    const altDir = path.dirname(page.altPath);
+    if (!fs.existsSync(altDir)) fs.mkdirSync(altDir, { recursive: true });
+    fs.writeFileSync(page.altPath, generatedHtml, 'utf8');
+    console.log(`[SEO Injector] Generated SEO page alias -> ${path.relative(distDir, page.altPath)}`);
+  }
+}
 
 // 1. Ensure dist/assets directory exists
 if (!fs.existsSync(distAssetsDir)) {

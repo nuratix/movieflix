@@ -77,6 +77,30 @@
       "destination": "/api/og-image"
     },
     {
+      "source": "/download",
+      "destination": "/download/index.html"
+    },
+    {
+      "source": "/apk",
+      "destination": "/apk/index.html"
+    },
+    {
+      "source": "/shorts",
+      "destination": "/shorts/index.html"
+    },
+    {
+      "source": "/privacy",
+      "destination": "/privacy/index.html"
+    },
+    {
+      "source": "/terms",
+      "destination": "/terms/index.html"
+    },
+    {
+      "source": "/dmca",
+      "destination": "/dmca/index.html"
+    },
+    {
       "source": "/((?!api/|assets/|favicon\\.ico|sitemap\\.xml|robots\\.txt|404\\.html|.*\\.(?:png|jpg|jpeg|gif|svg|ico|webp|mp4|json|js|css|ttf|woff|woff2)$).*)",
       "destination": "/index.html"
     }
