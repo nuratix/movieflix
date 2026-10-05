@@ -118,6 +118,10 @@ async function fetchWithSafeRedirects(initialUrl, fetchOptions, maxRedirects = 3
   throw new Error('Too many redirects');
 }
 
+export const config = {
+  runtime: 'edge',
+};
+
 export default async function handler(req, res) {
   // If invoked in Node.js environment (Connect / Express / Metro dev server)
   if (res && typeof res.writeHead === 'function') {
@@ -227,7 +231,12 @@ async function handleEdge(req) {
     responseHeaders.set('Access-Control-Allow-Headers', '*');
     responseHeaders.set('Access-Control-Expose-Headers', 'Content-Range, Content-Length, Accept-Ranges');
 
-    return new Response(upstreamRes.body, {
+    const body =
+      req.method === 'HEAD' || upstreamRes.status === 204 || upstreamRes.status === 304
+        ? null
+        : upstreamRes.body;
+
+    return new Response(body, {
       status: upstreamRes.status,
       statusText: upstreamRes.statusText,
       headers: responseHeaders,

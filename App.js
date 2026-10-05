@@ -3493,7 +3493,8 @@ function ReelApp() {
       };
 
       // 1. Hero List (Curated local hero items: Wednesday, Squid Game, Money Heist, Demon Slayer)
-      setHeroList(CURATED_HERO_ITEMS);
+      const newHero = CURATED_HERO_ITEMS;
+      setHeroList(newHero);
 
       // 2. Trending Now (Popular Movies + Banner items + Trending Now)
       const popMovies = serverSectionMap['Popular Movie'] || [];
