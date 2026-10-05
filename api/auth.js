@@ -5,10 +5,7 @@ import crypto from 'crypto';
 function getJwtSecret() {
   const secret = process.env.JWT_SECRET;
   if (!secret) {
-    if (process.env.NODE_ENV === 'production' || process.env.VERCEL) {
-      throw new Error('Server configuration error: JWT_SECRET environment variable is missing.');
-    }
-    return 'dev_secret_only_local_movieflix_2026';
+    throw new Error('Server configuration error: JWT_SECRET environment variable is missing.');
   }
   return secret;
 }
@@ -393,11 +390,11 @@ export default async function handler(req, res) {
         if (sql) {
           try {
             const rows = await sql`
-              SELECT shot_id, COUNT(*)::int AS count
+              SELECT shot_id, COUNT(DISTINCT uid)::int AS count
               FROM (
-                SELECT shot_id FROM mf_shots_likes WHERE shot_id = ANY(${shotIds})
+                SELECT shot_id, ('u:' || user_id::text) AS uid FROM mf_shots_likes WHERE shot_id = ANY(${shotIds})
                 UNION ALL
-                SELECT shot_id FROM mf_shots_guest_likes WHERE shot_id = ANY(${shotIds})
+                SELECT shot_id, ('g:' || guest_id::text) AS uid FROM mf_shots_guest_likes WHERE shot_id = ANY(${shotIds})
               ) combined
               GROUP BY shot_id
             `;
@@ -658,6 +655,9 @@ export default async function handler(req, res) {
       try {
         const identifier = user ? `user:${user.id}` : (guestId ? `guest:${guestId}` : '');
         let currentCount = 1;
+        if (user && guestId) {
+          removeMemoryLike(shotId, `guest:${guestId}`);
+        }
         if (identifier) {
           currentCount = addMemoryLike(shotId, identifier);
         }
@@ -665,6 +665,12 @@ export default async function handler(req, res) {
         if (sql) {
           try {
             if (user) {
+              if (guestId) {
+                await sql`
+                  DELETE FROM mf_shots_guest_likes
+                  WHERE guest_id = ${guestId} AND shot_id = ${shotId}
+                `;
+              }
               await sql`
                 INSERT INTO mf_shots_likes (user_id, shot_id)
                 VALUES (${user.id}, ${shotId})
@@ -679,11 +685,11 @@ export default async function handler(req, res) {
             }
 
             const countRes = await sql`
-              SELECT COUNT(*)::int AS count
+              SELECT COUNT(DISTINCT uid)::int AS count
               FROM (
-                SELECT shot_id FROM mf_shots_likes WHERE shot_id = ${shotId}
+                SELECT ('u:' || user_id::text) AS uid FROM mf_shots_likes WHERE shot_id = ${shotId}
                 UNION ALL
-                SELECT shot_id FROM mf_shots_guest_likes WHERE shot_id = ${shotId}
+                SELECT ('g:' || guest_id::text) AS uid FROM mf_shots_guest_likes WHERE shot_id = ${shotId}
               ) combined
             `;
             if (countRes && countRes[0]?.count) {
@@ -721,6 +727,9 @@ export default async function handler(req, res) {
         if (identifier) {
           currentCount = removeMemoryLike(shotId, identifier);
         }
+        if (user && guestId) {
+          removeMemoryLike(shotId, `guest:${guestId}`);
+        }
 
         if (sql) {
           try {
@@ -729,6 +738,12 @@ export default async function handler(req, res) {
                 DELETE FROM mf_shots_likes
                 WHERE user_id = ${user.id} AND shot_id = ${shotId}
               `;
+              if (guestId) {
+                await sql`
+                  DELETE FROM mf_shots_guest_likes
+                  WHERE guest_id = ${guestId} AND shot_id = ${shotId}
+                `;
+              }
             } else if (guestId) {
               await sql`
                 DELETE FROM mf_shots_guest_likes
@@ -737,11 +752,11 @@ export default async function handler(req, res) {
             }
 
             const countRes = await sql`
-              SELECT COUNT(*)::int AS count
+              SELECT COUNT(DISTINCT uid)::int AS count
               FROM (
-                SELECT shot_id FROM mf_shots_likes WHERE shot_id = ${shotId}
+                SELECT ('u:' || user_id::text) AS uid FROM mf_shots_likes WHERE shot_id = ${shotId}
                 UNION ALL
-                SELECT shot_id FROM mf_shots_guest_likes WHERE shot_id = ${shotId}
+                SELECT ('g:' || guest_id::text) AS uid FROM mf_shots_guest_likes WHERE shot_id = ${shotId}
               ) combined
             `;
             if (countRes && countRes[0]?.count !== undefined) {

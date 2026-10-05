@@ -13,10 +13,7 @@ const GITHUB_TOKEN = process.env.GITHUB_TOKEN ? process.env.GITHUB_TOKEN.trim() 
 function getJwtSecret() {
   const secret = process.env.JWT_SECRET;
   if (!secret) {
-    if (process.env.NODE_ENV === 'production' || process.env.VERCEL) {
-      throw new Error('Server configuration error: JWT_SECRET environment variable is missing.');
-    }
-    return 'dev_secret_only_local_movieflix_2026';
+    throw new Error('Server configuration error: JWT_SECRET environment variable is missing.');
   }
   return secret;
 }

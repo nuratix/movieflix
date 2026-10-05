@@ -359,6 +359,9 @@ export default async function handler(req, res) {
     const cached = cacheMap.get(cacheKey);
     if (cached && Date.now() < cached.expiresAt) {
       res.setHeader('X-Cache', 'HIT');
+      if (['home', 'catalog', 'movies', 'tv-series', 'animation'].includes(endpoint)) {
+        res.setHeader('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300');
+      }
       return res.status(200).json(cached.data);
     }
   }
@@ -399,6 +402,9 @@ export default async function handler(req, res) {
     }
 
     res.setHeader('X-Cache', 'MISS');
+    if (['home', 'catalog', 'movies', 'tv-series', 'animation'].includes(endpoint)) {
+      res.setHeader('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300');
+    }
     return res.status(200).json(data);
   } catch (err) {
     clearTimeout(timeoutId);

@@ -1,10 +1,6 @@
-// ─── Movieflix Edge & Serverless Media Streaming Proxy ───────────────────────────
+// ─── Movieflix Serverless Media Streaming Proxy ───────────────────────────
 // Hardened against SSRF, unauthorized network access, and open proxy abuse.
 // Enforces strict domain allowlists and validates all redirect destinations.
-
-export const config = {
-  runtime: 'edge',
-};
 
 // Approved media and metadata domains
 const ALLOWED_DOMAIN_PATTERNS = [

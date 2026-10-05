@@ -10,10 +10,7 @@ const OFFICIAL_BUILD_FINGERPRINT = 'mf_sec_sha256_b48f9d0c2e1a7b3c6e5a9d8f0b1c2e
 function getIntegritySecret() {
   const secret = process.env.INTEGRITY_SECRET;
   if (!secret) {
-    if (process.env.NODE_ENV === 'production' || process.env.VERCEL) {
-      return null;
-    }
-    return 'dev_integrity_secret_movieflix_2026';
+    return null;
   }
   return secret;
 }

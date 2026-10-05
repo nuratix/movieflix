@@ -1817,7 +1817,7 @@ function buildPureHtmlShotsPage({ initialShots, apiBase, isMuted, targetShortId,
         slide.innerHTML =
           '<img class="ambient-backdrop" src="' + (item.poster_url || '') + '" alt="" />' +
           '<div class="stage">' +
-            '<video class="player" playsinline webkit-playsinline loop preload="none"></video>' +
+            '<video class="player" playsinline webkit-playsinline loop preload="metadata"></video>' +
             '<img class="poster-img" src="' + (item.poster_url || '') + '" alt="" />' +
             '<div class="gradient-overlay"></div>' +
             '<div class="buffer-spinner"></div>' +
@@ -1883,7 +1883,16 @@ function buildPureHtmlShotsPage({ initialShots, apiBase, isMuted, targetShortId,
         var prevEpBtn = slide.querySelector('.ep-prev-btn');
         var nextEpBtn = slide.querySelector('.ep-next-btn');
 
+        poster.addEventListener('click', function(e) {
+          e.stopPropagation();
+          playSlide(idx);
+        });
+
         video.addEventListener('timeupdate', function() {
+          if (video.currentTime > 0) {
+            poster.classList.add('hidden');
+            spinner.classList.remove('active');
+          }
           if (video.duration > 0) {
             var pct = (video.currentTime / video.duration) * 100;
             progressFill.style.width = pct + '%';
@@ -1901,9 +1910,23 @@ function buildPureHtmlShotsPage({ initialShots, apiBase, isMuted, targetShortId,
 
         video.addEventListener('canplay', function() {
           spinner.classList.remove('active');
+          if (!video.paused) {
+            poster.classList.add('hidden');
+          }
         });
 
-        video.addEventListener('error', function() {
+        video.addEventListener('loadeddata', function() {
+          spinner.classList.remove('active');
+        });
+
+        video.addEventListener('error', function(err) {
+          console.warn('Video error on source:', video.src, err);
+          if (video.src && video.src.indexOf('/api/proxy?url=') !== -1 && item._rawUrl) {
+            console.log('Falling back to direct raw URL');
+            video.src = item._rawUrl;
+            video.play().catch(function() {});
+            return;
+          }
           spinner.classList.remove('active');
           poster.classList.remove('hidden');
         });
@@ -2002,7 +2025,10 @@ function buildPureHtmlShotsPage({ initialShots, apiBase, isMuted, targetShortId,
 
         function togglePlayPause() {
           if (video.paused) {
-            video.play().catch(function() {});
+            video.play().then(function() {
+              poster.classList.add('hidden');
+              spinner.classList.remove('active');
+            }).catch(function() {});
             hud.innerHTML = playSvg;
           } else {
             video.pause();
@@ -2177,6 +2203,7 @@ function buildPureHtmlShotsPage({ initialShots, apiBase, isMuted, targetShortId,
           var data = await res.json();
           var raw = data && data.sources && data.sources[0] && data.sources[0].url;
           if (raw) {
+            item._rawUrl = raw;
             var proxied = API_BASE + '/api/proxy?url=' + encodeURIComponent(raw);
             streamCache[key] = proxied;
             return proxied;
@@ -2208,16 +2235,20 @@ function buildPureHtmlShotsPage({ initialShots, apiBase, isMuted, targetShortId,
           video.muted = isMuted;
           video.currentTime = 0;
           var p = video.play();
-          if (p && p.catch) {
+          if (p && typeof p.then === 'function') {
             p.then(function() {
               poster.classList.add('hidden');
               spinner.classList.remove('active');
-            }).catch(function() {
+            }).catch(function(err) {
+              console.warn('Autoplay failed, retrying muted:', err);
               video.muted = true;
+              isMuted = true;
+              updateMuteIcon();
               video.play().then(function() {
                 poster.classList.add('hidden');
                 spinner.classList.remove('active');
-              }).catch(function() {
+              }).catch(function(e2) {
+                console.warn('Playback retry failed:', e2);
                 spinner.classList.remove('active');
               });
             });
@@ -2402,19 +2433,6 @@ function ShotsFeedView({
       }
     } else if (data.type === 'like') {
       triggerHaptic?.('selection');
-      if (authUser && authAccessToken && data.shotId) {
-        apiFetch(`${API_BASE}/api/auth`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${authAccessToken}`,
-          },
-          body: JSON.stringify({
-            action: data.liked ? 'like-shot' : 'unlike-shot',
-            shot_id: String(data.shotId),
-          }),
-        }).catch(() => {});
-      }
     } else if (data.type === 'share' && data.item) {
       triggerHaptic?.('selection');
       const activeSlug = data.slug || data.item.slug || data.item.subject_id || data.item.id;
@@ -3408,47 +3426,14 @@ function ReelApp() {
     }
 
     try {
-      // 2. Fetch fresh, randomized content from the server
-      const randMoviesPage1 = Math.floor(Math.random() * 50) + 1;
-      let randMoviesPage2 = Math.floor(Math.random() * 50) + 1;
-      while (randMoviesPage2 === randMoviesPage1) {
-        randMoviesPage2 = Math.floor(Math.random() * 50) + 1;
-      }
-      const randSeriesPage1 = Math.floor(Math.random() * 40) + 1;
-      let randSeriesPage2 = Math.floor(Math.random() * 40) + 1;
-      while (randSeriesPage2 === randSeriesPage1) {
-        randSeriesPage2 = Math.floor(Math.random() * 40) + 1;
-      }
-      const randAnimPage = Math.floor(Math.random() * 25) + 1;
-
-      const results = await Promise.allSettled([
-        apiFetch(`${API_BASE}/api/content?endpoint=home`),
-        apiFetch(`${API_BASE}/api/content?endpoint=movies&page=${randMoviesPage1}`),
-        apiFetch(`${API_BASE}/api/content?endpoint=movies&page=${randMoviesPage2}`),
-        apiFetch(`${API_BASE}/api/content?endpoint=tv-series&page=${randSeriesPage1}`),
-        apiFetch(`${API_BASE}/api/content?endpoint=tv-series&page=${randSeriesPage2}`),
-        apiFetch(`${API_BASE}/api/content?endpoint=animation&page=${randAnimPage}`),
-      ]);
-
-      const parseResponse = async (settledResult) => {
-        if (settledResult.status !== 'fulfilled' || !settledResult.value || !settledResult.value.ok) {
-          return null;
-        }
+      // 2. Single optimized home catalog request (cached at Edge & CDN)
+      const homeRes = await apiFetch(`${API_BASE}/api/content?endpoint=home`);
+      let homeData = null;
+      if (homeRes && homeRes.ok) {
         try {
-          return await settledResult.value.json();
-        } catch (_) {
-          return null;
-        }
-      };
-
-      const [homeData, moviesData1, moviesData2, seriesData1, seriesData2, animData] = await Promise.all([
-        parseResponse(results[0]),
-        parseResponse(results[1]),
-        parseResponse(results[2]),
-        parseResponse(results[3]),
-        parseResponse(results[4]),
-        parseResponse(results[5]),
-      ]);
+          homeData = await homeRes.json();
+        } catch (_) {}
+      }
 
       setIsOffline(false);
 
@@ -3483,18 +3468,6 @@ function ReelApp() {
         setCategoryItemsMap(itemsMap);
       }
 
-      // Helper to extract & normalize items from paginated responses
-      const extractItems = (data, isSeries = false) => {
-        if (!data || !Array.isArray(data.items)) return [];
-        return data.items.map(item => normalizeMovie({ ...item, isSeries: isSeries || item.isSeries })).filter(Boolean);
-      };
-
-      const pageMovies1 = extractItems(moviesData1, false);
-      const pageMovies2 = extractItems(moviesData2, false);
-      const pageSeries1 = extractItems(seriesData1, true);
-      const pageSeries2 = extractItems(seriesData2, true);
-      const pageAnim = extractItems(animData, false);
-
       // Helper function: Fisher-Yates array shuffle
       const shuffleArray = (arr) => {
         const copy = [...arr];
@@ -3520,26 +3493,27 @@ function ReelApp() {
         return res;
       };
 
-      // 1. Hero List (Widget posters and requested image URLs)
-      const newHero = CURATED_HERO_ITEMS;
+      // 1. Hero List (Curated hero items + Banner items from home)
+      const bannerItems = serverSectionMap['Banner'] || [];
+      const newHero = bannerItems.length > 0 ? dedupList([...bannerItems, ...CURATED_HERO_ITEMS]).slice(0, 8) : CURATED_HERO_ITEMS;
       setHeroList(newHero);
 
-      // 2. Trending Now (Popular Movies + fresh random movies)
+      // 2. Trending Now (Popular Movies)
       const popMovies = serverSectionMap['Popular Movie'] || [];
-      const trendingPool = dedupList([...popMovies, ...pageMovies1, ...TRENDING_NOW]);
-      const newTrending = shuffleArray(trendingPool).slice(0, 18);
+      const trendingPool = dedupList([...popMovies, ...TRENDING_NOW]);
+      const newTrending = trendingPool.slice(0, 18);
       setTrendingNow(newTrending);
 
-      // 3. Latest Releases (Random Movies 2 + Action Movies)
+      // 3. Latest Releases (Action Movies)
       const actionMovies = serverSectionMap['Action Movies'] || serverSectionMap['Action&Thriller'] || [];
-      const latestPool = dedupList([...pageMovies2, ...actionMovies, ...LATEST_RELEASES]);
-      const newLatest = shuffleArray(latestPool).slice(0, 18);
+      const latestPool = dedupList([...actionMovies, ...LATEST_RELEASES]);
+      const newLatest = latestPool.slice(0, 18);
       setLatestReleases(newLatest);
 
-      // 4. Netflix Popular (Popular Series + Random Series 1)
+      // 4. Netflix Popular (Popular Series)
       const popSeries = serverSectionMap['Popular Series'] || [];
-      const seriesPool = dedupList([...popSeries, ...pageSeries1, ...NETFLIX_POPULAR]);
-      const newNetflix = shuffleArray(seriesPool).slice(0, 18);
+      const seriesPool = dedupList([...popSeries, ...NETFLIX_POPULAR]);
+      const newNetflix = seriesPool.slice(0, 18);
       setNetflixPopular(newNetflix);
 
       // 5. Hindi & International (K-Drama, C-Drama, Nollywood, Bet+, Hindi Movies)
@@ -3548,42 +3522,41 @@ function ReelApp() {
       const nollywood = serverSectionMap['Nollywood Movie'] || [];
       const betPlus = serverSectionMap['Bet+'] || [];
       const hindiPool = dedupList([...kdrama, ...cdrama, ...nollywood, ...betPlus, ...HINDI_MOVIES]);
-      const newHindi = shuffleArray(hindiPool).slice(0, 18);
+      const newHindi = hindiPool.slice(0, 18);
       setHindiMoviesList(newHindi);
 
-      // 6. Anime Trending (Anime Dubbed + Random Animation)
+      // 6. Anime Trending (Anime Dubbed + Anime Trending)
       const animeDub = serverSectionMap['Anime[English Dubbed]'] || [];
-      const animeTrendPool = dedupList([...animeDub, ...pageAnim, ...ANIME_TRENDING]);
-      const newAnimeTrend = shuffleArray(animeTrendPool).slice(0, 18);
+      const animeTrendPool = dedupList([...animeDub, ...ANIME_TRENDING]);
+      const newAnimeTrend = animeTrendPool.slice(0, 18);
       setAnimeTrending(newAnimeTrend);
 
       // 7. Latest Anime (Adult Animation + Teen Fantasy + Anime Latest)
       const adultAnim = serverSectionMap['Adult Animation'] || [];
       const teenFantasy = serverSectionMap['Teen Fantasy'] || [];
       const animeLatePool = dedupList([...adultAnim, ...teenFantasy, ...ANIME_LATEST]);
-      const newAnimeLate = shuffleArray(animeLatePool).slice(0, 18);
+      const newAnimeLate = animeLatePool.slice(0, 18);
       setAnimeLatest(newAnimeLate);
 
-      // 8. Web Series (Superhero Series + Hot Short TV + Random Series 2)
+      // 8. Web Series (Superhero Series + Hot Short TV + Web Series)
       const superHero = serverSectionMap['Superhero Series'] || [];
       const shortTv = serverSectionMap['🔥Hot Short TV'] || [];
-      const webSeriesPool = dedupList([...superHero, ...shortTv, ...pageSeries2, ...WEBSERIES_LATEST]);
-      const newWebSeries = shuffleArray(webSeriesPool).slice(0, 18);
+      const webSeriesPool = dedupList([...superHero, ...shortTv, ...WEBSERIES_LATEST]);
+      const newWebSeries = webSeriesPool.slice(0, 18);
       setWebSeriesLatest(newWebSeries);
 
       // 9. Cartoons & Family (Sitcom, Epic Fantasy, Cartoons)
       const sitcom = serverSectionMap['Sitcom'] || [];
       const fantasy = serverSectionMap['Epic Fantasy'] || [];
       const cartoonPool = dedupList([...sitcom, ...fantasy, ...CARTOONS]);
-      const newCartoons = shuffleArray(cartoonPool).slice(0, 18);
+      const newCartoons = cartoonPool.slice(0, 18);
       setCartoonsList(newCartoons);
 
-      // Master catalog pool for recommendations and explore grid (hundreds of items!)
+      // Master catalog pool for recommendations and explore grid
       const masterItems = [];
       Object.values(serverSectionMap).forEach(arr => {
         if (Array.isArray(arr)) masterItems.push(...arr);
       });
-      masterItems.push(...pageMovies1, ...pageMovies2, ...pageSeries1, ...pageSeries2, ...pageAnim);
       masterItems.push(
         ...TRENDING_NOW,
         ...LATEST_RELEASES,
