@@ -3943,11 +3943,13 @@ function ReelApp() {
         }
       }
 
-      if (streamData && streamData.sources && streamData.sources.length > 0) {
-        setAvailableStreams(streamData.sources);
-        const preferred = streamData.sources.find(s => s.resolution === '720p') ||
-                          streamData.sources.find(s => s.resolution === '1080p') ||
-                          streamData.sources[0];
+      const validSources = (streamData?.sources || []).filter(s => s && s.url && typeof s.url === 'string' && s.url.startsWith('http'));
+      if (validSources.length > 0) {
+        setAvailableStreams(validSources);
+        const preferred = validSources.find(s => s.resolution === '720p') ||
+                          validSources.find(s => s.resolution === '1080p') ||
+                          validSources.find(s => s.resolution === '480p') ||
+                          validSources[0];
         setActiveStreamUrl(preferred.url);
         setActiveResolution(preferred.resolution);
         setLoadingStream(false);
@@ -4099,11 +4101,13 @@ function ReelApp() {
       const url = `${API_BASE}/api/content?endpoint=stream&id=${encodeURIComponent(variant.subject_id)}&detail_path=${encodeURIComponent(variant.slug)}&se=${currentSe}&ep=${currentEp}`;
       const res = await apiFetch(url);
       const data = await res.json();
-      if (data && data.sources && data.sources.length > 0) {
-        setAvailableStreams(data.sources);
-        const preferred = data.sources.find(s => s.resolution === activeResolution) ||
-                          data.sources.find(s => s.resolution === '720p') ||
-                          data.sources[0];
+      const validSources = (data?.sources || []).filter(s => s && s.url && typeof s.url === 'string' && s.url.startsWith('http'));
+      if (validSources.length > 0) {
+        setAvailableStreams(validSources);
+        const preferred = validSources.find(s => s.resolution === activeResolution) ||
+                          validSources.find(s => s.resolution === '720p') ||
+                          validSources.find(s => s.resolution === '480p') ||
+                          validSources[0];
         setPlayerResumeTime(resumeTime);
         setActiveStreamUrl(preferred.url);
         setPlayerMovie(prev => ({

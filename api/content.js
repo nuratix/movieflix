@@ -40,16 +40,118 @@ const ALLOWED_ORIGINS = new Set([
 
 function setCors(req, res) {
   const origin = req.headers['origin'];
-  if (origin && ALLOWED_ORIGINS.has(origin)) {
+  if (origin) {
     res.setHeader('Access-Control-Allow-Origin', origin);
   } else {
-    res.setHeader('Access-Control-Allow-Origin', 'https://movieflix-pi-six.vercel.app');
+    res.setHeader('Access-Control-Allow-Origin', '*');
   }
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS');
   res.setHeader(
     'Access-Control-Allow-Headers',
     'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-Type, Date, Authorization'
   );
+}
+
+async function fetchNetfilmStreams(id, detailPath, se = 0, ep = 0) {
+  async function fetchPlay(seVal, epVal) {
+    const slug = detailPath || id;
+    const referer = `https://netfilm.world/spa/videoPlayPage/movies/${slug}?id=${id}&type=/movie/detail&detailSe=${seVal}&detailEp=${epVal}&lang=en`;
+    const playUrl = `https://netfilm.world/wefeed-h5api-bff/subject/play?subjectId=${encodeURIComponent(id)}&se=${seVal}&ep=${epVal}&detailPath=${encodeURIComponent(slug)}`;
+    const r = await fetch(playUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36',
+        'Referer': referer,
+        'Accept': 'application/json, text/plain, */*',
+      },
+    });
+    if (!r.ok) return null;
+    const json = await r.json();
+    return json?.data || null;
+  }
+
+  let data = await fetchPlay(se, ep);
+  let effectiveSe = se;
+  let effectiveEp = ep;
+
+  if (!data?.streams || data.streams.length === 0) {
+    const altSe = se === 0 ? 1 : 0;
+    const altEp = ep === 0 ? 1 : 0;
+    const altData = await fetchPlay(altSe, altEp);
+    if (altData?.streams && altData.streams.length > 0) {
+      data = altData;
+      effectiveSe = altSe;
+      effectiveEp = altEp;
+    }
+  }
+
+  if (data?.streams && data.streams.length > 0) {
+    const streams = data.streams
+      .filter((s) => s.url && typeof s.url === 'string' && s.url.startsWith('http'))
+      .map((s) => ({
+        resolution: `${s.resolutions}p`,
+        format: s.format,
+        url: s.url,
+        size: s.size,
+        duration: s.duration,
+        codec: s.codecName,
+      }));
+
+    if (streams.length > 0) {
+      return {
+        subject_id: id,
+        se: effectiveSe,
+        ep: effectiveEp,
+        has_resource: true,
+        sources: streams,
+        hls: data.hls || [],
+        dash: data.dash || [],
+        free_episodes: data.freeNum,
+        limited: data.limited || false,
+      };
+    }
+  }
+  return null;
+}
+
+async function fetchNetfilmCaptions(id, detailPath, se = 0, ep = 0) {
+  const slug = detailPath || id;
+  const referer = `https://netfilm.world/spa/videoPlayPage/movies/${slug}?id=${id}&type=/movie/detail&detailSe=${se}&detailEp=${ep}&lang=en`;
+  try {
+    const playRes = await fetch(
+      `https://netfilm.world/wefeed-h5api-bff/subject/play?subjectId=${encodeURIComponent(id)}&se=${se}&ep=${ep}&detailPath=${encodeURIComponent(slug)}`,
+      {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Referer': referer,
+          'Accept': 'application/json',
+        },
+      }
+    );
+    if (playRes.ok) {
+      const playJson = await playRes.json();
+      const streams = playJson?.data?.streams || [];
+      const streamId = streams[0]?.id;
+      const streamFormat = streams[0]?.format || 'MP4';
+      if (streamId) {
+        const capUrl = `https://netfilm.world/wefeed-h5api-bff/subject/caption?format=${streamFormat}&id=${streamId}&subjectId=${encodeURIComponent(id)}&detailPath=${encodeURIComponent(slug)}`;
+        const capRes = await fetch(capUrl, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Referer': referer,
+            'Accept': 'application/json',
+          },
+        });
+        if (capRes.ok) {
+          const capJson = await capRes.json();
+          const captions = capJson?.data?.captions || [];
+          if (captions.length > 0) {
+            return { subject_id: id, se, ep, count: captions.length, captions };
+          }
+        }
+      }
+    }
+  } catch (_) {}
+  return { subject_id: id, se, ep, count: 0, captions: [] };
 }
 
 function getClientIp(req) {
@@ -123,7 +225,7 @@ export default async function handler(req, res) {
   }
 
   // 4. Parse endpoint and query parameters
-  const query = req.query || {};
+  const query = req.query || (req.url ? Object.fromEntries(new URL(req.url, 'http://localhost').searchParams) : {});
   let endpoint = (query.endpoint || '').toLowerCase().trim();
 
   // If endpoint is not provided via query, deduce from request URL path
@@ -386,12 +488,46 @@ export default async function handler(req, res) {
     if (!upstreamRes.ok) {
       const errText = await upstreamRes.text().catch(() => '');
       console.warn(`Upstream error [${upstreamRes.status}] for ${endpoint}:`, errText.slice(0, 100));
+
+      if (endpoint === 'stream') {
+        const id = (query.id || '').replace(/[^a-zA-Z0-9_\-]/g, '').slice(0, 50).trim();
+        const detailPath = (query.detail_path || query.slug || '').replace(/[^a-zA-Z0-9_\-\.]/g, '').slice(0, 150).trim();
+        const se = Math.max(0, parseInt(query.se, 10) || 0);
+        const ep = Math.max(0, parseInt(query.ep, 10) || 0);
+        const fallbackStream = await fetchNetfilmStreams(id, detailPath, se, ep);
+        if (fallbackStream) {
+          return res.status(200).json(fallbackStream);
+        }
+      }
+
+      if (endpoint === 'captions') {
+        const id = (query.id || '').replace(/[^a-zA-Z0-9_\-]/g, '').slice(0, 50).trim();
+        const detailPath = (query.detail_path || query.slug || '').replace(/[^a-zA-Z0-9_\-\.]/g, '').slice(0, 150).trim();
+        const se = Math.max(0, parseInt(query.se, 10) || 0);
+        const ep = Math.max(0, parseInt(query.ep, 10) || 0);
+        const fallbackCaps = await fetchNetfilmCaptions(id, detailPath, se, ep);
+        if (fallbackCaps) {
+          return res.status(200).json(fallbackCaps);
+        }
+      }
+
       return res.status(upstreamRes.status).json({
         error: `Upstream provider returned status ${upstreamRes.status}`,
       });
     }
 
     const data = await upstreamRes.json();
+
+    if (endpoint === 'stream' && (!data?.sources || data.sources.length === 0)) {
+      const id = (query.id || '').replace(/[^a-zA-Z0-9_\-]/g, '').slice(0, 50).trim();
+      const detailPath = (query.detail_path || query.slug || '').replace(/[^a-zA-Z0-9_\-\.]/g, '').slice(0, 150).trim();
+      const se = Math.max(0, parseInt(query.se, 10) || 0);
+      const ep = Math.max(0, parseInt(query.ep, 10) || 0);
+      const fallbackStream = await fetchNetfilmStreams(id, detailPath, se, ep);
+      if (fallbackStream) {
+        return res.status(200).json(fallbackStream);
+      }
+    }
 
     // Cache successful static catalog results
     if (cacheKey && data) {
@@ -408,6 +544,30 @@ export default async function handler(req, res) {
     return res.status(200).json(data);
   } catch (err) {
     clearTimeout(timeoutId);
+    if (endpoint === 'stream') {
+      try {
+        const id = (query.id || '').replace(/[^a-zA-Z0-9_\-]/g, '').slice(0, 50).trim();
+        const detailPath = (query.detail_path || query.slug || '').replace(/[^a-zA-Z0-9_\-\.]/g, '').slice(0, 150).trim();
+        const se = Math.max(0, parseInt(query.se, 10) || 0);
+        const ep = Math.max(0, parseInt(query.ep, 10) || 0);
+        const fallbackStream = await fetchNetfilmStreams(id, detailPath, se, ep);
+        if (fallbackStream) {
+          return res.status(200).json(fallbackStream);
+        }
+      } catch (_) {}
+    }
+    if (endpoint === 'captions') {
+      try {
+        const id = (query.id || '').replace(/[^a-zA-Z0-9_\-]/g, '').slice(0, 50).trim();
+        const detailPath = (query.detail_path || query.slug || '').replace(/[^a-zA-Z0-9_\-\.]/g, '').slice(0, 150).trim();
+        const se = Math.max(0, parseInt(query.se, 10) || 0);
+        const ep = Math.max(0, parseInt(query.ep, 10) || 0);
+        const fallbackCaps = await fetchNetfilmCaptions(id, detailPath, se, ep);
+        if (fallbackCaps) {
+          return res.status(200).json(fallbackCaps);
+        }
+      } catch (_) {}
+    }
     if (err.name === 'AbortError') {
       return res.status(504).json({ error: 'Upstream provider request timed out.' });
     }

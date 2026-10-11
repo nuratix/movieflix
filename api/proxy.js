@@ -140,10 +140,10 @@ const ALLOWED_ORIGINS = new Set([
 ]);
 
 function getCorsOrigin(origin) {
-  if (origin && ALLOWED_ORIGINS.has(origin)) {
+  if (origin) {
     return origin;
   }
-  return 'https://movieflix-pi-six.vercel.app';
+  return '*';
 }
 
 export function extractTargetUrl(reqUrl) {
