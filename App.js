@@ -65,7 +65,6 @@ import {
 import {
   CURRENT_APP_VERSION,
   checkForUpdateAsync,
-  downloadAndInstallApkAsync,
 } from './updateService';
 import {
   verifyAppSecurityAsync,
@@ -91,6 +90,7 @@ import CustomSplashScreen from './CustomSplashScreen';
 import PrivacyScreen, { PRIVACY_POLICY_URL } from './PrivacyScreen';
 import DownloadScreen from './DownloadScreen';
 import NotFoundScreen from './NotFoundScreen';
+import NowPaymentsButton from './components/NowPaymentsButton';
 import * as SplashScreen from 'expo-splash-screen';
 
 // Prevent native splash screen from hiding before custom splash animation mounts
@@ -5037,25 +5037,9 @@ function ReelApp() {
     }
   };
 
-  const handleDownloadAndInstallApk = async () => {
-    if (!updateInfo?.apkAsset) {
-      showToast('No APK file attached to this release. Visit GitHub to download manually.');
-      return;
-    }
-    setIsDownloadingApk(true);
-    setApkDownloadError(null);
-    setApkDownloadProgress({ percent: 0, writtenFormatted: '0 B', totalFormatted: updateInfo.apkAsset.sizeFormatted || '...' });
-    try {
-      await downloadAndInstallApkAsync(updateInfo.apkAsset, (progress) => {
-        setApkDownloadProgress(progress);
-      });
-      setIsDownloadingApk(false);
-      setIsUpdateModalOpen(false);
-      showToast('Update downloaded! Installing...');
-    } catch (err) {
-      setIsDownloadingApk(false);
-      setApkDownloadError(err.message || 'Download failed. Please try again.');
-    }
+  const handleOpenUpdate = () => {
+    setIsUpdateModalOpen(false);
+    Linking.openURL('https://movieflix-pi-six.vercel.app/download');
   };
   // ─────────────────────────────────────────────────────────────────────────
 
@@ -5437,7 +5421,25 @@ function ReelApp() {
                   </TouchableOpacity>
                 </View>
 
-                {/* Minimal Footer: Movieflix *v1.1.6* Up to date / Official build, verified */}
+                {/* Cryptocurrency & Bitcoin Donation Section */}
+                <View style={styles.meDonationCard}>
+                  <View style={styles.meDonationHeader}>
+                    <View style={styles.meDonationIcon}>
+                      <Feather name="heart" size={16} color="#e50914" />
+                    </View>
+                    <View style={styles.meDonationCopy}>
+                      <Text style={styles.meDonationTitle}>Support MovieFlix</Text>
+                      <Text style={styles.meDonationDescription}>
+                        Keep streaming free and ad-free with cryptocurrency & Bitcoin donations.
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={styles.meDonationBtnWrapper}>
+                    <NowPaymentsButton />
+                  </View>
+                </View>
+
+                {/* Minimal Footer: Movieflix *v1.1.7* Up to date / Official build, verified */}
                 <View style={styles.meMinimalAppFooter}>
                   <TouchableOpacity
                     style={styles.meMinimalVersionRow}
@@ -5460,36 +5462,15 @@ function ReelApp() {
 
                   {!isWeb && updateInfo?.hasUpdate && (
                     <TouchableOpacity
-                      style={[styles.meMinimalUpdateActionBtn, isDownloadingApk && { opacity: 0.7 }]}
-                      onPress={handleDownloadAndInstallApk}
+                      style={styles.meMinimalUpdateActionBtn}
+                      onPress={handleOpenUpdate}
                       activeOpacity={0.8}
-                      disabled={isDownloadingApk}
                     >
-                      {isDownloadingApk ? (
-                        <ActivityIndicator size="small" color="#FFFFFF" style={{ marginRight: 6 }} />
-                      ) : (
-                        <Feather name="arrow-down-circle" size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
-                      )}
+                      <Feather name="arrow-down-circle" size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
                       <Text style={styles.meMinimalUpdateActionText}>
-                        {isDownloadingApk ? 'Updating...' : `Update to v${updateInfo.latestVersion}`}
+                        {`Update to v${updateInfo.latestVersion}`}
                       </Text>
                     </TouchableOpacity>
-                  )}
-
-                  {!isWeb && isDownloadingApk && apkDownloadProgress && (
-                    <View style={[styles.minimalProgressBarTrack, { width: '80%', alignSelf: 'center', marginTop: 10 }]}>
-                      <View style={[styles.minimalProgressBarFill, { width: `${apkDownloadProgress.percent || 0}%` }]} />
-                      <Text style={styles.minimalProgressText}>
-                        {apkDownloadProgress.percent}% ({apkDownloadProgress.writtenFormatted} / {apkDownloadProgress.totalFormatted})
-                      </Text>
-                    </View>
-                  )}
-
-                  {!isWeb && apkDownloadError && (
-                    <View style={[styles.minimalErrorRow, { justifyContent: 'center' }]}>
-                      <Feather name="alert-circle" size={12} color="#ef4444" style={{ marginRight: 4 }} />
-                      <Text style={styles.minimalErrorText} numberOfLines={1}>{apkDownloadError}</Text>
-                    </View>
                   )}
 
                   <View style={styles.meMinimalSecurityRow}>
@@ -6929,15 +6910,13 @@ function ReelApp() {
             <TouchableWithoutFeedback onPress={() => {}}>
               <View style={styles.updateModalCard}>
                 {/* Close btn */}
-                {!isDownloadingApk && (
-                  <TouchableOpacity
-                    style={styles.updateModalCloseBtn}
-                    onPress={() => setIsUpdateModalOpen(false)}
-                    hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-                  >
-                    <Feather name="x" size={20} color="#8e8e93" />
-                  </TouchableOpacity>
-                )}
+                <TouchableOpacity
+                  style={styles.updateModalCloseBtn}
+                  onPress={() => setIsUpdateModalOpen(false)}
+                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                >
+                  <Feather name="x" size={20} color="#8e8e93" />
+                </TouchableOpacity>
 
                 {/* Icon + Title */}
                 <View style={styles.updateModalIconHalo}>
@@ -6976,62 +6955,29 @@ function ReelApp() {
                   <Text style={styles.updateModalErrorText}>{updateInfo.error}</Text>
                 )}
 
-                {/* Progress bar during download */}
-                {isDownloadingApk && apkDownloadProgress && (
-                  <View style={styles.apkProgressContainer}>
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
-                      <Text style={styles.apkProgressLabel}>Downloading APK...</Text>
-                      <Text style={styles.apkProgressLabel}>{apkDownloadProgress.percent}%</Text>
-                    </View>
-                    <View style={styles.apkProgressBarTrack}>
-                      <View style={[styles.apkProgressBarFill, { width: `${apkDownloadProgress.percent || 0}%` }]} />
-                    </View>
-                    <Text style={[styles.apkProgressText, { marginTop: 6 }]}>
-                      {apkDownloadProgress.writtenFormatted} / {apkDownloadProgress.totalFormatted}
-                    </Text>
-                  </View>
-                )}
-
-                {/* APK download error */}
-                {apkDownloadError && !isDownloadingApk && (
-                  <View style={[styles.apkErrorBox, { width: '100%' }]}>
-                    <Feather name="alert-circle" size={14} color="#e50914" style={{ marginRight: 6 }} />
-                    <Text style={styles.apkErrorText} numberOfLines={3}>{apkDownloadError}</Text>
-                  </View>
-                )}
-
                 {/* Action Buttons */}
                 <View style={styles.updateModalBtnRow}>
-                  {updateInfo?.hasUpdate && !isDownloadingApk && (
+                  {updateInfo?.hasUpdate && (
                     <TouchableOpacity
                       style={styles.updateModalInstallBtn}
-                      onPress={handleDownloadAndInstallApk}
+                      onPress={handleOpenUpdate}
                       activeOpacity={0.85}
                     >
                       <Feather name="download" size={16} color="#FFFFFF" style={{ marginRight: 7 }} />
                       <Text style={styles.updateModalInstallBtnText}>
-                        Download & Install
-                        {updateInfo?.apkAsset?.sizeFormatted ? ` (${updateInfo.apkAsset.sizeFormatted})` : ''}
+                        {`Update Now (v${updateInfo.latestVersion})`}
                       </Text>
                     </TouchableOpacity>
                   )}
-                  {isDownloadingApk && (
-                    <View style={[styles.updateModalInstallBtn, { backgroundColor: 'rgba(229,9,20,0.5)', justifyContent: 'center' }]}>
-                      <ActivityIndicator size="small" color="#FFFFFF" style={{ marginRight: 8 }} />
-                      <Text style={styles.updateModalInstallBtnText}>Downloading...</Text>
-                    </View>
-                  )}
-                  {!isDownloadingApk && (
-                    <TouchableOpacity
-                      style={styles.updateModalSkipBtn}
-                      onPress={() => setIsUpdateModalOpen(false)}
-                      activeOpacity={0.8}
-                    >
-                      <Text style={styles.updateModalSkipBtnText}>
-                        {updateInfo?.hasUpdate ? 'Skip for Now' : 'OK'}
-                      </Text>
-                    </TouchableOpacity>
-                  )}
+                  <TouchableOpacity
+                    style={styles.updateModalSkipBtn}
+                    onPress={() => setIsUpdateModalOpen(false)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.updateModalSkipBtnText}>
+                      {updateInfo?.hasUpdate ? 'Skip for Now' : 'OK'}
+                    </Text>
+                  </TouchableOpacity>
                 </View>
               </View>
             </TouchableWithoutFeedback>
@@ -11515,6 +11461,54 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 11,
     fontWeight: '700',
+  },
+  meDonationCard: {
+    width: '100%',
+    backgroundColor: '#0d0d0d',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(229, 9, 20, 0.25)',
+    padding: 16,
+    marginTop: 12,
+    marginBottom: 16,
+    alignItems: 'center',
+  },
+  meDonationHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    width: '100%',
+  },
+  meDonationIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(229, 9, 20, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(229, 9, 20, 0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  meDonationCopy: {
+    flex: 1,
+  },
+  meDonationTitle: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  meDonationDescription: {
+    color: '#a3a3a3',
+    fontSize: 11,
+    lineHeight: 16,
+    marginTop: 2,
+  },
+  meDonationBtnWrapper: {
+    marginTop: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
   },
   minimalProgressBarTrack: {
     height: 4,

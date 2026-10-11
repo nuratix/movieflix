@@ -88,7 +88,7 @@ export async function checkForUpdateAsync() {
 
     const latestTag = data.latestTag || data.latestVersion || CURRENT_APP_VERSION;
     const cleanTag = (data.latestVersion || latestTag).replace(/^v/i, '');
-    const hasUpdate = Boolean(data.hasUpdate || isNewerVersion(latestTag, CURRENT_APP_VERSION));
+    const hasUpdate = Boolean(data.hasUpdate && data.apkAsset && data.apkAsset.downloadUrl);
 
     const apkAsset = data.apkAsset
       ? {

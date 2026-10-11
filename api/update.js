@@ -145,20 +145,32 @@ export default async function handler(req, res) {
       if (githubRes.ok) {
         const releases = await githubRes.json();
         if (Array.isArray(releases) && releases.length > 0) {
-          const validReleases = releases.filter((r) => !r.draft);
-          if (validReleases.length > 0) {
-            // Find release matching TARGET_VERSION or highest version
-            const matchingRelease = validReleases.find(
-              (r) => (r.tag_name || '').replace(/^v/i, '') === TARGET_VERSION
-            );
-            latestRelease = matchingRelease || validReleases[0];
+          // Strictly filter for non-draft releases that ALREADY HAVE a completed .apk build asset uploaded
+          const completedReleases = releases
+            .filter((r) => !r.draft)
+            .map((r) => {
+              const assets = Array.isArray(r.assets) ? r.assets : [];
+              const apk = assets.find(
+                (a) =>
+                  (a.name && a.name.toLowerCase().endsWith('.apk')) ||
+                  a.content_type === 'application/vnd.android.package-archive'
+              );
+              return { release: r, apk };
+            })
+            .filter((item) => Boolean(item.apk && item.apk.browser_download_url));
 
-            const assets = Array.isArray(latestRelease.assets) ? latestRelease.assets : [];
-            foundApk = assets.find(
-              (a) =>
-                (a.name && a.name.toLowerCase().endsWith('.apk')) ||
-                a.content_type === 'application/vnd.android.package-archive'
-            );
+          if (completedReleases.length > 0) {
+            // Find newest completed release by semantic version
+            let highest = completedReleases[0];
+            for (let i = 1; i < completedReleases.length; i++) {
+              const currVer = (completedReleases[i].release.tag_name || '').replace(/^v/i, '');
+              const highVer = (highest.release.tag_name || '').replace(/^v/i, '');
+              if (isNewerVersion(currVer, highVer)) {
+                highest = completedReleases[i];
+              }
+            }
+            latestRelease = highest.release;
+            foundApk = highest.apk;
           }
         }
       }
@@ -166,7 +178,7 @@ export default async function handler(req, res) {
       console.warn('GitHub releases API fetch failed:', fetchErr.message);
     }
 
-    // Determine latest version: must be at least TARGET_VERSION ('1.1.6')
+    // Determine latest version from verified completed release
     let latestVersion = TARGET_VERSION;
     let latestTag = `v${TARGET_VERSION}`;
 
@@ -179,19 +191,27 @@ export default async function handler(req, res) {
       }
     }
 
-    // Determine if update is available for requesting client
-    const hasUpdate = isNewerVersion(latestVersion, currentVersion);
+    // STRICT REQUIREMENT:
+    // Do NOT show update before APK build is completed with new version and APK URL is available!
+    // hasUpdate is true IF AND ONLY IF:
+    // 1. latestVersion > currentVersion
+    // 2. AND an actual valid APK asset was found with an active browser_download_url!
+    const isNewer = isNewerVersion(latestVersion, currentVersion);
+    const hasValidApk = Boolean(foundApk && foundApk.browser_download_url);
+    const hasUpdate = Boolean(isNewer && hasValidApk);
 
-    const directApkUrl =
-      foundApk?.browser_download_url ||
-      `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases/download/v${latestVersion}/movieflix-v${latestVersion}.apk`;
+    const directApkUrl = hasValidApk
+      ? foundApk.browser_download_url
+      : 'https://movieflix-pi-six.vercel.app/download';
 
-    const apkAsset = {
-      name: foundApk?.name || `movieflix-v${latestVersion}.apk`,
-      size: foundApk?.size || 115878148,
-      sizeFormatted: foundApk?.size ? formatBytes(foundApk.size) : '110.5 MB',
-      downloadUrl: directApkUrl,
-    };
+    const apkAsset = hasValidApk
+      ? {
+          name: foundApk.name || `movieflix-v${latestVersion}.apk`,
+          size: foundApk.size || 0,
+          sizeFormatted: foundApk.size ? formatBytes(foundApk.size) : 'Unknown size',
+          downloadUrl: directApkUrl,
+        }
+      : null;
 
     return res.status(200).json({
       success: true,
@@ -210,22 +230,17 @@ export default async function handler(req, res) {
     });
   } catch (err) {
     console.error('Update check service error:', err.message);
-    const hasUpdate = isNewerVersion(TARGET_VERSION, currentVersion);
+    // Never show an update if the update check failed or if no APK is verified
     return res.status(200).json({
       success: true,
-      hasUpdate,
+      hasUpdate: false,
       currentVersion,
       latestVersion: TARGET_VERSION,
       latestTag: `v${TARGET_VERSION}`,
       releaseTitle: `Movieflix v${TARGET_VERSION}`,
       releaseNotes: DEFAULT_RELEASE_NOTES,
-      downloadUrl: `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases/download/v${TARGET_VERSION}/movieflix-v${TARGET_VERSION}.apk`,
-      apkAsset: {
-        name: `movieflix-v${TARGET_VERSION}.apk`,
-        size: 115878148,
-        sizeFormatted: '110.5 MB',
-        downloadUrl: `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases/download/v${TARGET_VERSION}/movieflix-v${TARGET_VERSION}.apk`,
-      },
+      downloadUrl: 'https://movieflix-pi-six.vercel.app/download',
+      apkAsset: null,
     });
   }
 }
