@@ -109,6 +109,14 @@
       "destination": "/dmca/index.html"
     },
     {
+      "source": "/maintenance",
+      "destination": "/maintenance/index.html"
+    },
+    {
+      "source": "/donate",
+      "destination": "/donate/index.html"
+    },
+    {
       "source": "/((?!api/|assets/|favicon\\.ico|sitemap\\.xml|robots\\.txt|404\\.html|.*\\.(?:png|jpg|jpeg|gif|svg|ico|webp|mp4|json|js|css|ttf|woff|woff2)$).*)",
       "destination": "/index.html"
     }

@@ -1,0 +1,44 @@
+// ─── MovieFlix System Status & Emergency Gate Endpoint ───────────────────────
+// Checks Vercel environment variables:
+// - MANTANANCE / MAINTENANCE: when "true", signals that site is under maintenance
+// - DONATE: when "true", signals that server is crashed and requests donations
+// If neither is true or env is unset, returns regular operational status.
+
+export default async function handler(req, res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', '*');
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
+  const rawMaintenance = (
+    process.env.MANTANANCE ||
+    process.env.MAINTENANCE ||
+    ''
+  ).trim().toLowerCase();
+
+  const isMaintenance =
+    rawMaintenance === 'true' ||
+    rawMaintenance === '1' ||
+    rawMaintenance === 'yes';
+
+  const rawDonate = (
+    process.env.DONATE ||
+    ''
+  ).trim().toLowerCase();
+
+  const isDonate =
+    rawDonate === 'true' ||
+    rawDonate === '1' ||
+    rawDonate === 'yes';
+
+  return res.status(200).json({
+    success: true,
+    maintenance: isMaintenance,
+    donate: isDonate,
+    timestamp: new Date().toISOString(),
+  });
+}

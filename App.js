@@ -91,6 +91,9 @@ import PrivacyScreen, { PRIVACY_POLICY_URL } from './PrivacyScreen';
 import DownloadScreen from './DownloadScreen';
 import NotFoundScreen from './NotFoundScreen';
 import NowPaymentsButton from './components/NowPaymentsButton';
+import MaintenanceScreen from './components/MaintenanceScreen';
+import ServerCrashDonateScreen from './components/ServerCrashDonateScreen';
+import { checkSystemStatusAsync } from './statusService';
 import * as SplashScreen from 'expo-splash-screen';
 
 // Prevent native splash screen from hiding before custom splash animation mounts
@@ -2676,6 +2679,35 @@ function ReelApp() {
   const [notFoundPath, setNotFoundPath] = useState('');
   const [showWebInstallBanner, setShowWebInstallBanner] = useState(true);
   const [securityStatus, setSecurityStatus] = useState({ verified: true, authentic: true, isTampered: false });
+  const [isMaintenanceMode, setIsMaintenanceMode] = useState(false);
+  const [isDonateServerDownMode, setIsDonateServerDownMode] = useState(false);
+  const [isCheckingSystemStatus, setIsCheckingSystemStatus] = useState(false);
+
+  const checkStatus = async () => {
+    setIsCheckingSystemStatus(true);
+    try {
+      const status = await checkSystemStatusAsync();
+      setIsMaintenanceMode(Boolean(status?.maintenance));
+      setIsDonateServerDownMode(Boolean(!status?.maintenance && status?.donate));
+    } catch (_) {
+      setIsMaintenanceMode(false);
+      setIsDonateServerDownMode(false);
+    } finally {
+      setIsCheckingSystemStatus(false);
+    }
+  };
+
+  useEffect(() => {
+    checkStatus();
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      const pathname = window.location.pathname;
+      if (pathname === '/maintenance') {
+        setIsMaintenanceMode(true);
+      } else if (pathname === '/donate') {
+        setIsDonateServerDownMode(true);
+      }
+    }
+  }, []);
 
   // Sync access token to module-level var so apiFetch picks it up automatically
   useEffect(() => { _authToken = authAccessToken; }, [authAccessToken]);
@@ -5045,6 +5077,28 @@ function ReelApp() {
 
   const heroItem = heroList[heroIndex % (heroList.length || 1)] || heroList[0];
 
+  // ─── EMERGENCY SYSTEM STATUS GATE (MANTANANCE & DONATE) ─────────────────
+  // Evaluated on BOTH Web and Native APK:
+  // - If MANTANANCE=true: shows full-screen "Site Under Maintenance"
+  // - If DONATE=true: shows full-screen "Our Server Has Crashed, Please Donate"
+  if (isMaintenanceMode) {
+    return (
+      <MaintenanceScreen
+        onRefresh={checkStatus}
+        isChecking={isCheckingSystemStatus}
+      />
+    );
+  }
+
+  if (isDonateServerDownMode) {
+    return (
+      <ServerCrashDonateScreen
+        onRefresh={checkStatus}
+        isChecking={isCheckingSystemStatus}
+      />
+    );
+  }
+
   // ─── NATIVE (APK) ONBOARDING & AUTH GATE ─────────────────────────────────
   if (Platform.OS !== 'web') {
     // 1. Every time user opens the APK cold: show custom splash screen FIRST!
@@ -5307,8 +5361,8 @@ function ReelApp() {
                   <View style={styles.meAvatarLarge}>
                     <Text style={styles.meAvatarInitial}>
                       {authUser
-                        ? (authUser.name || authUser.email || 'J').charAt(0).toUpperCase()
-                        : 'J'}
+                        ? (authUser.name || authUser.email || 'M').charAt(0).toUpperCase()
+                        : 'M'}
                     </Text>
                     {authUser && <View style={styles.meAvatarOnlineDot} />}
                   </View>
@@ -5316,13 +5370,13 @@ function ReelApp() {
                   <Text style={styles.meProfileUsername}>
                     {authUser
                       ? (authUser.name || authUser.email.split('@')[0])
-                      : 'jndjdk'}
+                      : 'Guest User'}
                   </Text>
 
                   <Text style={styles.meProfileEmail}>
                     {authUser
                       ? authUser.email
-                      : 'jndjdk@outlook.com'}
+                      : 'Sign in to sync watchlist & history'}
                   </Text>
 
                   <TouchableOpacity
@@ -7044,6 +7098,11 @@ function ReelApp() {
               isSeries={isSeries}
               currentSeason={currentSe}
               currentEpisode={currentEp}
+              seasons={seriesSeasonsRef.current || detailData?.seasons || []}
+              onSelectEpisode={(targetSe, targetEp) => {
+                showToast(`Loading Season ${targetSe} · Episode ${targetEp}...`);
+                launchPlayer(playerMovie, targetSe, targetEp, true, 0, null, null, true, true);
+              }}
               availableStreams={availableStreams}
               activeResolution={activeResolution}
               availableCaptions={availableCaptions}
@@ -7855,6 +7914,7 @@ function ReelCustomPlayer({
   isSeries,
   currentSeason,
   currentEpisode,
+  seasons = [],
   availableStreams,
   activeResolution,
   availableCaptions = [],
@@ -7863,6 +7923,7 @@ function ReelCustomPlayer({
   onSwitchQuality,
   onSwitchAudioDub,
   onPlayNextEpisode,
+  onSelectEpisode,
   onProgressUpdate,
   onClose,
 }) {
@@ -7876,6 +7937,32 @@ function ReelCustomPlayer({
   const [currentSpeed, setCurrentSpeed] = useState('1.0×');
   const [isQualityModalOpen, setIsQualityModalOpen] = useState(false);
   const [isAudioSubsModalOpen, setIsAudioSubsModalOpen] = useState(false);
+  const [isEpisodesModalOpen, setIsEpisodesModalOpen] = useState(false);
+  const [selectedSheetSeasonIdx, setSelectedSheetSeasonIdx] = useState(() => {
+    if (Array.isArray(seasons) && seasons.length > 0) {
+      const idx = seasons.findIndex(s => s.se === (currentSeason || 1));
+      return idx >= 0 ? idx : 0;
+    }
+    return 0;
+  });
+
+  // Smooth Scrubber Tracking (Eliminates lag, jitter, and seeks spam)
+  const [isScrubbing, setIsScrubbing] = useState(false);
+  const [scrubPercent, setScrubPercent] = useState(0);
+  const [scrubTime, setScrubTime] = useState(0);
+  const isScrubbingRef = useRef(false);
+  const scrubTargetTimeRef = useRef(0);
+  const scrubberRailWidthRef = useRef(0);
+  const scrubberRailPageXRef = useRef(0);
+  const lastThrottleSeekRef = useRef(0);
+
+  useEffect(() => {
+    if (Array.isArray(seasons) && seasons.length > 0) {
+      const idx = seasons.findIndex(s => s.se === (currentSeason || 1));
+      if (idx >= 0) setSelectedSheetSeasonIdx(idx);
+    }
+  }, [seasons, currentSeason]);
+
   const [playerStatus, setPlayerStatus] = useState('loading');
 
   // Video Stretch / Zoom mode: 'contain' (Fit) | 'cover' (Zoom) | 'fill' (Stretch)
@@ -8333,9 +8420,12 @@ function ReelCustomPlayer({
     });
 
     const timeSub = player.addListener('timeUpdate', (e) => {
-      setCurrentTime(e.currentTime);
+      if (!isScrubbingRef.current) {
+        setCurrentTime(e.currentTime);
+      }
       if (player.duration) {
         setDuration(player.duration);
+        durationRef.current = player.duration;
         if (onProgressUpdate) {
           onProgressUpdate(e.currentTime, player.duration);
         }
@@ -8747,7 +8837,86 @@ function ReelCustomPlayer({
     return `${m}:${sStr}`;
   };
 
-  const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
+  const displayProgressPercent = isScrubbing
+    ? scrubPercent
+    : duration > 0
+    ? Math.max(0, Math.min(100, (currentTime / duration) * 100))
+    : 0;
+
+  const displayTime = isScrubbing ? scrubTime : currentTime;
+
+  const computeScrubRatio = (e) => {
+    const pageX = e.nativeEvent?.pageX;
+    const locationX = e.nativeEvent?.locationX;
+    const railWidth = scrubberRailWidthRef.current;
+    const railPageX = scrubberRailPageXRef.current;
+
+    if (railWidth > 0) {
+      if (typeof pageX === 'number' && railPageX > 0) {
+        return Math.max(0, Math.min(1, (pageX - railPageX) / railWidth));
+      }
+      if (typeof locationX === 'number') {
+        return Math.max(0, Math.min(1, locationX / railWidth));
+      }
+    }
+    const screenW = windowWidthRef.current || windowWidth || 800;
+    const approxWidth = Math.max(100, screenW - 40);
+    const approxX = typeof pageX === 'number' ? pageX - 20 : (locationX || 0);
+    return Math.max(0, Math.min(1, approxX / approxWidth));
+  };
+
+  const handleScrubberTouchStart = (e) => {
+    wakeControls();
+    isScrubbingRef.current = true;
+    setIsScrubbing(true);
+    const dur = durationRef.current || duration || 0;
+    const ratio = computeScrubRatio(e);
+    const target = ratio * dur;
+    scrubTargetTimeRef.current = target;
+    setScrubPercent(ratio * 100);
+    setScrubTime(target);
+  };
+
+  const handleScrubberTouchMove = (e) => {
+    wakeControls();
+    const dur = durationRef.current || duration || 0;
+    const ratio = computeScrubRatio(e);
+    const target = ratio * dur;
+    scrubTargetTimeRef.current = target;
+    setScrubPercent(ratio * 100);
+    setScrubTime(target);
+
+    // Throttle preview seeks during dragging to 250ms to keep video smooth
+    const now = Date.now();
+    if (now - lastThrottleSeekRef.current > 250) {
+      lastThrottleSeekRef.current = now;
+      const activePlayer = playerRef.current || player;
+      if (activePlayer && dur > 0) {
+        try {
+          activePlayer.currentTime = target;
+        } catch (_) {}
+      }
+    }
+  };
+
+  const handleScrubberTouchEnd = () => {
+    wakeControls();
+    const dur = durationRef.current || duration || 0;
+    const finalTarget = scrubTargetTimeRef.current;
+    const activePlayer = playerRef.current || player;
+    if (activePlayer && dur > 0) {
+      try {
+        activePlayer.currentTime = finalTarget;
+      } catch (err) {
+        console.warn('[Player] Scrubber release seek error:', err);
+      }
+    }
+    setCurrentTime(finalTarget);
+    setTimeout(() => {
+      isScrubbingRef.current = false;
+      setIsScrubbing(false);
+    }, 150);
+  };
 
   return (
     <View style={[styles.playerContainer, StyleSheet.absoluteFillObject, { backgroundColor: '#000000' }]}>
@@ -8993,21 +9162,6 @@ function ReelCustomPlayer({
             >
               <MaterialIcons name="forward-10" size={32} color="#FFFFFF" />
             </TouchableOpacity>
-
-            {/* Next Episode Center Button (when series) */}
-            {Boolean(isSeries || currentSeason > 0 || currentEpisode > 0 || movie?.isSeries || movie?.subjectType === 2) && onPlayNextEpisode && (
-              <TouchableOpacity
-                style={[styles.playerSeekRoundBtn, { marginLeft: 12 }]}
-                onPress={() => {
-                  wakeControls();
-                  onPlayNextEpisode();
-                }}
-                activeOpacity={0.7}
-                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-              >
-                <Feather name="skip-forward" size={26} color="#FFFFFF" />
-              </TouchableOpacity>
-            )}
           </View>
 
           {/* BOTTOM CONTROLS BAR (PINNED TO BOTTOM OF SCREEN) */}
@@ -9020,44 +9174,45 @@ function ReelCustomPlayer({
               },
             ]}
           >
-            {/* Interactive Scrubber Rail */}
+            {/* Interactive Smooth Scrubber Rail */}
             <View
               style={styles.scrubberTouchableArea}
+              onLayout={(e) => {
+                const { width } = e.nativeEvent.layout;
+                scrubberRailWidthRef.current = width;
+                if (e.target && typeof e.target.measure === 'function') {
+                  e.target.measure((x, y, w, h, pageX) => {
+                    if (pageX) scrubberRailPageXRef.current = pageX;
+                  });
+                }
+              }}
               onStartShouldSetResponder={() => true}
-              onResponderGrant={(e) => {
-                wakeControls();
-                const activePlayer = playerRef.current || player;
-                const dur = durationRef.current || duration || 0;
-                if (dur > 0 && activePlayer) {
-                  try {
-                    const locationX = e.nativeEvent.locationX;
-                    const screenW = windowWidthRef.current || windowWidth || 800;
-                    const ratio = Math.max(0, Math.min(1, locationX / (screenW - 40)));
-                    activePlayer.currentTime = ratio * dur;
-                  } catch (err) {
-                    console.warn('[Player] Scrubber grant error:', err);
-                  }
-                }
-              }}
-              onResponderMove={(e) => {
-                wakeControls();
-                const activePlayer = playerRef.current || player;
-                const dur = durationRef.current || duration || 0;
-                if (dur > 0 && activePlayer) {
-                  try {
-                    const locationX = e.nativeEvent.locationX;
-                    const screenW = windowWidthRef.current || windowWidth || 800;
-                    const ratio = Math.max(0, Math.min(1, locationX / (screenW - 40)));
-                    activePlayer.currentTime = ratio * dur;
-                  } catch (err) {
-                    console.warn('[Player] Scrubber move error:', err);
-                  }
-                }
-              }}
+              onMoveShouldSetResponder={() => true}
+              onResponderGrant={handleScrubberTouchStart}
+              onResponderMove={handleScrubberTouchMove}
+              onResponderRelease={handleScrubberTouchEnd}
+              onResponderTerminate={handleScrubberTouchEnd}
             >
               <View style={styles.scrubberRail}>
-                <View style={[styles.scrubberFill, { width: `${progressPercent}%` }]} />
-                <View style={[styles.scrubberKnob, { left: `${progressPercent}%` }]} />
+                <View
+                  style={[
+                    styles.scrubberFill,
+                    { width: `${displayProgressPercent}%` },
+                    Platform.OS === 'web' && !isScrubbing && {
+                      transition: 'width 0.08s linear',
+                    },
+                  ]}
+                />
+                <View
+                  style={[
+                    styles.scrubberKnob,
+                    { left: `${displayProgressPercent}%` },
+                    isScrubbing && styles.scrubberKnobActive,
+                    Platform.OS === 'web' && !isScrubbing && {
+                      transition: 'left 0.08s linear',
+                    },
+                  ]}
+                />
               </View>
             </View>
 
@@ -9081,7 +9236,7 @@ function ReelCustomPlayer({
                   <Feather name={isPlaying ? "pause" : "play"} size={16} color="#FFFFFF" style={{ marginRight: 10 }} />
                 </TouchableOpacity>
                 <Text style={styles.playerTimecodeText}>
-                  {formatTime(currentTime)} <Text style={{ color: '#737373' }}>/ {formatTime(duration)}</Text>
+                  {formatTime(displayTime)} <Text style={{ color: '#737373' }}>/ {formatTime(duration)}</Text>
                 </Text>
               </View>
 
@@ -9114,16 +9269,21 @@ function ReelCustomPlayer({
                   <Text style={styles.playerGlassActionText}>{currentSpeed}</Text>
                 </TouchableOpacity>
 
-                {/* 4. Next Episode (for Series) */}
-                {Boolean(isSeries || currentSeason > 0 || currentEpisode > 0 || movie?.isSeries || movie?.subjectType === 2) && onPlayNextEpisode && (
+                {/* 4. Episode Selector Sheet Button (EP) */}
+                {Boolean(isSeries || currentSeason > 0 || currentEpisode > 0 || movie?.isSeries || movie?.subjectType === 2 || (seasons && seasons.length > 0)) && (
                   <TouchableOpacity
-                    style={styles.playerGlassActionBtn}
-                    onPress={() => { wakeControls(); onPlayNextEpisode(); }}
+                    style={[styles.playerGlassActionBtn, styles.playerGlassActionBtnEp]}
+                    onPress={() => {
+                      wakeControls();
+                      setIsEpisodesModalOpen(true);
+                    }}
                     activeOpacity={0.7}
                     hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                   >
-                    <Feather name="skip-forward" size={13} color="#FFFFFF" style={{ marginRight: 4 }} />
-                    <Text style={styles.playerGlassActionText}>Next</Text>
+                    <Feather name="list" size={13} color="#e50914" style={{ marginRight: 4 }} />
+                    <Text style={[styles.playerGlassActionText, { color: '#FFFFFF', fontWeight: '700' }]}>
+                      {currentEpisode ? `EP ${currentEpisode}` : 'EP'}
+                    </Text>
                   </TouchableOpacity>
                 )}
 
@@ -9306,6 +9466,130 @@ function ReelCustomPlayer({
               })}
             </ScrollView>
           </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* EPISODES SELECTOR MODAL / SHEET */}
+      <Modal
+        visible={isEpisodesModalOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setIsEpisodesModalOpen(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalBackdrop}
+          activeOpacity={1}
+          onPress={() => setIsEpisodesModalOpen(false)}
+        >
+          <TouchableWithoutFeedback onPress={() => {}}>
+            <View style={styles.episodesSheetModal}>
+              {/* Header */}
+              <View style={styles.episodesSheetHeader}>
+                <View>
+                  <Text style={styles.episodesSheetTitle}>Select Episode</Text>
+                  <Text style={styles.episodesSheetSub}>
+                    {movie?.name ? movie.name : 'Episodes'}
+                    {currentSeason ? ` · Season ${currentSeason}` : ''}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.episodesSheetCloseBtn}
+                  onPress={() => setIsEpisodesModalOpen(false)}
+                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                >
+                  <Feather name="x" size={20} color="#8e8e93" />
+                </TouchableOpacity>
+              </View>
+
+              {/* Season Tabs if multiple seasons exist */}
+              {Array.isArray(seasons) && seasons.length > 1 && (
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.episodesSeasonTabsTrack}
+                >
+                  {seasons.map((s, idx) => (
+                    <TouchableOpacity
+                      key={`sheet-se-${s.se || idx}`}
+                      style={[
+                        styles.episodesSeasonTab,
+                        selectedSheetSeasonIdx === idx && styles.episodesSeasonTabActive,
+                      ]}
+                      onPress={() => setSelectedSheetSeasonIdx(idx)}
+                      activeOpacity={0.75}
+                    >
+                      <Text
+                        style={[
+                          styles.episodesSeasonTabText,
+                          selectedSheetSeasonIdx === idx && styles.episodesSeasonTabTextActive,
+                        ]}
+                      >
+                        Season {s.se}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              )}
+
+              {/* Episode Numbers Grid */}
+              <ScrollView
+                style={styles.episodesSheetScroll}
+                contentContainerStyle={styles.episodesSheetGrid}
+                showsVerticalScrollIndicator={false}
+              >
+                {(() => {
+                  const activeSeasonObj =
+                    Array.isArray(seasons) && seasons.length > 0
+                      ? seasons[selectedSheetSeasonIdx] || seasons[0]
+                      : null;
+                  const activeSeNum = activeSeasonObj?.se || currentSeason || 1;
+                  const epList = activeSeasonObj
+                    ? getEpisodesArray(activeSeasonObj)
+                    : Array.from({ length: 24 }, (_, i) => i + 1);
+
+                  return epList.map((epNum) => {
+                    const isCurrentlyPlaying =
+                      activeSeNum === (currentSeason || 1) &&
+                      epNum === (currentEpisode || 1);
+
+                    return (
+                      <TouchableOpacity
+                        key={`sheet-ep-${activeSeNum}-${epNum}`}
+                        style={[
+                          styles.epGridItem,
+                          isCurrentlyPlaying && styles.epGridItemActive,
+                        ]}
+                        onPress={() => {
+                          setIsEpisodesModalOpen(false);
+                          if (onSelectEpisode) {
+                            onSelectEpisode(activeSeNum, epNum);
+                          }
+                        }}
+                        activeOpacity={0.8}
+                      >
+                        <Text
+                          style={[
+                            styles.epGridNumber,
+                            isCurrentlyPlaying && styles.epGridNumberActive,
+                          ]}
+                        >
+                          {epNum}
+                        </Text>
+                        <Text
+                          style={[
+                            styles.epGridLabel,
+                            isCurrentlyPlaying && styles.epGridLabelActive,
+                          ]}
+                        >
+                          {isCurrentlyPlaying ? 'Playing' : `EP ${epNum}`}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  });
+                })()}
+              </ScrollView>
+            </View>
+          </TouchableWithoutFeedback>
         </TouchableOpacity>
       </Modal>
 
@@ -10624,6 +10908,119 @@ const styles = StyleSheet.create({
     borderRadius: 7,
     backgroundColor: '#FFFFFF',
     marginLeft: -7,
+  },
+  scrubberKnobActive: {
+    transform: [{ scale: 1.35 }],
+    backgroundColor: '#E50914',
+  },
+  playerGlassActionBtnEp: {
+    borderColor: 'rgba(229, 9, 20, 0.45)',
+    backgroundColor: 'rgba(229, 9, 20, 0.15)',
+  },
+  episodesSheetModal: {
+    width: '100%',
+    maxWidth: 580,
+    maxHeight: '80%',
+    backgroundColor: '#121216',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+    paddingTop: 18,
+    paddingBottom: 24,
+    paddingHorizontal: 20,
+    alignSelf: 'center',
+  },
+  episodesSheetHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  episodesSheetTitle: {
+    color: '#FFFFFF',
+    fontSize: 17,
+    fontWeight: '700',
+  },
+  episodesSheetSub: {
+    color: '#8e8e93',
+    fontSize: 12.5,
+    marginTop: 2,
+  },
+  episodesSheetCloseBtn: {
+    padding: 6,
+  },
+  episodesSeasonTabsTrack: {
+    paddingBottom: 12,
+    gap: 8,
+  },
+  episodesSeasonTab: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  episodesSeasonTabActive: {
+    backgroundColor: '#E50914',
+    borderColor: '#E50914',
+  },
+  episodesSeasonTabText: {
+    color: '#a3a3a3',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  episodesSeasonTabTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  episodesSheetScroll: {
+    maxHeight: 340,
+  },
+  episodesSheetGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    paddingVertical: 6,
+  },
+  epGridItem: {
+    width: '22%',
+    minWidth: 64,
+    aspectRatio: 1.1,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 6,
+  },
+  epGridItemActive: {
+    backgroundColor: 'rgba(229, 9, 20, 0.18)',
+    borderColor: '#E50914',
+    borderWidth: 1.5,
+  },
+  epGridNumber: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  epGridNumberActive: {
+    color: '#E50914',
+  },
+  epGridLabel: {
+    color: '#71717a',
+    fontSize: 10,
+    marginTop: 2,
+    fontWeight: '500',
+  },
+  epGridLabelActive: {
+    color: '#f87171',
+    fontWeight: '600',
   },
   playerBottomOptionsRow: {
     flexDirection: 'row',

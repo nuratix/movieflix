@@ -288,6 +288,36 @@ const PAGES = {
         "url": `${BASE_URL}/`
       }
     }
+  },
+
+  maintenance: {
+    outPath: path.join(distDir, 'maintenance', 'index.html'),
+    title: 'Site Under Maintenance — MovieFlix',
+    description: 'MovieFlix is currently under scheduled maintenance. Please check back shortly.',
+    canonical: `${BASE_URL}/maintenance`,
+    ogType: 'website',
+    keywords: 'movieflix maintenance, movieflix server status',
+    schema: {
+      "@context": "https://schema.org",
+      "@type": "WebPage",
+      "name": "MovieFlix Under Maintenance",
+      "description": "MovieFlix is undergoing scheduled system maintenance."
+    }
+  },
+
+  donate: {
+    outPath: path.join(distDir, 'donate', 'index.html'),
+    title: 'Support MovieFlix Server Recovery — Cryptocurrency & Bitcoin Donation',
+    description: 'Our server has crashed. Please donate to help keep MovieFlix alive for everyone.',
+    canonical: `${BASE_URL}/donate`,
+    ogType: 'website',
+    keywords: 'donate movieflix, cryptocurrency donation, bitcoin donation, nowpayments',
+    schema: {
+      "@context": "https://schema.org",
+      "@type": "WebPage",
+      "name": "MovieFlix Server Donation",
+      "description": "Help support MovieFlix infrastructure."
+    }
   }
 };
 
