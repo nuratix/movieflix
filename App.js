@@ -1112,144 +1112,184 @@ function HomeSkeletonLoader() {
 // ─── INSTAGRAM-STYLE 9:16 SHOTS FEED & VIDEO PLAYER ─────────────────────────
 const INITIAL_SHOTS = [
   {
-    id: "545117293769020152-ep1",
+    id: "shot-4183823238805478232-init",
+    subject_id: "4183823238805478232",
+    title: "Matchbox the Movie",
+    name: "Matchbox the Movie",
+    slug: "matchbox-the-movie-S5hfykcX3Z4",
+    poster_url: "https://pbcdnw.aoneroom.com/image/2026/10/10/486b8e41bf36e0c35a2ec0b4de21aa06.jpg",
+    rating: "5.8",
+    author: "@Movieflix",
+    isMovie: true,
+    isSeries: false,
+    badge: "Movie",
+    total_episodes: 0,
+    se: 0,
+    ep: 0,
+    likes: 0,
+    shares: 0,
+  },
+  {
+    id: "shot-8697152315721245208-init",
+    subject_id: "8697152315721245208",
+    title: "Avatar: Seven Havens",
+    name: "Avatar: Seven Havens",
+    slug: "avatar-seven-havens-6RjmSI53tma",
+    poster_url: "https://pbcdnw.aoneroom.com/image/2026/09/24/3ff183eb269dc4526205208417134b4a.jpg",
+    rating: "6.6",
+    author: "@Netflix",
+    isMovie: false,
+    isSeries: true,
+    badge: "Series",
+    total_episodes: 10,
+    se: 1,
+    ep: 1,
+    likes: 0,
+    shares: 0,
+  },
+  {
+    id: "shot-545117293769020152-init",
     subject_id: "545117293769020152",
     title: "I'm pregnant, it's not yours",
+    name: "I'm pregnant, it's not yours",
     slug: "im-pregnant-its-not-yours-iLdEdERDgE",
     poster_url: "https://pbcdnw.aoneroom.com/image/2026/08/19/c0a1ea39fb7a40fd3d0ec44fa6684a39.jpg",
     rating: "7.9",
-    total_episodes: 37,
     author: "@DramaBox",
-    likes: 0,
-    shares: 0,
+    isMovie: false,
+    isSeries: true,
+    badge: "Short",
+    total_episodes: 37,
     se: 1,
     ep: 1,
+    likes: 0,
+    shares: 0,
   },
   {
-    id: "8514694265598101032-ep1",
+    id: "shot-8026099856525641752-init",
+    subject_id: "8026099856525641752",
+    title: "Ice Cream Man",
+    name: "Ice Cream Man",
+    slug: "ice-cream-man-werpFRACTy9",
+    poster_url: "https://pbcdnw.aoneroom.com/image/2026/08/04/de3f5362aee4f59e3d760c6283c35a6c.jpg",
+    rating: "6.5",
+    author: "@CinemaMax",
+    isMovie: true,
+    isSeries: false,
+    badge: "Movie",
+    total_episodes: 0,
+    se: 0,
+    ep: 0,
+    likes: 0,
+    shares: 0,
+  },
+  {
+    id: "shot-5139196938264400928-init",
+    subject_id: "5139196938264400928",
+    title: "The Boys",
+    name: "The Boys",
+    slug: "the-boys-c8bx84KzD76",
+    poster_url: "https://pbcdnw.aoneroom.com/image/2026/09/15/455328c7f4249ad60b5e585049de8019.jpg",
+    rating: "8.5",
+    author: "@AmazonPrime",
+    isMovie: false,
+    isSeries: true,
+    badge: "Series",
+    total_episodes: 8,
+    se: 1,
+    ep: 1,
+    likes: 0,
+    shares: 0,
+  },
+  {
+    id: "shot-8514694265598101032-init",
     subject_id: "8514694265598101032",
     title: "Beneath Her Gown: The Master's Claimed Wolf Pet",
+    name: "Beneath Her Gown: The Master's Claimed Wolf Pet",
     slug: "beneath-her-gown-the-masters-claimed-wolf-pet-k8xuNqboZ8a",
     poster_url: "https://pbcdnw.aoneroom.com/image/2026/08/11/50e2c2fc118aaacb56bf6e892743d5ff.jpg",
     rating: "7.2",
-    total_episodes: 28,
     author: "@NetShort",
-    likes: 0,
-    shares: 0,
+    isMovie: false,
+    isSeries: true,
+    badge: "Short",
+    total_episodes: 28,
     se: 1,
     ep: 1,
-  },
-  {
-    id: "3453846752107844528-ep1",
-    subject_id: "3453846752107844528",
-    title: "Disciplined by My Mafia Master",
-    slug: "disciplined-by-my-mafia-master-IOUVnVAE874",
-    poster_url: "https://pbcdnw.aoneroom.com/image/2026/08/12/eba98a15ea3a790581c975c58a80cf94.jpg",
-    rating: "7.8",
-    total_episodes: 24,
-    author: "@DramaBox",
     likes: 0,
     shares: 0,
-    se: 1,
-    ep: 1,
   },
   {
-    id: "8656852975811445184-ep1",
+    id: "shot-5295229396255755840-init",
+    subject_id: "5295229396255755840",
+    title: "Lita",
+    name: "Lita",
+    slug: "lita-4UlZmZOcaj6",
+    poster_url: "https://pbcdnw.aoneroom.com/image/2025/11/03/3ee77ff1b25fd77f85403b3cd535741f.jpg",
+    rating: "7.4",
+    author: "@WarnerBros",
+    isMovie: true,
+    isSeries: false,
+    badge: "Movie",
+    total_episodes: 0,
+    se: 0,
+    ep: 0,
+    likes: 0,
+    shares: 0,
+  },
+  {
+    id: "shot-149973373144159000-init",
+    subject_id: "149973373144159000",
+    title: "Snowfall",
+    name: "Snowfall",
+    slug: "snowfall-6JvIRkxS4b",
+    poster_url: "https://pbcdnw.aoneroom.com/image/2026/01/27/bd0959b7ce517e11ee5a4294e987317c.jpg",
+    rating: "8.5",
+    author: "@HBO",
+    isMovie: false,
+    isSeries: true,
+    badge: "Series",
+    total_episodes: 10,
+    se: 1,
+    ep: 1,
+    likes: 0,
+    shares: 0,
+  },
+  {
+    id: "shot-8656852975811445184-init",
     subject_id: "8656852975811445184",
     title: "The Hidden Dragon Rider Returns for Justice",
+    name: "The Hidden Dragon Rider Returns for Justice",
     slug: "the-hidden-dragon-rider-returns-for-justice-KTqXdfFtuja",
     poster_url: "https://pbcdnw.aoneroom.com/image/2026/08/24/4be78c41bd06008edc758fed54b88750.jpg",
     rating: "7.9",
+    author: "@ShortMax",
+    isMovie: false,
+    isSeries: true,
+    badge: "Short",
     total_episodes: 30,
-    author: "@ShortMax",
-    likes: 0,
-    shares: 0,
     se: 1,
     ep: 1,
-  },
-  {
-    id: "1893361129175368768-ep1",
-    subject_id: "1893361129175368768",
-    title: "The Gambling God Vanished Until the Final Hand",
-    slug: "the-gambling-god-vanished-until-the-final-hand-8sEaor4CRf2",
-    poster_url: "https://pbcdnw.aoneroom.com/image/2026/08/24/1901755c3ec30ab5e338938d3c9f0064.jpg",
-    rating: "7.1",
-    total_episodes: 18,
-    author: "@ReelShort",
     likes: 0,
     shares: 0,
-    se: 1,
-    ep: 1,
   },
   {
-    id: "8569709395045678544-ep1",
-    subject_id: "8569709395045678544",
-    title: "OMG! My Divorce Client Is My Billionaire Husband",
-    slug: "omg-my-divorce-client-is-my-billionaire-husband-6Rd6xDjm3da",
-    poster_url: "https://pbcdnw.aoneroom.com/image/2026/08/19/6b3f8c18a5311f8b344a19037c6f199b.jpg",
-    rating: "7.6",
-    total_episodes: 32,
-    author: "@DramaBox",
-    likes: 0,
-    shares: 0,
-    se: 1,
-    ep: 1,
-  },
-  {
-    id: "9106721078893863608-ep1",
-    subject_id: "9106721078893863608",
-    title: "One Move God Mode 2",
-    slug: "one-move-god-mode-2-uH6hEtvSIQa",
-    poster_url: "https://pbcdnw.aoneroom.com/image/2026/08/12/0a07afddec873b23bf2b74073424a4a4.jpg",
-    rating: "7.7",
-    total_episodes: 20,
-    author: "@NetShort",
-    likes: 0,
-    shares: 0,
-    se: 1,
-    ep: 1,
-  },
-  {
-    id: "8529996031482808168-ep1",
-    subject_id: "8529996031482808168",
-    title: "Daddy Don's Forbidden Pet",
-    slug: "daddy-dons-forbidden-pet-QEduiBht7aa",
-    poster_url: "https://pbcdnw.aoneroom.com/image/2026/08/25/f02290e1f49389c5a626cea31c20c3a0.jpg",
+    id: "shot-3272392338131385552-init",
+    subject_id: "3272392338131385552",
+    title: "MY 30TH WEDDING",
+    name: "MY 30TH WEDDING",
+    slug: "my-30th-wedding-6x5L5dGAJT3",
+    poster_url: "https://pbcdnw.aoneroom.com/image/2026/10/01/4d04cebd1d30043dd31a26817dba4776.jpg",
     rating: "7.0",
-    total_episodes: 16,
-    author: "@GoodShort",
+    author: "@Universal",
+    isMovie: true,
+    isSeries: false,
+    badge: "Movie",
+    total_episodes: 0,
+    se: 0,
+    ep: 0,
     likes: 0,
     shares: 0,
-    se: 1,
-    ep: 1,
-  },
-  {
-    id: "6191020716834840472-ep1",
-    subject_id: "6191020716834840472",
-    title: "The 100th Divorce Was Final",
-    slug: "the-100th-divorce-was-final-ke4MZwjWkn7",
-    poster_url: "https://pbcdnw.aoneroom.com/image/2026/08/18/5fbef86eb4e1a06e9708fe18412b2e60.jpg",
-    rating: "7.1",
-    total_episodes: 25,
-    author: "@ReelShort",
-    likes: 0,
-    shares: 0,
-    se: 1,
-    ep: 1,
-  },
-  {
-    id: "1980899104976688224-ep1",
-    subject_id: "1980899104976688224",
-    title: "From XL to Extra Love",
-    slug: "from-xl-to-extra-love-EOfYUApxkm2",
-    poster_url: "https://pbcdnw.aoneroom.com/image/2026/03/26/68269d6d0a6b02da95bd09cb04b42cce.jpg",
-    rating: "7.7",
-    total_episodes: 22,
-    author: "@ShortMax",
-    likes: 0,
-    shares: 0,
-    se: 1,
-    ep: 1,
   }
 ];
 
@@ -1540,6 +1580,44 @@ function buildPureHtmlShotsPage({ initialShots, apiBase, isMuted, targetShortId,
       opacity: 1;
       transform: scale(1.2);
     }
+    .type-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      background: rgba(0, 0, 0, 0.6);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      border-radius: 10px;
+      padding: 2px 7px;
+      font-size: 10px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #e50914;
+    }
+    .watch-this-btn {
+      display: inline-flex;
+      align-items: center;
+      align-self: flex-start;
+      gap: 7px;
+      background: linear-gradient(135deg, #e50914 0%, #b20710 100%);
+      color: #ffffff;
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      border-radius: 20px;
+      padding: 7px 16px;
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: 0.3px;
+      cursor: pointer;
+      box-shadow: 0 4px 14px rgba(229, 9, 20, 0.45);
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+      margin-top: 4px;
+      pointer-events: auto;
+    }
+    .watch-this-btn:active {
+      transform: scale(0.93);
+      box-shadow: 0 2px 8px rgba(229, 9, 20, 0.3);
+    }
     .progress-bar-track {
       position: absolute;
       bottom: 0;
@@ -1807,10 +1885,30 @@ function buildPureHtmlShotsPage({ initialShots, apiBase, isMuted, targetShortId,
       }
 
       function createSlideElement(item, idx) {
-        item.currentEp = item.ep || 1;
-        item.total_episodes = item.total_episodes || 12;
+        var isSeries = Boolean(item.isSeries);
+        var supportsEpisodes = isSeries && (item.total_episodes > 1 || item.episodes_count > 1);
+        item.currentEp = supportsEpisodes ? (item.ep || 1) : 0;
+        item.total_episodes = supportsEpisodes ? (item.total_episodes || 1) : 0;
         item.likesCount = Number(item.likes || 0);
         item.liked = Boolean(localLikedIds[String(item.subject_id || item.id)]);
+
+        var badgeLabel = item.badge || (item.isMovie ? 'Movie' : (item.isSeries ? 'Series' : ''));
+        var badgeHtml = badgeLabel ? ('<span class="type-badge">' + badgeLabel + '</span>') : '';
+
+        var epPillHtml = supportsEpisodes ? (
+          '<div class="ep-pill">' +
+            '<button class="ep-btn ep-prev-btn" aria-label="Previous episode">&#9664;</button>' +
+            '<span class="ep-text">Ep ' + item.currentEp + ' / ' + item.total_episodes + '</span>' +
+            '<button class="ep-btn ep-next-btn" aria-label="Next episode">&#9654;</button>' +
+          '</div>'
+        ) : '';
+
+        var watchLabel = item.isMovie ? 'Watch Full Movie' : (item.isSeries ? 'Watch Full Series' : 'Watch This');
+        var watchBtnHtml =
+          '<button class="watch-this-btn" aria-label="Watch">' +
+            '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>' +
+            '<span>' + watchLabel + '</span>' +
+          '</button>';
 
         var slide = document.createElement('div');
         slide.className = 'slide';
@@ -1854,13 +1952,11 @@ function buildPureHtmlShotsPage({ initialShots, apiBase, isMuted, targetShortId,
               '<div class="creator-row">' +
                 '<img class="creator-avatar" src="' + (item.poster_url || '') + '" alt="" />' +
                 '<span class="creator-name">' + (item.author || '@Movieflix') + '</span>' +
+                badgeHtml +
               '</div>' +
-              '<div class="shot-title">' + (item.title || '') + '</div>' +
-              '<div class="ep-pill">' +
-                '<button class="ep-btn ep-prev-btn">&#9664;</button>' +
-                '<span class="ep-text">Ep ' + item.currentEp + ' / ' + item.total_episodes + '</span>' +
-                '<button class="ep-btn ep-next-btn">&#9654;</button>' +
-              '</div>' +
+              '<div class="shot-title">' + (item.title || item.name || '') + '</div>' +
+              epPillHtml +
+              watchBtnHtml +
             '</div>' +
             '<div class="progress-bar-track">' +
               '<div class="progress-bar-fill"></div>' +
@@ -1885,10 +1981,37 @@ function buildPureHtmlShotsPage({ initialShots, apiBase, isMuted, targetShortId,
         var epText = slide.querySelector('.ep-text');
         var prevEpBtn = slide.querySelector('.ep-prev-btn');
         var nextEpBtn = slide.querySelector('.ep-next-btn');
+        var watchBtn = slide.querySelector('.watch-this-btn');
+
+        if (watchBtn) {
+          watchBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            postToNative({
+              type: 'watch-movie',
+              item: item
+            });
+          });
+        }
 
         poster.addEventListener('click', function(e) {
           e.stopPropagation();
           playSlide(idx);
+        });
+
+        video.addEventListener('loadedmetadata', function() {
+          var dur = video.duration;
+          // For longer titles (movies or episodes > 3 minutes):
+          // jump to middle part around 45% and play ~1 to 2 minutes (90s) clip
+          if (dur && dur > 180) {
+            var clipStart = Math.max(60, Math.floor(dur * 0.45));
+            var clipLength = 90;
+            item._clipStart = clipStart;
+            item._clipEnd = Math.min(dur - 10, clipStart + clipLength);
+            video.currentTime = clipStart;
+          } else {
+            item._clipStart = 0;
+            item._clipEnd = dur || 0;
+          }
         });
 
         video.addEventListener('timeupdate', function() {
@@ -1896,7 +2019,17 @@ function buildPureHtmlShotsPage({ initialShots, apiBase, isMuted, targetShortId,
             poster.classList.add('hidden');
             spinner.classList.remove('active');
           }
-          if (video.duration > 0) {
+          if (item._clipEnd && item._clipEnd > 0 && video.duration > 180) {
+            // Loop middle 1-2 min preview clip
+            if (video.currentTime >= item._clipEnd) {
+              video.currentTime = item._clipStart || 60;
+            }
+            var clipStart = item._clipStart || 0;
+            var clipLen = Math.max(1, item._clipEnd - clipStart);
+            var relTime = Math.max(0, video.currentTime - clipStart);
+            var pct = Math.min(100, (relTime / clipLen) * 100);
+            progressFill.style.width = pct + '%';
+          } else if (video.duration > 0) {
             var pct = (video.currentTime / video.duration) * 100;
             progressFill.style.width = pct + '%';
           }
@@ -2003,15 +2136,19 @@ function buildPureHtmlShotsPage({ initialShots, apiBase, isMuted, targetShortId,
           }
         }
 
-        prevEpBtn.addEventListener('click', function(e) {
-          e.stopPropagation();
-          changeEp(-1);
-        });
+        if (prevEpBtn) {
+          prevEpBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            changeEp(-1);
+          });
+        }
 
-        nextEpBtn.addEventListener('click', function(e) {
-          e.stopPropagation();
-          changeEp(1);
-        });
+        if (nextEpBtn) {
+          nextEpBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            changeEp(1);
+          });
+        }
 
         function triggerHeartPop() {
           heartBurst.classList.remove('pop');
@@ -2100,7 +2237,7 @@ function buildPureHtmlShotsPage({ initialShots, apiBase, isMuted, targetShortId,
           if (touchMoved) {
             var dx = e.changedTouches[0].clientX - touchStartX;
             var dy = e.changedTouches[0].clientY - touchStartY;
-            if (Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+            if (supportsEpisodes && Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy) * 1.5) {
               if (dx < 0) changeEp(1);
               else changeEp(-1);
             }
@@ -2198,14 +2335,25 @@ function buildPureHtmlShotsPage({ initialShots, apiBase, isMuted, targetShortId,
       }
 
       async function fetchStreamUrl(item) {
-        var ep = item.currentEp || 1;
-        var key = (item.subject_id || item.id) + '-ep-' + ep;
+        var isSeries = Boolean(item.isSeries);
+        var se = isSeries ? (item.se || 1) : 0;
+        var ep = isSeries ? (item.currentEp || item.ep || 1) : 0;
+        var key = (item.subject_id || item.id) + '-s' + se + '-e' + ep;
         if (streamCache[key]) return streamCache[key];
 
         try {
-          var res = await fetch(API_BASE + '/api/content?endpoint=stream&id=' + encodeURIComponent(item.subject_id) + '&detail_path=' + encodeURIComponent(item.slug || '') + '&se=1&ep=' + ep);
+          var primaryUrl = API_BASE + '/api/content?endpoint=stream&id=' + encodeURIComponent(item.subject_id) + '&detail_path=' + encodeURIComponent(item.slug || '') + '&se=' + se + '&ep=' + ep;
+          var res = await fetch(primaryUrl);
           var data = await res.json();
           var raw = data && data.sources && data.sources[0] && data.sources[0].url;
+
+          // If series mode returned no stream, try movie mode fallback (se=0, ep=0)
+          if (!raw && (se > 0 || ep > 0)) {
+            var fbRes = await fetch(API_BASE + '/api/content?endpoint=stream&id=' + encodeURIComponent(item.subject_id) + '&detail_path=' + encodeURIComponent(item.slug || '') + '&se=0&ep=0');
+            var fbData = await fbRes.json();
+            raw = fbData && fbData.sources && fbData.sources[0] && fbData.sources[0].url;
+          }
+
           if (raw) {
             item._rawUrl = raw;
             var isWebBrowser = typeof window !== 'undefined' && (!window.ReactNativeWebView);
@@ -2238,7 +2386,11 @@ function buildPureHtmlShotsPage({ initialShots, apiBase, isMuted, targetShortId,
             video.src = url;
           }
           video.muted = isMuted;
-          video.currentTime = 0;
+          if (item._clipStart && item._clipStart > 0) {
+            try { video.currentTime = item._clipStart; } catch (_) {}
+          } else {
+            video.currentTime = 0;
+          }
           var p = video.play();
           if (p && typeof p.then === 'function') {
             p.then(function() {
@@ -2377,6 +2529,7 @@ function ShotsFeedView({
   authAccessToken,
   openAuthModal,
   targetShortId,
+  onWatchMovie,
 }) {
   const webViewRef = useRef(null);
   const iframeRef = useRef(null);
@@ -2438,6 +2591,26 @@ function ShotsFeedView({
       }
     } else if (data.type === 'like') {
       triggerHaptic?.('selection');
+    } else if (data.type === 'watch-movie' && data.item) {
+      triggerHaptic?.('selection');
+      const item = data.item;
+      const se = item.isSeries ? (item.se || 1) : 0;
+      const ep = item.isSeries ? (item.currentEp || item.ep || 1) : 0;
+      const isSeries = Boolean(item.isSeries);
+      const normMovie = {
+        name: item.title || item.name || 'Title',
+        title: item.title || item.name || 'Title',
+        slug: item.slug || '',
+        subject_id: item.subject_id || item.id || '',
+        poster_url: item.poster_url || '',
+        rating: item.rating || '',
+        isSeries,
+        se,
+        ep,
+      };
+      if (onWatchMovie) {
+        onWatchMovie(normMovie, se, ep, isSeries);
+      }
     } else if (data.type === 'share' && data.item) {
       triggerHaptic?.('selection');
       const activeSlug = data.slug || data.item.slug || data.item.subject_id || data.item.id;
@@ -2448,7 +2621,7 @@ function ShotsFeedView({
         title: data.item.title || 'Movieflix Shorts',
       }).catch(() => {});
     }
-  }, [authUser, authAccessToken, onBack, showToast, triggerHaptic]);
+  }, [authUser, authAccessToken, onBack, showToast, triggerHaptic, onWatchMovie]);
 
   // Listen for Web iframe postMessage
   useEffect(() => {
@@ -5314,6 +5487,10 @@ function ReelApp() {
           authAccessToken={authAccessToken}
           openAuthModal={() => setIsAuthPageOpen(true)}
           targetShortId={targetShortId}
+          onWatchMovie={(movie, se, ep, isSeries) => {
+            setMainTab('Home');
+            launchPlayer(movie, se, ep, isSeries);
+          }}
         />
       ) : (
         <ScrollView

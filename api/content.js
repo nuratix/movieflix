@@ -359,39 +359,80 @@ export default async function handler(req, res) {
       }
       try {
         let rawItems = [];
-        if (page === 1) {
-          const homeRes = await fetch(`${UPSTREAM_BASE}/home`, {
-            headers: {
-              'Accept': 'application/json',
-              'X-App-Key': providerKey,
-              'User-Agent': 'Movieflix-Proxy/1.1.4',
-            },
+        const seenIds = new Set();
+
+        const addUnique = (item, isMovie, isSeries, badge) => {
+          if (!item || !item.subject_id) return;
+          const sId = String(item.subject_id);
+          if (seenIds.has(sId)) return;
+          seenIds.add(sId);
+          rawItems.push({
+            ...item,
+            isMovie: Boolean(isMovie),
+            isSeries: Boolean(isSeries),
+            badge: badge || (isMovie ? 'Movie' : 'Series'),
           });
-          const homeData = await homeRes.json();
+        };
+
+        if (page === 1) {
+          const [homeRes, moviesRes, tvRes] = await Promise.allSettled([
+            fetch(`${UPSTREAM_BASE}/home`, {
+              headers: { 'Accept': 'application/json', 'X-App-Key': providerKey, 'User-Agent': 'Movieflix-Proxy/1.1.4' },
+            }).then((r) => r.json()),
+            fetch(`${UPSTREAM_BASE}/movies?page=1`, {
+              headers: { 'Accept': 'application/json', 'X-App-Key': providerKey, 'User-Agent': 'Movieflix-Proxy/1.1.4' },
+            }).then((r) => r.json()),
+            fetch(`${UPSTREAM_BASE}/tv-series?page=1`, {
+              headers: { 'Accept': 'application/json', 'X-App-Key': providerKey, 'User-Agent': 'Movieflix-Proxy/1.1.4' },
+            }).then((r) => r.json()),
+          ]);
+
+          const homeData = homeRes.status === 'fulfilled' ? homeRes.value : {};
+          const moviesData = moviesRes.status === 'fulfilled' ? moviesRes.value : {};
+          const tvData = tvRes.status === 'fulfilled' ? tvRes.value : {};
+
+          const movieItems = (moviesData.items || []).slice();
+          const tvItems = (tvData.items || []).slice();
+
+          // Extract sections from home
           const sections = homeData.sections || [];
           const shortSection = sections.find((s) => s.section && s.section.toLowerCase().includes('short'));
-          rawItems = shortSection?.items ? [...shortSection.items] : [];
+          const shortItems = (shortSection?.items || []).slice();
 
-          // Also merge popular short-format and romantic dramas from other sections
-          const dramaSections = sections.filter((s) => s.section && (s.section.includes('Drama') || s.section.includes('Romance') || s.section.includes('Teen')));
-          for (const ds of dramaSections) {
-            for (const item of (ds.items || [])) {
-              if (item.subject_id && !rawItems.some((r) => r.subject_id === item.subject_id)) {
-                rawItems.push(item);
-              }
+          // Interleave: Movie -> Web Series -> Short/Drama
+          const maxLen = Math.max(movieItems.length, tvItems.length, shortItems.length);
+          for (let i = 0; i < maxLen; i++) {
+            if (movieItems[i]) addUnique(movieItems[i], true, false, 'Movie');
+            if (tvItems[i]) addUnique(tvItems[i], false, true, 'Series');
+            if (shortItems[i]) addUnique(shortItems[i], false, true, 'Short');
+          }
+
+          // If still items needed, add other movie/drama sections from home
+          for (const s of sections) {
+            const isMovieSec = s.section && (s.section.includes('Movie') || s.section.includes('Film'));
+            for (const it of (s.items || [])) {
+              addUnique(it, isMovieSec, !isMovieSec, isMovieSec ? 'Movie' : 'Series');
             }
           }
         } else {
-          // Page 2+: fetch from /tv-series?page=${page} for endless short drama / series content
-          const tvRes = await fetch(`${UPSTREAM_BASE}/tv-series?page=${page}`, {
-            headers: {
-              'Accept': 'application/json',
-              'X-App-Key': providerKey,
-              'User-Agent': 'Movieflix-Proxy/1.1.4',
-            },
-          });
-          const tvData = await tvRes.json();
-          rawItems = tvData?.items ? [...tvData.items] : [];
+          // Page 2+: fetch catalog movies and tv-series in parallel
+          const [moviesRes, tvRes] = await Promise.allSettled([
+            fetch(`${UPSTREAM_BASE}/movies?page=${page}`, {
+              headers: { 'Accept': 'application/json', 'X-App-Key': providerKey, 'User-Agent': 'Movieflix-Proxy/1.1.4' },
+            }).then((r) => r.json()),
+            fetch(`${UPSTREAM_BASE}/tv-series?page=${page}`, {
+              headers: { 'Accept': 'application/json', 'X-App-Key': providerKey, 'User-Agent': 'Movieflix-Proxy/1.1.4' },
+            }).then((r) => r.json()),
+          ]);
+
+          const movieItems = (moviesRes.status === 'fulfilled' ? moviesRes.value?.items : []) || [];
+          const tvItems = (tvRes.status === 'fulfilled' ? tvRes.value?.items : []) || [];
+
+          const maxLen = Math.max(movieItems.length, tvItems.length);
+          for (let i = 0; i < maxLen; i++) {
+            if (movieItems[i]) addUnique(movieItems[i], true, false, 'Movie');
+            if (tvItems[i]) addUnique(tvItems[i], false, true, 'Series');
+          }
         }
 
         // Retrieve real likes from database for these shot IDs
@@ -419,25 +460,48 @@ export default async function handler(req, res) {
           }
         }
 
-        const authors = ['@DramaBox', '@ShortMax', '@ReelShort', '@NetShort', '@GoodShort', '@MiniTV', '@BillionaireTV'];
+        const movieAuthors = ['@Movieflix', '@CinemaMax', '@WarnerBros', '@Paramount', '@Universal', '@SonyPictures'];
+        const seriesAuthors = ['@Netflix', '@HBO', '@AmazonPrime', '@DisneyPlus', '@AppleTV', '@AMC'];
+        const shortAuthors = ['@DramaBox', '@ShortMax', '@ReelShort', '@NetShort', '@GoodShort', '@MiniTV'];
+
         const shots = rawItems.map((item, idx) => {
-          const author = authors[(idx + (page * 3)) % authors.length];
-          const totalEps = item.total_episodes || item.episodes_count || (12 + ((idx * 7) % 28));
+          const isMovie = Boolean(item.isMovie);
+          const isSeries = Boolean(item.isSeries);
+          const isShort = item.badge === 'Short';
+
+          let authorList = isMovie ? movieAuthors : (isShort ? shortAuthors : seriesAuthors);
+          const author = authorList[(idx + (page * 3)) % authorList.length];
           const realLikes = dbLikesMap[String(item.subject_id)] || 0;
+
+          // Only series with actual episodes have total_episodes > 0 and se/ep > 0
+          // Movies DO NOT support episodes: se: 0, ep: 0, total_episodes: 0
+          let totalEps = 0;
+          let se = 0;
+          let ep = 0;
+
+          if (isSeries) {
+            totalEps = item.total_episodes || item.episodes_count || (isShort ? 30 : 1);
+            se = 1;
+            ep = 1;
+          }
 
           return {
             id: `shot-${item.subject_id || idx}-p${page}`,
             subject_id: item.subject_id,
             title: item.name,
+            name: item.name,
             slug: item.slug,
             poster_url: item.poster_url,
             rating: item.rating || '7.8',
             author,
             likes: realLikes,
             shares: 0,
+            isMovie,
+            isSeries,
+            badge: item.badge || (isMovie ? 'Movie' : 'Series'),
             total_episodes: totalEps,
-            se: 1,
-            ep: 1,
+            se,
+            ep,
           };
         });
 

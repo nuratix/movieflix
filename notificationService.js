@@ -6,11 +6,16 @@ try {
   Notifications = require('expo-notifications');
   if (Notifications?.setNotificationHandler) {
     Notifications.setNotificationHandler({
-      handleNotification: async () => ({
-        shouldShowAlert: true,
-        shouldPlaySound: true,
-        shouldSetBadge: false,
-      }),
+      handleNotification: async (notification) => {
+        const channelId = notification?.request?.content?.channelId;
+        const identifier = notification?.request?.identifier || '';
+        const isProgress = channelId === 'download-progress' || identifier.startsWith('dl_');
+        return {
+          shouldShowAlert: !isProgress,
+          shouldPlaySound: !isProgress,
+          shouldSetBadge: false,
+        };
+      },
     });
   }
 } catch (err) {
@@ -129,22 +134,11 @@ async function setupAndroidChannels() {
 
 /**
  * Trigger immediate notification when download starts
+ * (Silent no-op to ensure ONLY ONE notification is posted for the download, without any annoying chime sound)
  */
 export async function notifyDownloadStarted(movieName, resolution = '720p', language = 'Original') {
-  if (!Notifications?.scheduleNotificationAsync) return;
-  try {
-    await Notifications.scheduleNotificationAsync({
-      content: {
-        title: `Starting download: ${movieName}`,
-        body: `Quality: ${resolution} · ${language}. Download in progress...`,
-        sound: 'default',
-        channelId: 'downloads',
-      },
-      trigger: null,
-    });
-  } catch (e) {
-    console.warn('Download start notification error:', e);
-  }
+  // Intentionally silent no-op: prevents duplicate notifications and continuous chime sounds.
+  // The single download progress notification is updated seamlessly in-place instead.
 }
 
 /**
@@ -165,6 +159,7 @@ export async function notifyDownloadProgress(downloadId, movieName, percent, wri
         body: `${bar} ${percent}%\n${writtenStr} / ${totalStr}`,
         channelId: 'download-progress',
         priority: Notifications.AndroidNotificationPriority?.LOW ?? 'low',
+        sound: null,
         sticky: true,
         autoDismiss: false,
       },

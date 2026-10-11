@@ -103,7 +103,7 @@ export async function startDownload({
 
   await saveDownload(downloadRecord);
   if (onStatusChange) onStatusChange('downloading', 0);
-  notifyDownloadStarted(movie.name || 'Title', resolution, language);
+  // Post single progress notification initially
   notifyDownloadProgress(id, movie.name || 'Title', 0, 0, 0);
 
   // If subtitle URL provided, download subtitle file in background
@@ -130,6 +130,7 @@ export async function startDownload({
   }
 
   let lastSaveTime = 0;
+  let lastNotifPercent = -1;
 
   const callback = (downloadProgress) => {
     const written = downloadProgress.totalBytesWritten;
@@ -142,8 +143,11 @@ export async function startDownload({
     }
 
     const now = Date.now();
-    if (now - lastSaveTime > 1200 || percent === 100) {
+    // Throttle progress updates to at least 2500ms apart and 2% change, or on completion.
+    // This updates the single notification loader bar smoothly without spamming or playing rapid sounds.
+    if ((now - lastSaveTime > 2500 && Math.abs(percent - lastNotifPercent) >= 2) || percent === 100) {
       lastSaveTime = now;
+      lastNotifPercent = percent;
       updateDownloadProgress(id, percent, 'downloading', localVideoUri, written);
       notifyDownloadProgress(id, movie.name || 'Title', percent, written, expected);
     }
