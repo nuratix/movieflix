@@ -6958,8 +6958,8 @@ function ReelApp() {
               </View>
             </View>
 
-            {/* Actions Bar: Play, Download, Add to List */}
-            <View style={styles.detailActionsBar}>
+            {/* Actions Bar: Play (Full width row) & Secondary Actions (Download, List, Telegram) */}
+            <View style={styles.detailActionsContainer}>
               <TouchableOpacity
                 style={styles.detailPlayButton}
                 onPress={() => {
@@ -6970,58 +6970,60 @@ function ReelApp() {
                 }}
                 activeOpacity={0.85}
               >
-                <Feather name="play" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
-                <Text style={styles.detailPlayButtonText}>
+                <Feather name="play" size={17} color="#FFFFFF" style={{ marginRight: 8 }} />
+                <Text style={styles.detailPlayButtonText} numberOfLines={1}>
                   {detailData?.isSeries ? "Play S1:E1" : "Play Now"}
                 </Text>
               </TouchableOpacity>
 
-              {/* DOWNLOAD BUTTON (DISABLED ON WEB) */}
-              {!isWeb && (
+              <View style={styles.detailSecondaryActionsBar}>
+                {/* DOWNLOAD BUTTON (DISABLED ON WEB) */}
+                {!isWeb && (
+                  <TouchableOpacity
+                    style={styles.detailDownloadButton}
+                    onPress={() => openDownloadModal(detailMovie, detailData)}
+                    activeOpacity={0.85}
+                  >
+                    <Feather name="download" size={15} color="#f5f5f1" style={{ marginRight: 6 }} />
+                    <Text style={styles.detailDownloadButtonText} numberOfLines={1}>Download</Text>
+                  </TouchableOpacity>
+                )}
+
                 <TouchableOpacity
-                  style={styles.detailDownloadButton}
-                  onPress={() => openDownloadModal(detailMovie, detailData)}
-                  activeOpacity={0.85}
+                  style={styles.detailListButton}
+                  onPress={() => toggleMyList(detailMovie)}
+                  activeOpacity={0.8}
                 >
-                  <Feather name="download" size={16} color="#f5f5f1" style={{ marginRight: 6 }} />
-                  <Text style={styles.detailDownloadButtonText}>Download</Text>
+                  <Feather
+                    name={isInMyList(detailMovie) ? "check" : "plus"}
+                    size={15}
+                    color="#f5f5f1"
+                    style={{ marginRight: 5 }}
+                  />
+                  <Text style={styles.detailListButtonText} numberOfLines={1}>
+                    {isInMyList(detailMovie) ? "In My List" : "Add to List"}
+                  </Text>
                 </TouchableOpacity>
-              )}
 
-              <TouchableOpacity
-                style={styles.detailListButton}
-                onPress={() => toggleMyList(detailMovie)}
-                activeOpacity={0.8}
-              >
-                <Feather
-                  name={isInMyList(detailMovie) ? "check" : "plus"}
-                  size={16}
-                  color="#f5f5f1"
-                  style={{ marginRight: 4 }}
-                />
-                <Text style={styles.detailListButtonText}>
-                  {isInMyList(detailMovie) ? "In My List" : "Add to List"}
-                </Text>
-              </TouchableOpacity>
-
-              {/* TELEGRAM BUTTON (NEXT TO LIST BUTTON) */}
-              <TouchableOpacity
-                style={styles.detailTelegramButton}
-                onPress={() => {
-                  Linking.openURL('https://t.me/movieflixlol').catch((err) => {
-                    console.warn('Failed to open Telegram URL:', err);
-                  });
-                }}
-                activeOpacity={0.8}
-              >
-                <Feather
-                  name="send"
-                  size={15}
-                  color="#0088cc"
-                  style={{ marginRight: 5 }}
-                />
-                <Text style={styles.detailTelegramButtonText}>Telegram</Text>
-              </TouchableOpacity>
+                {/* TELEGRAM BUTTON (NEXT TO LIST BUTTON) */}
+                <TouchableOpacity
+                  style={styles.detailTelegramButton}
+                  onPress={() => {
+                    Linking.openURL('https://t.me/movieflixlol').catch((err) => {
+                      console.warn('Failed to open Telegram URL:', err);
+                    });
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Feather
+                    name="send"
+                    size={14}
+                    color="#0088cc"
+                    style={{ marginRight: 5 }}
+                  />
+                  <Text style={styles.detailTelegramButtonText} numberOfLines={1}>Telegram</Text>
+                </TouchableOpacity>
+              </View>
             </View>
 
             {/* Real Synopsis / Overview & IMDb Cast & Actresses */}
@@ -10789,22 +10791,21 @@ const styles = StyleSheet.create({
     color: '#a3a3a3',
     fontSize: 13,
   },
+  detailActionsContainer: {
+    paddingHorizontal: 16,
+    marginVertical: 14,
+  },
   detailActionsBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
     paddingHorizontal: 16,
     marginVertical: 14,
   },
   detailPlayButton: {
-    flex: 1.2,
-    minWidth: 84,
+    width: '100%',
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#e50914',
-    paddingHorizontal: 10,
-    paddingVertical: 11,
+    paddingVertical: 13,
     borderRadius: 10,
     shadowColor: '#e50914',
     shadowOffset: { width: 0, height: 4 },
@@ -10815,56 +10816,68 @@ const styles = StyleSheet.create({
   detailPlayButtonText: {
     color: '#FFFFFF',
     fontWeight: '800',
-    fontSize: 14,
+    fontSize: 15,
     letterSpacing: 0.2,
   },
+  detailSecondaryActionsBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 10,
+  },
   detailDownloadButton: {
+    flex: 1,
+    minWidth: 0,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(255, 255, 255, 0.08)',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.16)',
-    paddingHorizontal: 10,
-    paddingVertical: 11,
+    paddingHorizontal: 6,
+    paddingVertical: 10,
     borderRadius: 10,
   },
   detailDownloadButtonText: {
     color: '#f5f5f1',
     fontWeight: '700',
-    fontSize: 12.5,
+    fontSize: 12,
   },
   detailListButton: {
+    flex: 1,
+    minWidth: 0,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(255, 255, 255, 0.08)',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.16)',
-    paddingHorizontal: 10,
-    paddingVertical: 11,
+    paddingHorizontal: 6,
+    paddingVertical: 10,
     borderRadius: 10,
   },
   detailListButtonText: {
     color: '#f5f5f1',
     fontWeight: '700',
-    fontSize: 12.5,
+    fontSize: 12,
   },
   detailTelegramButton: {
+    flex: 1,
+    minWidth: 0,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(0, 136, 204, 0.12)',
     borderWidth: 1,
     borderColor: 'rgba(0, 136, 204, 0.32)',
-    paddingHorizontal: 10,
-    paddingVertical: 11,
+    paddingHorizontal: 6,
+    paddingVertical: 10,
     borderRadius: 10,
   },
   detailTelegramButtonText: {
     color: '#38bdf8',
     fontWeight: '700',
-    fontSize: 12.5,
+    fontSize: 12,
   },
   detailOverviewSection: {
     paddingHorizontal: 18,
@@ -12710,25 +12723,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
 
-  // DETAIL ACTION BAR DOWNLOAD BUTTON
-  detailDownloadButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.15)',
-    flex: 1,
-    marginHorizontal: 5,
-  },
-  detailDownloadButtonText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '700',
-  },
+
   epQuickDownloadBadge: {
     position: 'absolute',
     top: 6,
