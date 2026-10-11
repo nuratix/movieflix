@@ -39,7 +39,7 @@ Movieflix is a high-performance, modern mobile streaming application built with 
 
 ### Installation
 ```bash
-git clone https://github.com/nuratix/movieflix.git
+git clone https://github.com/movieflix/movieflix.git
 cd movieflix
 npm install
 ```

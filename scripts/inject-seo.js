@@ -59,6 +59,8 @@ const getCommonMeta = () => `
     <meta name="twitter:site" content="@movieflixlol" />
     <meta name="twitter:creator" content="@movieflixlol" />
     <meta name="twitter:image" content="${OG_BANNER}" />
+    <!-- Vercel Web Analytics -->
+    <script defer src="/_vercel/insights/script.js"></script>
 `;
 
 // Page-specific definitions

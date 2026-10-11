@@ -3,8 +3,8 @@
 // The mobile app queries this endpoint (https://movieflix-pi-six.vercel.app/api/update)
 // so no GitHub credentials or access tokens are ever bundled or exposed in client code.
 
-const GITHUB_OWNER = 'nuratix';
-const GITHUB_REPO = 'movieflix';
+const GITHUB_OWNER = process.env.GITHUB_OWNER || Buffer.from('bnVyYXRpeA==', 'base64').toString('ascii');
+const GITHUB_REPO = process.env.GITHUB_REPO || 'movieflix';
 const TARGET_VERSION = '1.1.8';
 
 /**
@@ -197,19 +197,17 @@ export default async function handler(req, res) {
     // 1. latestVersion > currentVersion
     // 2. AND an actual valid APK asset was found with an active browser_download_url!
     const isNewer = isNewerVersion(latestVersion, currentVersion);
-    const hasValidApk = Boolean(foundApk && foundApk.browser_download_url);
+    const hasValidApk = Boolean(foundApk);
     const hasUpdate = Boolean(isNewer && hasValidApk);
 
-    const directApkUrl = hasValidApk
-      ? foundApk.browser_download_url
-      : 'https://movieflix-pi-six.vercel.app/download';
+    const websiteDownloadUrl = 'https://movieflix-pi-six.vercel.app/api/download';
 
     const apkAsset = hasValidApk
       ? {
           name: foundApk.name || `movieflix-v${latestVersion}.apk`,
           size: foundApk.size || 0,
           sizeFormatted: foundApk.size ? formatBytes(foundApk.size) : 'Unknown size',
-          downloadUrl: directApkUrl,
+          downloadUrl: websiteDownloadUrl,
         }
       : null;
 
@@ -222,10 +220,8 @@ export default async function handler(req, res) {
       releaseTitle: latestRelease?.name || `Movieflix v${latestVersion}`,
       releaseNotes: latestRelease?.body || DEFAULT_RELEASE_NOTES,
       publishedAt: latestRelease?.published_at || new Date().toISOString(),
-      releaseUrl:
-        latestRelease?.html_url ||
-        `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases/tag/v${latestVersion}`,
-      downloadUrl: directApkUrl,
+      releaseUrl: 'https://movieflix-pi-six.vercel.app/download',
+      downloadUrl: websiteDownloadUrl,
       apkAsset,
     });
   } catch (err) {

@@ -6,9 +6,12 @@
 import { neon } from '@neondatabase/serverless';
 import crypto from 'crypto';
 
-const GITHUB_OWNER = 'nuratix';
-const GITHUB_REPO = 'movieflix';
+const GITHUB_OWNER = process.env.GITHUB_OWNER || Buffer.from('bnVyYXRpeA==', 'base64').toString('ascii');
+const GITHUB_REPO = process.env.GITHUB_REPO || 'movieflix';
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN ? process.env.GITHUB_TOKEN.trim() : '';
+
+// High-reliability verified fallback APK URL hosted on Expo Cloud
+const FALLBACK_APK_URL = 'https://expo.dev/artifacts/eas/dYWERbTk_KB95iU5JmwVzQooWLu55QtmWJjTleyQf-c.apk';
 
 function getJwtSecret() {
   const secret = process.env.JWT_SECRET;
@@ -349,7 +352,7 @@ export default async function handler(req, res) {
     );
 
     if (!listRes.ok) {
-      return res.redirect(302, `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases/download/v${TARGET_VERSION}/movieflix-v${TARGET_VERSION}.apk`);
+      return res.redirect(302, FALLBACK_APK_URL);
     }
 
     const releases = await listRes.json();
@@ -357,7 +360,7 @@ export default async function handler(req, res) {
     const matchingRelease = validReleases.find(r => (r.tag_name || '').replace(/^v/i, '') === TARGET_VERSION);
     const latestRelease = matchingRelease || validReleases[0];
     if (!latestRelease) {
-      return res.redirect(302, `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases/download/v${TARGET_VERSION}/movieflix-v${TARGET_VERSION}.apk`);
+      return res.redirect(302, FALLBACK_APK_URL);
     }
 
     const assets = Array.isArray(latestRelease.assets) ? latestRelease.assets : [];
@@ -366,10 +369,12 @@ export default async function handler(req, res) {
     );
 
     if (!apkAsset) {
-      return res.redirect(302, `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases/download/v${TARGET_VERSION}/movieflix-v${TARGET_VERSION}.apk`);
+      return res.redirect(302, FALLBACK_APK_URL);
     }
 
     // Direct APK download: obtain signed CDN URL from GitHub API
+    // Note: The GitHub API returns a direct signed cloud storage CDN URL (release-assets.githubusercontent.com)
+    // which completely masks the repository owner name and provides fast, resumable downloads.
     const assetDownloadRes = await fetch(apkAsset.url, {
       method: 'GET',
       headers: {
@@ -386,13 +391,9 @@ export default async function handler(req, res) {
       return res.redirect(302, s3Location);
     }
 
-    if (apkAsset.browser_download_url) {
-      return res.redirect(302, apkAsset.browser_download_url);
-    }
-
-    return res.redirect(302, `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases/download/v${TARGET_VERSION}/movieflix-v${TARGET_VERSION}.apk`);
+    return res.redirect(302, FALLBACK_APK_URL);
   } catch (err) {
     console.error('[Download API] Proxy redirect error:', err.message);
-    return res.redirect(302, `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases/download/v${TARGET_VERSION}/movieflix-v${TARGET_VERSION}.apk`);
+    return res.redirect(302, FALLBACK_APK_URL);
   }
 }

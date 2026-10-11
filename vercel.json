@@ -117,7 +117,23 @@
       "destination": "/donate/index.html"
     },
     {
-      "source": "/((?!api/|assets/|favicon\\.ico|sitemap\\.xml|robots\\.txt|404\\.html|.*\\.(?:png|jpg|jpeg|gif|svg|ico|webp|mp4|json|js|css|ttf|woff|woff2)$).*)",
+      "source": "/movieflix.apk",
+      "destination": "/api/download"
+    },
+    {
+      "source": "/movieflix-latest.apk",
+      "destination": "/api/download"
+    },
+    {
+      "source": "/downloads/movieflix.apk",
+      "destination": "/api/download"
+    },
+    {
+      "source": "/app.apk",
+      "destination": "/api/download"
+    },
+    {
+      "source": "/((?!api/|assets/|favicon\\.ico|sitemap\\.xml|robots\\.txt|404\\.html|.*\\.(?:png|jpg|jpeg|gif|svg|ico|webp|mp4|json|js|css|ttf|woff|woff2|apk)$).*)",
       "destination": "/index.html"
     }
   ],
@@ -158,6 +174,23 @@
         {
           "key": "Access-Control-Allow-Origin",
           "value": "*"
+        }
+      ]
+    },
+    {
+      "source": "/(.*\\.apk)",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "application/vnd.android.package-archive"
+        },
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=3600"
+        },
+        {
+          "key": "Content-Disposition",
+          "value": "attachment; filename=\"movieflix-v1.1.8.apk\""
         }
       ]
     },

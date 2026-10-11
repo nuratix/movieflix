@@ -2879,6 +2879,14 @@ function ReelApp() {
       } else if (pathname === '/donate') {
         setIsDonateServerDownMode(true);
       }
+      // Initialize Vercel Analytics for web visitor telemetry
+      import('@vercel/analytics')
+        .then(({ inject }) => {
+          inject();
+        })
+        .catch((e) => {
+          console.warn('[Analytics] Vercel Analytics initialization skipped:', e?.message);
+        });
     }
   }, []);
 
@@ -5706,6 +5714,22 @@ function ReelApp() {
 
                   <TouchableOpacity
                     style={styles.meMinimalLinkRow}
+                    onPress={() => {
+                      Linking.openURL('https://t.me/movieflixlol').catch((err) => {
+                        console.warn('Failed to open Telegram URL:', err);
+                      });
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.meMinimalLinkLeft}>
+                      <Feather name="send" size={16} color="#0088cc" style={{ marginRight: 10 }} />
+                      <Text style={styles.meMinimalLinkText}>Join Our Telegram</Text>
+                    </View>
+                    <Feather name="external-link" size={16} color="#525252" />
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.meMinimalLinkRow}
                     onPress={handleOpenPrivacy}
                     activeOpacity={0.7}
                   >
@@ -6978,6 +7002,25 @@ function ReelApp() {
                 <Text style={styles.detailListButtonText}>
                   {isInMyList(detailMovie) ? "In My List" : "Add to List"}
                 </Text>
+              </TouchableOpacity>
+
+              {/* TELEGRAM BUTTON (NEXT TO LIST BUTTON) */}
+              <TouchableOpacity
+                style={styles.detailTelegramButton}
+                onPress={() => {
+                  Linking.openURL('https://t.me/movieflixlol').catch((err) => {
+                    console.warn('Failed to open Telegram URL:', err);
+                  });
+                }}
+                activeOpacity={0.8}
+              >
+                <Feather
+                  name="send"
+                  size={15}
+                  color="#0088cc"
+                  style={{ marginRight: 5 }}
+                />
+                <Text style={styles.detailTelegramButtonText}>Telegram</Text>
               </TouchableOpacity>
             </View>
 
@@ -10748,17 +10791,20 @@ const styles = StyleSheet.create({
   },
   detailActionsBar: {
     flexDirection: 'row',
-    gap: 12,
-    paddingHorizontal: 18,
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
     marginVertical: 14,
   },
   detailPlayButton: {
-    flex: 1.4,
+    flex: 1.2,
+    minWidth: 84,
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#e50914',
-    paddingVertical: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 11,
     borderRadius: 10,
     shadowColor: '#e50914',
     shadowOffset: { width: 0, height: 4 },
@@ -10769,7 +10815,7 @@ const styles = StyleSheet.create({
   detailPlayButtonText: {
     color: '#FFFFFF',
     fontWeight: '800',
-    fontSize: 15,
+    fontSize: 14,
     letterSpacing: 0.2,
   },
   detailDownloadButton: {
@@ -10779,14 +10825,14 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.08)',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.16)',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 11,
     borderRadius: 10,
   },
   detailDownloadButtonText: {
     color: '#f5f5f1',
     fontWeight: '700',
-    fontSize: 13,
+    fontSize: 12.5,
   },
   detailListButton: {
     flexDirection: 'row',
@@ -10795,14 +10841,30 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.08)',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.16)',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 11,
     borderRadius: 10,
   },
   detailListButtonText: {
     color: '#f5f5f1',
     fontWeight: '700',
-    fontSize: 13,
+    fontSize: 12.5,
+  },
+  detailTelegramButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0, 136, 204, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 136, 204, 0.32)',
+    paddingHorizontal: 10,
+    paddingVertical: 11,
+    borderRadius: 10,
+  },
+  detailTelegramButtonText: {
+    color: '#38bdf8',
+    fontWeight: '700',
+    fontSize: 12.5,
   },
   detailOverviewSection: {
     paddingHorizontal: 18,
