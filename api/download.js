@@ -18,7 +18,7 @@ function getJwtSecret() {
   return secret;
 }
 
-const TARGET_VERSION = '1.1.7';
+const TARGET_VERSION = '1.1.8';
 
 // Rate limiting for APK downloads to prevent flooding
 const downloadRateLimitMap = new Map();

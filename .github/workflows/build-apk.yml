@@ -67,10 +67,11 @@ jobs:
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
+        continue-on-error: true
         with:
           name: movieflix-v${{ steps.prepare_apk.outputs.version }}-apk
           path: output/movieflix-v${{ steps.prepare_apk.outputs.version }}.apk
-          retention-days: 30
+          retention-days: 7
 
       - name: Create GitHub Release
         if: github.ref == 'refs/heads/main'
@@ -80,16 +81,19 @@ jobs:
           name: Movieflix v${{ steps.prepare_apk.outputs.version }}
           draft: false
           prerelease: false
+          make_latest: true
           body: |
             ### 🎬 Movieflix v${{ steps.prepare_apk.outputs.version }} Official Production Release APK
 
             Official Production Build via **GitHub Actions Cloud**!
 
             #### 🚀 Release Notes (v${{ steps.prepare_apk.outputs.version }}):
-            * **Added Shorts**: Seamless 9:16 vertical short drama reels player with instant video playback, double-tap to like with floating heart animation, 2× fast-forward on long press, real database-synced likes, and share support.
-            * **Cleaned UI**: Refreshed navigation, official MovieFlix branding in header, removed mock counters, and polished edge-to-edge dark theme layout.
-            * **Revamped Homepage**: Ultra-smooth local hero poster background transitions (Wednesday, Squid Game, Money Heist, Demon Slayer), instant catalog loading with local caching, and stable hero action controls.
-            * **Zero Egress & Fast Delivery**: Direct CDN streaming architecture and optimized metadata caching.
+            * **Search Pagination & Load More**: Full search pagination support with `+More` pill in search bar capsule, header load more button, and bottom grid "Load More Search Results" button. Auto-deduplicated.
+            * **Shorts Catalog Previews & Watch This**: Direct middle-portion 1-2 min preview clips for movies and web series with instant "Watch This" play page redirect and database-synced likes.
+            * **Player Episode Selector Sheet**: Clean bottom sheet displaying all episode numbers and season tabs, with instant loading indicator on episode switch.
+            * **Single Silent Download Notification**: Clean progress bar notification without repetitive sound spam or multiple notification alerts.
+            * **Ultra-Smooth Video Seeker & Player**: Zero lag scrubber bar with debounced seeking.
+            * **Maintenance & Emergency Donate Gates**: Centralized status checks for high availability.
           files: |
             output/movieflix-v${{ steps.prepare_apk.outputs.version }}.apk
         env:

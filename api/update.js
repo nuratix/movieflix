@@ -5,7 +5,7 @@
 
 const GITHUB_OWNER = 'nuratix';
 const GITHUB_REPO = 'movieflix';
-const TARGET_VERSION = '1.1.7';
+const TARGET_VERSION = '1.1.8';
 
 /**
  * Compare two semver strings (e.g., "1.1.7" vs "1.1.6", or "v1.1.7" vs "1.1.6")
@@ -47,11 +47,11 @@ function formatBytes(bytes, decimals = 1) {
 
 const DEFAULT_RELEASE_NOTES = `### 🎬 Movieflix v${TARGET_VERSION} Official Release APK
 
-* **Home Screen Widget Portrait Posters**: Bundled official high-definition portrait posters (Wednesday, Squid Game, Money Heist) with signature red ambient glow and zero cutoff.
-* **Horizontal Season Scroll**: Season selection pill bar is now smoothly scrollable horizontally to easily browse all seasons.
-* **"Me" Tab Notification Dot Fix**: Red indicator badge automatically and permanently dismisses when navigating to the Me tab.
-* **In-App Updater Package Parsing Fix**: Hardened package integrity checks (>5MB) and direct CDN routing to ensure smooth updates without Android parsing errors.
-* **EAS Updates Always-Check Channel**: Instant OTA sync configured for future seamless hotfixes.`;
+* **Search Pagination & Load More**: Full search pagination support with +More pill in search bar and grid Load More button.
+* **Shorts Catalog Previews & Watch This**: Direct middle-portion 1-2 min preview clips for movies and web series with instant "Watch This" play page redirect.
+* **Player Episode Selector Sheet**: Modern bottom sheet displaying all episode numbers and season tabs, with instant loading indicator on episode switch.
+* **Single Silent Download Notification**: Clean progress bar notification without repetitive sound spam or multiple notification alerts.
+* **Ultra-Smooth Video Seeker & Player**: Zero lag scrubber bar with debounced seeking.`;
 
 // Rate limiting for update checks to prevent GitHub API rate limits
 const updateRateLimitMap = new Map();

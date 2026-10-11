@@ -3212,6 +3212,7 @@ function ReelApp() {
   const [searchPage, setSearchPage] = useState(1);
   const [hasMoreSearch, setHasMoreSearch] = useState(false);
   const [isLoadingMoreSearch, setIsLoadingMoreSearch] = useState(false);
+  const searchSeqRef = useRef(0);
 
   // Content Data
   const [loading, setLoading] = useState(true);
@@ -3821,22 +3822,29 @@ function ReelApp() {
   const handleSearch = async (text) => {
     setSearchQuery(text);
     setSearchPage(1);
+    const currentSeq = ++searchSeqRef.current;
     if (!text || text.trim().length === 0) {
       setSearchResults([]);
       setHasMoreSearch(false);
+      setIsSearching(false);
       return;
     }
     setIsSearching(true);
     try {
       const res = await apiFetch(`${API_BASE}/api/content?endpoint=search&q=${encodeURIComponent(text.trim())}&page=1`);
       const data = await res.json();
+      if (currentSeq !== searchSeqRef.current) return;
       const items = data.items || [];
       setSearchResults(items);
       setHasMoreSearch(items.length > 0 && (data.total ? items.length < data.total : items.length >= 8));
     } catch (err) {
-      console.error("Search error:", err);
+      if (currentSeq === searchSeqRef.current) {
+        console.error("Search error:", err);
+      }
     } finally {
-      setIsSearching(false);
+      if (currentSeq === searchSeqRef.current) {
+        setIsSearching(false);
+      }
     }
   };
 
@@ -3844,10 +3852,12 @@ function ReelApp() {
   const loadMoreSearch = async () => {
     if (isLoadingMoreSearch || !hasMoreSearch || !searchQuery.trim()) return;
     setIsLoadingMoreSearch(true);
+    const currentSeq = searchSeqRef.current;
     const nextPage = searchPage + 1;
     try {
       const res = await apiFetch(`${API_BASE}/api/content?endpoint=search&q=${encodeURIComponent(searchQuery.trim())}&page=${nextPage}`);
       const data = await res.json();
+      if (currentSeq !== searchSeqRef.current) return;
       const newItems = data.items || [];
       if (newItems.length > 0) {
         setSearchResults((prev) => {
@@ -3861,10 +3871,14 @@ function ReelApp() {
         setHasMoreSearch(false);
       }
     } catch (err) {
-      console.error("Load more search error:", err);
-      showToast('Could not load more results. Try again.');
+      if (currentSeq === searchSeqRef.current) {
+        console.error("Load more search error:", err);
+        showToast('Could not load more results. Try again.');
+      }
     } finally {
-      setIsLoadingMoreSearch(false);
+      if (currentSeq === searchSeqRef.current) {
+        setIsLoadingMoreSearch(false);
+      }
     }
   };
 
@@ -4575,8 +4589,8 @@ function ReelApp() {
       );
     } else if (isDownloadPageOpen) {
       updateWebMetaTags(
-        'Download MovieFlix APK v1.1.7 (Official) - Free Android Movies & TV App',
-        'Download official MovieFlix Android APK (v1.1.7). Stream and download unlimited 4K/1080p movies, TV series, anime, and shorts with multi-audio dubs and zero ads. 100% Safe & Verified.',
+        'Download MovieFlix APK v1.1.8 (Official) - Free Android Movies & TV App',
+        'Download official MovieFlix Android APK (v1.1.8). Stream and download unlimited 4K/1080p movies, TV series, anime, and shorts with multi-audio dubs and zero ads. 100% Safe & Verified.',
         'https://movieflix-pi-six.vercel.app/assets/og-banner.png',
         'https://movieflix-pi-six.vercel.app/download'
       );
@@ -4602,7 +4616,7 @@ function ReelApp() {
       updateWebMetaTags(title, desc, img, url);
     } else {
       updateWebMetaTags(
-        'MovieFlix - Watch & Download Free Movies, TV Series & Official APK (v1.1.7)',
+        'MovieFlix - Watch & Download Free Movies, TV Series & Official APK (v1.1.8)',
         'Stream and download thousands of HD movies, web series, Hindi dubbed blockbusters, and anime in 4K/1080p with zero ads. Download the official MovieFlix Android APK.',
         'https://movieflix-pi-six.vercel.app/assets/og-banner.png',
         'https://movieflix-pi-six.vercel.app/'
@@ -5721,7 +5735,7 @@ function ReelApp() {
                   </View>
                 </View>
 
-                {/* Minimal Footer: Movieflix *v1.1.7* Up to date / Official build, verified */}
+                {/* Minimal Footer: Movieflix *v1.1.8* Up to date / Official build, verified */}
                 <View style={styles.meMinimalAppFooter}>
                   <TouchableOpacity
                     style={styles.meMinimalVersionRow}
@@ -7970,7 +7984,7 @@ function ReelApp() {
                   Install Movieflix APK for a better experience
                 </Text>
                 <Text style={styles.webInstallSubtitle} numberOfLines={1}>
-                  Tap to download latest v1.1.7 · Faster stream · 0 ads
+                  Tap to download latest v1.1.8 · Faster stream · 0 ads
                 </Text>
               </View>
               <View style={styles.webInstallBtn}>
