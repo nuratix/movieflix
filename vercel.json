@@ -25,6 +25,14 @@
       "destination": "/api/content?endpoint=animation"
     },
     {
+      "source": "/api/shots",
+      "destination": "/api/content?endpoint=shots"
+    },
+    {
+      "source": "/api/reels",
+      "destination": "/api/content?endpoint=shots"
+    },
+    {
       "source": "/api/search",
       "destination": "/api/content?endpoint=search"
     },
