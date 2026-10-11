@@ -3209,6 +3209,9 @@ function ReelApp() {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [searchPage, setSearchPage] = useState(1);
+  const [hasMoreSearch, setHasMoreSearch] = useState(false);
+  const [isLoadingMoreSearch, setIsLoadingMoreSearch] = useState(false);
 
   // Content Data
   const [loading, setLoading] = useState(true);
@@ -3817,19 +3820,51 @@ function ReelApp() {
   // Search Handler
   const handleSearch = async (text) => {
     setSearchQuery(text);
+    setSearchPage(1);
     if (!text || text.trim().length === 0) {
       setSearchResults([]);
+      setHasMoreSearch(false);
       return;
     }
     setIsSearching(true);
     try {
-      const res = await apiFetch(`${API_BASE}/api/content?endpoint=search&q=${encodeURIComponent(text.trim())}`);
+      const res = await apiFetch(`${API_BASE}/api/content?endpoint=search&q=${encodeURIComponent(text.trim())}&page=1`);
       const data = await res.json();
-      setSearchResults(data.items || []);
+      const items = data.items || [];
+      setSearchResults(items);
+      setHasMoreSearch(items.length > 0 && (data.total ? items.length < data.total : items.length >= 8));
     } catch (err) {
       console.error("Search error:", err);
     } finally {
       setIsSearching(false);
+    }
+  };
+
+  // Load More Search Results Handler
+  const loadMoreSearch = async () => {
+    if (isLoadingMoreSearch || !hasMoreSearch || !searchQuery.trim()) return;
+    setIsLoadingMoreSearch(true);
+    const nextPage = searchPage + 1;
+    try {
+      const res = await apiFetch(`${API_BASE}/api/content?endpoint=search&q=${encodeURIComponent(searchQuery.trim())}&page=${nextPage}`);
+      const data = await res.json();
+      const newItems = data.items || [];
+      if (newItems.length > 0) {
+        setSearchResults((prev) => {
+          const seen = new Set(prev.map((it) => it.slug || it.subject_id || it.name));
+          const filtered = newItems.filter((it) => !seen.has(it.slug || it.subject_id || it.name));
+          return [...prev, ...filtered];
+        });
+        setSearchPage(nextPage);
+        setHasMoreSearch(newItems.length >= 8);
+      } else {
+        setHasMoreSearch(false);
+      }
+    } catch (err) {
+      console.error("Load more search error:", err);
+      showToast('Could not load more results. Try again.');
+    } finally {
+      setIsLoadingMoreSearch(false);
     }
   };
 
@@ -5428,11 +5463,27 @@ function ReelApp() {
               <TextInput
                 value={searchQuery}
                 onChangeText={handleSearch}
+                onSubmitEditing={() => handleSearch(searchQuery)}
                 placeholder="Search titles..."
                 placeholderTextColor="#737373"
                 style={styles.searchInput}
                 returnKeyType="search"
               />
+              {searchQuery.length > 0 && hasMoreSearch && (
+                <TouchableOpacity
+                  onPress={loadMoreSearch}
+                  disabled={isLoadingMoreSearch}
+                  style={styles.searchCapsuleLoadMoreBtn}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  activeOpacity={0.7}
+                >
+                  {isLoadingMoreSearch ? (
+                    <ActivityIndicator size="small" color="#e50914" style={{ transform: [{ scale: 0.7 }] }} />
+                  ) : (
+                    <Text style={styles.searchCapsuleLoadMoreText}>+More</Text>
+                  )}
+                </TouchableOpacity>
+              )}
               {searchQuery.length > 0 && (
                 <TouchableOpacity onPress={() => handleSearch('')} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
                   <Feather name="x-circle" size={15} color="#a3a3a3" />
@@ -6056,22 +6107,64 @@ function ReelApp() {
                   </View>
                 </View>
               )}
-              <Text style={styles.sectionHeaderTitle}>
-                Search Results for "{searchQuery}"
-              </Text>
+              <View style={styles.searchResultsHeaderRow}>
+                <Text style={styles.sectionHeaderTitle}>
+                  Search Results for "{searchQuery}"
+                </Text>
+                {hasMoreSearch && (
+                  <TouchableOpacity
+                    style={styles.searchHeaderMoreBtn}
+                    onPress={loadMoreSearch}
+                    disabled={isLoadingMoreSearch}
+                    activeOpacity={0.8}
+                  >
+                    {isLoadingMoreSearch ? (
+                      <ActivityIndicator size="small" color="#e50914" />
+                    ) : (
+                      <>
+                        <Feather name="plus" size={13} color="#e50914" style={{ marginRight: 3 }} />
+                        <Text style={styles.searchHeaderMoreText}>Load More</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                )}
+              </View>
               {isSearching ? (
                 <ActivityIndicator size="small" color="#e50914" style={{ marginTop: 24 }} />
               ) : searchResults.length > 0 ? (
-                <View style={styles.exploreGridContainer}>
-                  {searchResults.map((item, idx) => (
-                    <GlassMovieCard
-                      key={`search-${item.slug || item.subject_id}-${idx}`}
-                      movie={item}
-                      onPress={() => openDetail(item)}
-                      style={{ width: exploreCardWidth, aspectRatio: 2 / 3, marginBottom: 10 }}
-                    />
-                  ))}
-                </View>
+                <>
+                  <View style={styles.exploreGridContainer}>
+                    {searchResults.map((item, idx) => (
+                      <GlassMovieCard
+                        key={`search-${item.slug || item.subject_id}-${idx}`}
+                        movie={item}
+                        onPress={() => openDetail(item)}
+                        style={{ width: exploreCardWidth, aspectRatio: 2 / 3, marginBottom: 10 }}
+                      />
+                    ))}
+                  </View>
+
+                  {/* Load More Results Option Button */}
+                  {hasMoreSearch && (
+                    <View style={styles.searchLoadMoreContainer}>
+                      <TouchableOpacity
+                        style={styles.searchLoadMoreBtn}
+                        onPress={loadMoreSearch}
+                        disabled={isLoadingMoreSearch}
+                        activeOpacity={0.8}
+                      >
+                        {isLoadingMoreSearch ? (
+                          <ActivityIndicator size="small" color="#FFFFFF" style={{ marginRight: 8 }} />
+                        ) : (
+                          <Feather name="plus-circle" size={16} color="#FFFFFF" style={{ marginRight: 8 }} />
+                        )}
+                        <Text style={styles.searchLoadMoreText}>
+                          {isLoadingMoreSearch ? 'Loading More Titles...' : 'Load More Search Results'}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </>
               ) : (
                 <View style={styles.noResultCard}>
                   <View style={styles.noResultIconCircle}>
@@ -9837,6 +9930,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
     height: 36,
   },
+  searchCapsuleLoadMoreBtn: {
+    backgroundColor: 'rgba(229, 9, 20, 0.22)',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(229, 9, 20, 0.45)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    marginRight: 6,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  searchCapsuleLoadMoreText: {
+    color: '#e50914',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
   headerRightActions: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -10402,6 +10512,56 @@ const styles = StyleSheet.create({
   },
   searchResultsContainer: {
     paddingTop: 12,
+  },
+  searchResultsHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingRight: 16,
+    marginBottom: 4,
+  },
+  searchHeaderMoreBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(229, 9, 20, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(229, 9, 20, 0.35)',
+    borderRadius: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  searchHeaderMoreText: {
+    color: '#e50914',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  searchLoadMoreContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 24,
+    paddingHorizontal: 16,
+  },
+  searchLoadMoreBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#e50914',
+    borderRadius: 22,
+    paddingHorizontal: 22,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    shadowColor: '#e50914',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    elevation: 4,
+  },
+  searchLoadMoreText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: 0.3,
   },
   myListContainer: {
     paddingTop: 12,

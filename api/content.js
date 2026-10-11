@@ -294,8 +294,9 @@ export default async function handler(req, res) {
       if (!q) {
         return res.status(400).json({ error: 'Missing or empty search query "q".' });
       }
-      targetUrl = `${UPSTREAM_BASE}/search?q=${encodeURIComponent(q)}`;
-      cacheKey = `search:${q.toLowerCase()}`;
+      const page = Math.max(1, parseInt(query.page, 10) || 1);
+      targetUrl = `${UPSTREAM_BASE}/search?q=${encodeURIComponent(q)}&page=${page}`;
+      cacheKey = `search:${q.toLowerCase()}:p${page}`;
       break;
     }
     case 'detail': {
