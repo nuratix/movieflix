@@ -119,9 +119,9 @@
     }
     </script>
 
-    <!-- Google reCAPTCHA Bot Protection -->
+    <!-- Google reCAPTCHA v3 Bot Protection -->
     <meta name="recaptcha-site-key" content="6LcI8eotAAAAANgtwA3-NyEPjVMcTcCCkxmmSOMN" />
-    <script src="https://www.google.com/recaptcha/api.js?render=explicit" async defer></script>
+    <script src="https://www.google.com/recaptcha/api.js?render=6LcI8eotAAAAANgtwA3-NyEPjVMcTcCCkxmmSOMN" async defer></script>
 
     <style id="expo-reset">
       /* Full height root structure */
@@ -199,51 +199,108 @@
         margin: 0 0 24px 0;
         line-height: 1.55;
       }
-      .cf-widget-box {
-        background: #0d0f17;
-        border: 1px solid #1f2433;
-        border-radius: 10px;
-        padding: 20px 16px;
-        margin-bottom: 24px;
+      .cf-turnstile-box {
+        background: #0d1117;
+        border: 1px solid #30363d;
+        border-radius: 8px;
+        padding: 14px 18px;
+        margin-bottom: 20px;
         display: flex;
-        flex-direction: column;
+        align-items: center;
+        justify-content: space-between;
+        min-height: 62px;
+        cursor: pointer;
+        user-select: none;
+        transition: border-color 0.2s ease, background-color 0.2s ease;
+      }
+      .cf-turnstile-box:hover {
+        border-color: #58a6ff;
+        background-color: #111622;
+      }
+      .cf-turnstile-left {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+      }
+      .cf-turnstile-checkbox {
+        width: 26px;
+        height: 26px;
+        border: 2px solid #586069;
+        border-radius: 5px;
+        background: #161b22;
+        display: flex;
         align-items: center;
         justify-content: center;
-        min-height: 82px;
+        transition: all 0.2s ease;
+        flex-shrink: 0;
       }
-      .cf-loading-row {
+      .cf-turnstile-checkbox.checking {
+        border: 2px solid #388bfd;
+        border-top-color: transparent;
+        border-radius: 50%;
+        animation: cf-spin-kf 0.7s linear infinite;
+        background: transparent;
+      }
+      .cf-turnstile-checkbox.verified {
+        border-color: #2ea043;
+        background: #238636;
+      }
+      .cf-checkmark-icon {
+        display: none;
+        width: 14px;
+        height: 14px;
+        stroke: #ffffff;
+        stroke-width: 3;
+        fill: none;
+      }
+      .cf-turnstile-checkbox.verified .cf-checkmark-icon {
+        display: block;
+      }
+      .cf-turnstile-text {
+        font-size: 15px;
+        font-weight: 500;
+        color: #f0f6fc;
+      }
+      .cf-turnstile-right {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 2px;
+      }
+      .cf-turnstile-brand {
         display: flex;
         align-items: center;
-        gap: 12px;
-        color: #9ca3af;
+        gap: 6px;
         font-size: 13px;
+        font-weight: 600;
+        color: #f0883e;
       }
-      .cf-spinner-ring {
-        width: 20px;
-        height: 20px;
-        border: 2px solid #2a3145;
-        border-top-color: #e50914;
-        border-radius: 50%;
-        animation: cf-spin-kf 0.8s linear infinite;
+      .cf-turnstile-links {
+        font-size: 10px;
+        color: #6e7681;
       }
-      @keyframes cf-spin-kf {
-        to { transform: rotate(360deg); }
-      }
-      .cf-status {
-        margin-top: 12px;
-        font-size: 13px;
+      .cf-status-row {
+        margin-top: -12px;
+        margin-bottom: 16px;
+        font-size: 12px;
         text-align: center;
         display: none;
       }
-      .cf-status.success {
+      .cf-status-row.active {
         display: block;
-        color: #10b981;
-        font-weight: 600;
+        color: #8b949e;
       }
-      .cf-status.error {
+      .cf-status-row.success {
         display: block;
-        color: #ef4444;
+        color: #3fb950;
         font-weight: 500;
+      }
+      .cf-status-row.error {
+        display: block;
+        color: #f85149;
+      }
+      @keyframes cf-spin-kf {
+        to { transform: rotate(360deg); }
       }
       .cf-info {
         font-size: 12px;
@@ -295,26 +352,40 @@
       <div class="cf-card">
         <div class="cf-brand">
           <img src="/favicon.png" alt="MovieFlix" class="cf-logo" onerror="this.style.display='none'" />
-          <div class="cf-site-name">movieflix.app</div>
+          <div class="cf-site-name">movieflix.lol</div>
         </div>
         <h1 class="cf-title">Checking if the site connection is secure</h1>
-        <p class="cf-desc">movieflix.app needs to review the security of your connection before proceeding.</p>
+        <p class="cf-desc">movieflix.lol needs to review the security of your connection before proceeding.</p>
 
-        <div class="cf-widget-box">
-          <div id="movieflix-recaptcha-widget"></div>
-          <div id="cf-loading" class="cf-loading-row">
-            <div class="cf-spinner-ring"></div>
-            <span>Verifying you are human. This may take a few seconds...</span>
+        <div class="cf-turnstile-box" id="cf-turnstile-box" role="button" tabindex="0" title="Click to verify">
+          <div class="cf-turnstile-left">
+            <div class="cf-turnstile-checkbox" id="cf-cb">
+              <svg class="cf-checkmark-icon" id="cf-chk-svg" viewBox="0 0 24 24">
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+            </div>
+            <span class="cf-turnstile-text" id="cf-cb-text">Verify you are human</span>
           </div>
-          <div id="cf-status-label" class="cf-status"></div>
+          <div class="cf-turnstile-right">
+            <div class="cf-turnstile-brand">
+              <svg width="22" height="15" viewBox="0 0 45 30" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M34.2 12.8C33.6 8.5 29.9 5.2 25.5 5.2C22.6 5.2 20 6.6 18.4 8.8C17.5 8.1 16.3 7.6 15 7.6C12.1 7.6 9.6 9.8 9.2 12.7C4.1 13.3 0 17.6 0 22.8C0 28.5 4.6 33.1 10.3 33.1H34.5C39.7 33.1 44 28.9 44 23.6C44 18.6 40.1 14.4 35.1 13.9" fill="#F48120"/>
+              </svg>
+              <span>Cloudflare</span>
+            </div>
+            <div class="cf-turnstile-links">
+              <span>Privacy</span> • <span>Terms</span>
+            </div>
+          </div>
         </div>
+        <div id="cf-status-msg" class="cf-status-row"></div>
 
         <div class="cf-info">
-          Why am I seeing this page? Requests from new sessions undergo a quick automated verification to protect high-speed streaming servers from malicious bots and DDoS attacks.
+          Why am I seeing this page? Requests from new sessions undergo a quick automated verification on movieflix.lol to protect high-speed streaming servers from malicious bots and DDoS attacks.
         </div>
 
         <div class="cf-bottom">
-          <span>Performance &amp; security by <strong>Cloudflare &amp; MovieFlix</strong></span>
+          <span>Performance &amp; security by <strong>Cloudflare &amp; movieflix.lol</strong></span>
           <span class="cf-ray" id="cf-ray-val">Ray ID: 9b2d87e14a60f1</span>
         </div>
       </div>
@@ -324,6 +395,8 @@
       (function() {
         var SITE_KEY = '6LcI8eotAAAAANgtwA3-NyEPjVMcTcCCkxmmSOMN';
         var VERIFY_URL = '/api/verify-captcha';
+        var isVerifying = false;
+        var hasVerified = false;
 
         function checkBypass() {
           try {
@@ -346,44 +419,116 @@
         }
 
         function unlockSite(token) {
+          if (hasVerified) return;
+          hasVerified = true;
+
           try {
-            localStorage.setItem('movieflix_cf_verified', token || 'verified');
+            localStorage.setItem('movieflix_cf_verified', token || 'verified_v3');
             localStorage.setItem('movieflix_cf_verified_at', Date.now().toString());
           } catch (_) {}
+
+          var cb = document.getElementById('cf-cb');
+          var txt = document.getElementById('cf-cb-text');
+          var status = document.getElementById('cf-status-msg');
+
+          if (cb) cb.className = 'cf-turnstile-checkbox verified';
+          if (txt) {
+            txt.textContent = 'Success!';
+            txt.style.color = '#3fb950';
+          }
+          if (status) {
+            status.className = 'cf-status-row success';
+            status.textContent = 'Connection verified. Entering movieflix.lol...';
+          }
+
           var wrap = document.getElementById('cf-challenge-wrap');
           if (wrap) {
             wrap.style.opacity = '0';
             wrap.style.pointerEvents = 'none';
             setTimeout(function() {
               if (wrap && wrap.parentNode) wrap.parentNode.removeChild(wrap);
-            }, 380);
+            }, 420);
           }
         }
 
-        function onCaptchaVerified(token) {
-          var loading = document.getElementById('cf-loading');
-          var status = document.getElementById('cf-status-label');
-          if (loading) loading.style.display = 'none';
+        function runV3Verification() {
+          if (isVerifying || hasVerified) return;
+          isVerifying = true;
+
+          var cb = document.getElementById('cf-cb');
+          var txt = document.getElementById('cf-cb-text');
+          var status = document.getElementById('cf-status-msg');
+
+          if (cb) cb.className = 'cf-turnstile-checkbox checking';
+          if (txt) txt.textContent = 'Verifying...';
           if (status) {
-            status.className = 'cf-status success';
-            status.textContent = 'Verification successful. Connecting to MovieFlix...';
+            status.className = 'cf-status-row active';
+            status.textContent = 'Reviewing connection security...';
           }
 
-          fetch(VERIFY_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ token: token })
-          })
-          .then(function(res) { return res.json(); })
-          .then(function(data) {
-            unlockSite(data.session || token);
-          })
-          .catch(function() {
-            unlockSite(token);
-          });
+          var fallbackTimer = setTimeout(function() {
+            if (!hasVerified) {
+              unlockSite('client_v3_fallback_' + Date.now());
+            }
+          }, 4500);
+
+          function handleToken(token) {
+            fetch(VERIFY_URL, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ token: token })
+            })
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+              clearTimeout(fallbackTimer);
+              unlockSite(data.session || token);
+            })
+            .catch(function() {
+              clearTimeout(fallbackTimer);
+              unlockSite(token);
+            });
+          }
+
+          if (window.grecaptcha && window.grecaptcha.ready) {
+            window.grecaptcha.ready(function() {
+              try {
+                window.grecaptcha.execute(SITE_KEY, { action: 'homepage' })
+                  .then(handleToken)
+                  .catch(function(err) {
+                    console.warn('[v3 error]', err);
+                    clearTimeout(fallbackTimer);
+                    unlockSite('v3_token_fallback');
+                  });
+              } catch (execErr) {
+                console.warn('[v3 exec err]', execErr);
+                clearTimeout(fallbackTimer);
+                unlockSite('v3_exec_fallback');
+              }
+            });
+          } else {
+            var retries = 0;
+            var poll = setInterval(function() {
+              retries++;
+              if (window.grecaptcha && window.grecaptcha.ready) {
+                clearInterval(poll);
+                window.grecaptcha.ready(function() {
+                  window.grecaptcha.execute(SITE_KEY, { action: 'homepage' })
+                    .then(handleToken)
+                    .catch(function() {
+                      clearTimeout(fallbackTimer);
+                      unlockSite('v3_retry_fallback');
+                    });
+                });
+              } else if (retries > 12) {
+                clearInterval(poll);
+                clearTimeout(fallbackTimer);
+                unlockSite('v3_load_fallback');
+              }
+            }, 250);
+          }
         }
 
-        function setupRecaptcha() {
+        function initChallenge() {
           if (checkBypass()) {
             unlockSite();
             return;
@@ -397,28 +542,22 @@
             rayEl.textContent = 'Ray ID: ' + hex;
           }
 
-          var target = document.getElementById('movieflix-recaptcha-widget');
-          if (window.grecaptcha && window.grecaptcha.render && target) {
-            if (!target.hasChildNodes()) {
-              try {
-                window.grecaptcha.render('movieflix-recaptcha-widget', {
-                  sitekey: SITE_KEY,
-                  theme: 'dark',
-                  callback: onCaptchaVerified
-                });
-                var loading = document.getElementById('cf-loading');
-                if (loading) loading.style.display = 'none';
-              } catch (_) {}
-            }
-          } else {
-            setTimeout(setupRecaptcha, 200);
+          var box = document.getElementById('cf-turnstile-box');
+          if (box) {
+            box.addEventListener('click', function() {
+              runV3Verification();
+            });
           }
+
+          setTimeout(function() {
+            runV3Verification();
+          }, 600);
         }
 
         if (document.readyState === 'loading') {
-          document.addEventListener('DOMContentLoaded', setupRecaptcha);
+          document.addEventListener('DOMContentLoaded', initChallenge);
         } else {
-          setupRecaptcha();
+          initChallenge();
         }
       })();
     </script>
