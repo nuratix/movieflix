@@ -2895,8 +2895,8 @@ function ReelApp() {
     _authToken = authAccessToken;
     if (Platform.OS === 'web' && authAccessToken && typeof document !== 'undefined') {
       try {
-        const cfEl = document.getElementById('cf-challenge-wrap');
-        if (cfEl) cfEl.remove();
+        const wrapEl = document.getElementById('mf-verify-wrap') || document.getElementById('cf-challenge-wrap');
+        if (wrapEl) wrapEl.remove();
       } catch (_) {}
     }
   }, [authAccessToken]);
