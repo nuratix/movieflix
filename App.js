@@ -9812,111 +9812,125 @@ function ReelCustomPlayer({
         >
           <TouchableWithoutFeedback onPress={() => {}}>
             <View style={styles.episodesSheetModal}>
-              {/* Header */}
-              <View style={styles.episodesSheetHeader}>
-                <View>
-                  <Text style={styles.episodesSheetTitle}>Select Episode</Text>
-                  <Text style={styles.episodesSheetSub}>
-                    {movie?.name ? movie.name : 'Episodes'}
-                    {currentSeason ? ` · Season ${currentSeason}` : ''}
-                  </Text>
-                </View>
-                <TouchableOpacity
-                  style={styles.episodesSheetCloseBtn}
-                  onPress={() => setIsEpisodesModalOpen(false)}
-                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-                >
-                  <Feather name="x" size={20} color="#8e8e93" />
-                </TouchableOpacity>
-              </View>
+              {/* Header & Content */}
+              {(() => {
+                const activeSeasonObj =
+                  Array.isArray(seasons) && seasons.length > 0
+                    ? seasons[selectedSheetSeasonIdx] || seasons[0]
+                    : null;
+                const activeSeNum = activeSeasonObj?.se || currentSeason || 1;
+                const epList = activeSeasonObj
+                  ? getEpisodesArray(activeSeasonObj)
+                  : Array.from({ length: 24 }, (_, i) => i + 1);
 
-              {/* Season Tabs if multiple seasons exist */}
-              {Array.isArray(seasons) && seasons.length > 1 && (
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.episodesSeasonTabsTrack}
-                >
-                  {seasons.map((s, idx) => (
-                    <TouchableOpacity
-                      key={`sheet-se-${s.se || idx}`}
-                      style={[
-                        styles.episodesSeasonTab,
-                        selectedSheetSeasonIdx === idx && styles.episodesSeasonTabActive,
-                      ]}
-                      onPress={() => setSelectedSheetSeasonIdx(idx)}
-                      activeOpacity={0.75}
-                    >
-                      <Text
-                        style={[
-                          styles.episodesSeasonTabText,
-                          selectedSheetSeasonIdx === idx && styles.episodesSeasonTabTextActive,
-                        ]}
-                      >
-                        Season {s.se}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              )}
-
-              {/* Episode Numbers Grid */}
-              <ScrollView
-                style={styles.episodesSheetScroll}
-                contentContainerStyle={styles.episodesSheetGrid}
-                showsVerticalScrollIndicator={false}
-              >
-                {(() => {
-                  const activeSeasonObj =
-                    Array.isArray(seasons) && seasons.length > 0
-                      ? seasons[selectedSheetSeasonIdx] || seasons[0]
-                      : null;
-                  const activeSeNum = activeSeasonObj?.se || currentSeason || 1;
-                  const epList = activeSeasonObj
-                    ? getEpisodesArray(activeSeasonObj)
-                    : Array.from({ length: 24 }, (_, i) => i + 1);
-
-                  return epList.map((epNum) => {
-                    const isCurrentlyPlaying =
-                      activeSeNum === (currentSeason || 1) &&
-                      epNum === (currentEpisode || 1);
-
-                    return (
+                return (
+                  <>
+                    <View style={styles.episodesSheetHeader}>
+                      <View style={{ flex: 1, marginRight: 12 }}>
+                        <Text style={styles.episodesSheetTitle} numberOfLines={1}>Select Episode</Text>
+                        <Text style={styles.episodesSheetSub} numberOfLines={1}>
+                          {movie?.name ? movie.name : 'Episodes'}
+                          {activeSeNum ? ` · Season ${activeSeNum}` : ''}
+                        </Text>
+                      </View>
                       <TouchableOpacity
-                        key={`sheet-ep-${activeSeNum}-${epNum}`}
-                        style={[
-                          styles.epGridItem,
-                          isCurrentlyPlaying && styles.epGridItemActive,
-                        ]}
-                        onPress={() => {
-                          setIsEpisodesModalOpen(false);
-                          if (onSelectEpisode) {
-                            onSelectEpisode(activeSeNum, epNum);
-                          }
-                        }}
-                        activeOpacity={0.8}
+                        style={styles.episodesSheetCloseBtn}
+                        onPress={() => setIsEpisodesModalOpen(false)}
+                        hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
                       >
-                        <Text
-                          style={[
-                            styles.epGridNumber,
-                            isCurrentlyPlaying && styles.epGridNumberActive,
-                          ]}
-                        >
-                          {epNum}
-                        </Text>
-                        <Text
-                          style={[
-                            styles.epGridLabel,
-                            isCurrentlyPlaying && styles.epGridLabelActive,
-                          ]}
-                        >
-                          {isCurrentlyPlaying ? 'Playing' : `EP ${epNum}`}
-                        </Text>
+                        <Feather name="x" size={20} color="#8e8e93" />
                       </TouchableOpacity>
-                    );
-                  });
-                })()}
-              </ScrollView>
+                    </View>
+
+                    {/* Season Tabs if multiple seasons exist */}
+                    {Array.isArray(seasons) && seasons.length > 1 && (
+                      <View style={styles.episodesSeasonTabsWrapper}>
+                        <ScrollView
+                          horizontal
+                          showsHorizontalScrollIndicator={false}
+                          style={styles.episodesSeasonTabsScroll}
+                          contentContainerStyle={styles.episodesSeasonTabsTrack}
+                        >
+                          {seasons.map((s, idx) => {
+                            const seNum = s?.se != null ? s.se : idx + 1;
+                            const isSelected = selectedSheetSeasonIdx === idx;
+                            return (
+                              <TouchableOpacity
+                                key={`sheet-se-${seNum}-${idx}`}
+                                style={[
+                                  styles.episodesSeasonTab,
+                                  isSelected && styles.episodesSeasonTabActive,
+                                ]}
+                                onPress={() => setSelectedSheetSeasonIdx(idx)}
+                                activeOpacity={0.75}
+                              >
+                                <Text
+                                  style={[
+                                    styles.episodesSeasonTabText,
+                                    isSelected && styles.episodesSeasonTabTextActive,
+                                  ]}
+                                  numberOfLines={1}
+                                >
+                                  Season {seNum}
+                                </Text>
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </ScrollView>
+                      </View>
+                    )}
+
+                    {/* Episode Numbers Grid */}
+                    <ScrollView
+                      style={styles.episodesSheetScroll}
+                      contentContainerStyle={styles.episodesSheetGrid}
+                      showsVerticalScrollIndicator={true}
+                    >
+                      {epList.map((epNum) => {
+                        const isCurrentlyPlaying =
+                          activeSeNum === (currentSeason || 1) &&
+                          epNum === (currentEpisode || 1);
+
+                        return (
+                          <TouchableOpacity
+                            key={`sheet-ep-${activeSeNum}-${epNum}`}
+                            style={[
+                              styles.epGridItem,
+                              isCurrentlyPlaying && styles.epGridItemActive,
+                            ]}
+                            onPress={() => {
+                              setIsEpisodesModalOpen(false);
+                              if (onSelectEpisode) {
+                                onSelectEpisode(activeSeNum, epNum);
+                              }
+                            }}
+                            activeOpacity={0.8}
+                          >
+                            <Text
+                              style={[
+                                styles.epGridNumber,
+                                isCurrentlyPlaying && styles.epGridNumberActive,
+                              ]}
+                              numberOfLines={1}
+                            >
+                              {epNum}
+                            </Text>
+                            <Text
+                              style={[
+                                styles.epGridLabel,
+                                isCurrentlyPlaying && styles.epGridLabelActive,
+                              ]}
+                              numberOfLines={1}
+                            >
+                              {isCurrentlyPlaying ? 'Playing' : `EP ${epNum}`}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </ScrollView>
+                  </>
+                );
+              })()}
             </View>
           </TouchableWithoutFeedback>
         </TouchableOpacity>
@@ -11345,59 +11359,72 @@ const styles = StyleSheet.create({
   },
   episodesSheetModal: {
     width: '100%',
-    maxWidth: 580,
-    maxHeight: '80%',
-    backgroundColor: '#121216',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    maxWidth: 640,
+    maxHeight: '88%',
+    backgroundColor: '#141418',
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.12)',
-    paddingTop: 18,
-    paddingBottom: 24,
-    paddingHorizontal: 20,
+    paddingTop: 14,
+    paddingBottom: 16,
+    paddingHorizontal: 16,
     alignSelf: 'center',
   },
   episodesSheetHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 16,
-    paddingBottom: 12,
+    marginBottom: 10,
+    paddingBottom: 8,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255, 255, 255, 0.08)',
   },
   episodesSheetTitle: {
     color: '#FFFFFF',
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '700',
   },
   episodesSheetSub: {
     color: '#8e8e93',
-    fontSize: 12.5,
+    fontSize: 12,
     marginTop: 2,
   },
   episodesSheetCloseBtn: {
     padding: 6,
   },
+  episodesSeasonTabsWrapper: {
+    marginBottom: 10,
+    flexShrink: 0,
+  },
+  episodesSeasonTabsScroll: {
+    flexGrow: 0,
+  },
   episodesSeasonTabsTrack: {
-    paddingBottom: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 8,
+    paddingRight: 16,
+    paddingVertical: 2,
   },
   episodesSeasonTab: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+    minHeight: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   episodesSeasonTabActive: {
     backgroundColor: '#E50914',
     borderColor: '#E50914',
   },
   episodesSeasonTabText: {
-    color: '#a3a3a3',
-    fontSize: 13,
+    color: '#a1a1aa',
+    fontSize: 12,
     fontWeight: '600',
   },
   episodesSeasonTabTextActive: {
@@ -11405,44 +11432,47 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   episodesSheetScroll: {
-    maxHeight: 340,
+    flexShrink: 1,
+    maxHeight: 220,
   },
   episodesSheetGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
-    paddingVertical: 6,
+    gap: 8,
+    paddingVertical: 4,
   },
   epGridItem: {
-    width: '22%',
-    minWidth: 64,
-    aspectRatio: 1.1,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderRadius: 12,
+    width: 66,
+    height: 46,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    borderRadius: 10,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
+    borderColor: 'rgba(255, 255, 255, 0.1)',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 6,
+    paddingHorizontal: 4,
+    paddingVertical: 4,
   },
   epGridItemActive: {
-    backgroundColor: 'rgba(229, 9, 20, 0.18)',
+    backgroundColor: 'rgba(229, 9, 20, 0.22)',
     borderColor: '#E50914',
     borderWidth: 1.5,
   },
   epGridNumber: {
     color: '#FFFFFF',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
+    lineHeight: 18,
   },
   epGridNumberActive: {
     color: '#E50914',
   },
   epGridLabel: {
     color: '#71717a',
-    fontSize: 10,
+    fontSize: 9.5,
     marginTop: 2,
     fontWeight: '500',
+    lineHeight: 12,
   },
   epGridLabelActive: {
     color: '#f87171',
