@@ -28,7 +28,7 @@ const MAX_REQUESTS_PER_WINDOW = 150;
 
 // In-memory response cache for high-traffic static catalog endpoints
 const cacheMap = new Map();
-const CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes
+const CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
 
 const ALLOWED_ORIGINS = new Set([
   'https://movieflix-pi-six.vercel.app',
@@ -50,6 +50,22 @@ function setCors(req, res) {
     'Access-Control-Allow-Headers',
     'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-Type, Date, Authorization'
   );
+}
+
+function setOptimalCaching(res, endpoint) {
+  if (['home', 'catalog', 'movies', 'tv-series', 'animation'].includes(endpoint)) {
+    // 30 minutes edge cache, 24 hours background stale-while-revalidate
+    res.setHeader('Cache-Control', 'public, s-maxage=1800, stale-while-revalidate=86400');
+  } else if (['detail', 'dubs', 'metadata'].includes(endpoint)) {
+    // 24 hours edge cache, 7 days background stale-while-revalidate
+    res.setHeader('Cache-Control', 'public, s-maxage=86400, stale-while-revalidate=604800');
+  } else if (['shots', 'reels'].includes(endpoint)) {
+    // 5 minutes edge cache, 30 minutes background stale-while-revalidate
+    res.setHeader('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=1800');
+  } else if (endpoint === 'captions') {
+    // 24 hours edge cache, 7 days background stale-while-revalidate
+    res.setHeader('Cache-Control', 'public, s-maxage=86400, stale-while-revalidate=604800');
+  }
 }
 
 async function fetchNetfilmStreams(id, detailPath, se = 0, ep = 0) {
@@ -356,6 +372,7 @@ export default async function handler(req, res) {
       const cached = cacheMap.get(cacheKey);
       if (cached && Date.now() < cached.expiresAt) {
         res.setHeader('X-Cache', 'HIT');
+        res.setHeader('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=1800');
         return res.status(200).json(cached.data);
       }
       try {
@@ -507,7 +524,8 @@ export default async function handler(req, res) {
         });
 
         const responseData = { status: 'success', page, count: shots.length, items: shots, has_more: true };
-        cacheMap.set(cacheKey, { data: responseData, expiresAt: Date.now() + 15 * 1000 });
+        cacheMap.set(cacheKey, { data: responseData, expiresAt: Date.now() + 60 * 1000 });
+        res.setHeader('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=1800');
         return res.status(200).json(responseData);
       } catch (err) {
         console.error('Failed to fetch shots:', err);
@@ -526,9 +544,7 @@ export default async function handler(req, res) {
     const cached = cacheMap.get(cacheKey);
     if (cached && Date.now() < cached.expiresAt) {
       res.setHeader('X-Cache', 'HIT');
-      if (['home', 'catalog', 'movies', 'tv-series', 'animation'].includes(endpoint)) {
-        res.setHeader('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300');
-      }
+      setOptimalCaching(res, endpoint);
       return res.status(200).json(cached.data);
     }
   }
@@ -596,16 +612,17 @@ export default async function handler(req, res) {
 
     // Cache successful static catalog results
     if (cacheKey && data) {
+      const ttl = ['detail', 'dubs', 'metadata', 'captions'].includes(endpoint)
+        ? 60 * 60 * 1000 // 1 hour in-memory for static details
+        : CACHE_TTL_MS;
       cacheMap.set(cacheKey, {
         data,
-        expiresAt: Date.now() + CACHE_TTL_MS,
+        expiresAt: Date.now() + ttl,
       });
     }
 
     res.setHeader('X-Cache', 'MISS');
-    if (['home', 'catalog', 'movies', 'tv-series', 'animation'].includes(endpoint)) {
-      res.setHeader('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300');
-    }
+    setOptimalCaching(res, endpoint);
     return res.status(200).json(data);
   } catch (err) {
     clearTimeout(timeoutId);
