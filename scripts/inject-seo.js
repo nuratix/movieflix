@@ -59,8 +59,296 @@ const getCommonMeta = () => `
     <meta name="twitter:site" content="@movieflixlol" />
     <meta name="twitter:creator" content="@movieflixlol" />
     <meta name="twitter:image" content="${OG_BANNER}" />
+    <!-- Google reCAPTCHA v2 / v3 Bot Protection -->
+    <meta name="recaptcha-site-key" content="6LcI8eotAAAAANgtwA3-NyEPjVMcTcCCkxmmSOMN" />
+    <script src="https://www.google.com/recaptcha/api.js?render=explicit" async defer></script>
     <!-- Vercel Web Analytics -->
     <script defer src="/_vercel/insights/script.js"></script>
+`;
+
+const getBotProtectionStyles = () => `
+    <style id="cf-challenge-styles">
+      #cf-challenge-wrap {
+        position: fixed;
+        inset: 0;
+        width: 100vw;
+        height: 100vh;
+        background-color: #0b0d13;
+        color: #d1d5db;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+        z-index: 2147483647;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        box-sizing: border-box;
+        opacity: 1;
+        transition: opacity 0.35s ease-out;
+      }
+      .cf-card {
+        max-width: 520px;
+        width: 100%;
+        background: #141721;
+        border: 1px solid #232838;
+        border-radius: 14px;
+        padding: 36px 32px;
+        box-shadow: 0 24px 60px rgba(0, 0, 0, 0.85);
+      }
+      .cf-brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 24px;
+      }
+      .cf-logo {
+        width: 36px;
+        height: 36px;
+        border-radius: 8px;
+        object-fit: contain;
+      }
+      .cf-site-name {
+        font-size: 21px;
+        font-weight: 700;
+        letter-spacing: -0.3px;
+        color: #ffffff;
+      }
+      .cf-title {
+        font-size: 22px;
+        font-weight: 600;
+        color: #ffffff;
+        margin: 0 0 10px 0;
+        line-height: 1.35;
+      }
+      .cf-desc {
+        font-size: 14px;
+        color: #9ca3af;
+        margin: 0 0 24px 0;
+        line-height: 1.55;
+      }
+      .cf-widget-box {
+        background: #0d0f17;
+        border: 1px solid #1f2433;
+        border-radius: 10px;
+        padding: 20px 16px;
+        margin-bottom: 24px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 82px;
+      }
+      .cf-loading-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        color: #9ca3af;
+        font-size: 13px;
+      }
+      .cf-spinner-ring {
+        width: 20px;
+        height: 20px;
+        border: 2px solid #2a3145;
+        border-top-color: #e50914;
+        border-radius: 50%;
+        animation: cf-spin-kf 0.8s linear infinite;
+      }
+      @keyframes cf-spin-kf {
+        to { transform: rotate(360deg); }
+      }
+      .cf-status {
+        margin-top: 12px;
+        font-size: 13px;
+        text-align: center;
+        display: none;
+      }
+      .cf-status.success {
+        display: block;
+        color: #10b981;
+        font-weight: 600;
+      }
+      .cf-status.error {
+        display: block;
+        color: #ef4444;
+        font-weight: 500;
+      }
+      .cf-info {
+        font-size: 12px;
+        color: #6b7280;
+        line-height: 1.6;
+        border-top: 1px solid #1e2333;
+        padding-top: 18px;
+        margin-bottom: 18px;
+      }
+      .cf-bottom {
+        border-top: 1px solid #1e2333;
+        padding-top: 14px;
+        font-size: 11px;
+        color: #4b5563;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .cf-ray {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      }
+    </style>
+`;
+
+const getBotProtectionBodyHtml = () => `
+    <!-- Instant Login/Verification Bypass Check -->
+    <script>
+      (function() {
+        try {
+          var isLogged = false;
+          var rawSess = localStorage.getItem('@mf_session');
+          if (rawSess) {
+            var s = JSON.parse(rawSess);
+            if (s && (s.accessToken || s.user)) isLogged = true;
+          }
+          var cfToken = localStorage.getItem('movieflix_cf_verified');
+          var cfTime = parseInt(localStorage.getItem('movieflix_cf_verified_at') || '0', 10);
+          var isVerified = Boolean(cfToken && cfTime && (Date.now() - cfTime < 7 * 24 * 60 * 60 * 1000));
+          if (isLogged || isVerified) {
+            document.write('<style>#cf-challenge-wrap { display: none !important; }</style>');
+          }
+        } catch (_) {}
+      })();
+    </script>
+
+    <!-- Cloudflare-Style Full-Screen Bot Protection Barrier -->
+    <div id="cf-challenge-wrap">
+      <div class="cf-card">
+        <div class="cf-brand">
+          <img src="/favicon.png" alt="MovieFlix" class="cf-logo" onerror="this.style.display='none'" />
+          <div class="cf-site-name">movieflix.app</div>
+        </div>
+        <h1 class="cf-title">Checking if the site connection is secure</h1>
+        <p class="cf-desc">movieflix.app needs to review the security of your connection before proceeding.</p>
+
+        <div class="cf-widget-box">
+          <div id="movieflix-recaptcha-widget"></div>
+          <div id="cf-loading" class="cf-loading-row">
+            <div class="cf-spinner-ring"></div>
+            <span>Verifying you are human. This may take a few seconds...</span>
+          </div>
+          <div id="cf-status-label" class="cf-status"></div>
+        </div>
+
+        <div class="cf-info">
+          Why am I seeing this page? Requests from new sessions undergo a quick automated verification to protect high-speed streaming servers from malicious bots and DDoS attacks.
+        </div>
+
+        <div class="cf-bottom">
+          <span>Performance &amp; security by <strong>Cloudflare &amp; MovieFlix</strong></span>
+          <span class="cf-ray" id="cf-ray-val">Ray ID: 9b2d87e14a60f1</span>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      (function() {
+        var SITE_KEY = '6LcI8eotAAAAANgtwA3-NyEPjVMcTcCCkxmmSOMN';
+        var VERIFY_URL = '/api/verify-captcha';
+
+        function checkBypass() {
+          try {
+            var rawSess = localStorage.getItem('@mf_session');
+            if (rawSess) {
+              var s = JSON.parse(rawSess);
+              if (s && (s.accessToken || s.user)) return true;
+            }
+            var cfToken = localStorage.getItem('movieflix_cf_verified');
+            var cfTime = parseInt(localStorage.getItem('movieflix_cf_verified_at') || '0', 10);
+            if (cfToken && cfTime && (Date.now() - cfTime < 7 * 24 * 60 * 60 * 1000)) return true;
+          } catch (_) {}
+          return false;
+        }
+
+        if (checkBypass()) {
+          var wrap = document.getElementById('cf-challenge-wrap');
+          if (wrap && wrap.parentNode) wrap.parentNode.removeChild(wrap);
+          return;
+        }
+
+        function unlockSite(token) {
+          try {
+            localStorage.setItem('movieflix_cf_verified', token || 'verified');
+            localStorage.setItem('movieflix_cf_verified_at', Date.now().toString());
+          } catch (_) {}
+          var wrap = document.getElementById('cf-challenge-wrap');
+          if (wrap) {
+            wrap.style.opacity = '0';
+            wrap.style.pointerEvents = 'none';
+            setTimeout(function() {
+              if (wrap && wrap.parentNode) wrap.parentNode.removeChild(wrap);
+            }, 380);
+          }
+        }
+
+        function onCaptchaVerified(token) {
+          var loading = document.getElementById('cf-loading');
+          var status = document.getElementById('cf-status-label');
+          if (loading) loading.style.display = 'none';
+          if (status) {
+            status.className = 'cf-status success';
+            status.textContent = 'Verification successful. Connecting to MovieFlix...';
+          }
+
+          fetch(VERIFY_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token: token })
+          })
+          .then(function(res) { return res.json(); })
+          .then(function(data) {
+            unlockSite(data.session || token);
+          })
+          .catch(function() {
+            unlockSite(token);
+          });
+        }
+
+        function setupRecaptcha() {
+          if (checkBypass()) {
+            unlockSite();
+            return;
+          }
+
+          var rayEl = document.getElementById('cf-ray-val');
+          if (rayEl && window.crypto && window.crypto.getRandomValues) {
+            var bytes = new Uint8Array(8);
+            window.crypto.getRandomValues(bytes);
+            var hex = Array.from(bytes).map(function(b) { return b.toString(16).padStart(2, '0'); }).join('');
+            rayEl.textContent = 'Ray ID: ' + hex;
+          }
+
+          var target = document.getElementById('movieflix-recaptcha-widget');
+          if (window.grecaptcha && window.grecaptcha.render && target) {
+            if (!target.hasChildNodes()) {
+              try {
+                window.grecaptcha.render('movieflix-recaptcha-widget', {
+                  sitekey: SITE_KEY,
+                  theme: 'dark',
+                  callback: onCaptchaVerified
+                });
+                var loading = document.getElementById('cf-loading');
+                if (loading) loading.style.display = 'none';
+              } catch (_) {}
+            }
+          } else {
+            setTimeout(setupRecaptcha, 200);
+          }
+        }
+
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', setupRecaptcha);
+        } else {
+          setupRecaptcha();
+        }
+      })();
+    </script>
 `;
 
 // Page-specific definitions
@@ -349,6 +637,7 @@ function generatePageHtml(template, page) {
     <meta name="twitter:description" content="${page.description}" />
 
     ${getCommonMeta()}
+    ${getBotProtectionStyles()}
 
     <!-- Structured Data (Schema.org JSON-LD Graph) -->
     <script type="application/ld+json">
@@ -356,7 +645,9 @@ function generatePageHtml(template, page) {
     </script>
 `;
 
-  return content.replace('<head>', '<head>' + headSnippet);
+  content = content.replace('<head>', '<head>' + headSnippet);
+  content = content.replace('<body>', '<body>' + getBotProtectionBodyHtml());
+  return content;
 }
 
 // Generate all pages

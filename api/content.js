@@ -15,6 +15,68 @@ function getDb() {
   return neon(dbUrl);
 }
 
+// ─── Neon Database Persistent Cache & Rate Limit Fallback ────────────────────
+let cacheTableInitialized = false;
+
+async function ensureCacheTable(sql) {
+  if (cacheTableInitialized || !sql) return;
+  try {
+    await sql`
+      CREATE TABLE IF NOT EXISTS movieflix_content_cache (
+        cache_key VARCHAR(255) PRIMARY KEY,
+        endpoint VARCHAR(50) NOT NULL,
+        data JSONB NOT NULL,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        expires_at TIMESTAMP WITH TIME ZONE
+      );
+    `;
+    cacheTableInitialized = true;
+  } catch (err) {
+    console.warn('[Neon Cache] ensureCacheTable error:', err.message);
+  }
+}
+
+async function getFromNeonCache(cacheKey) {
+  if (!cacheKey) return null;
+  try {
+    const sql = getDb();
+    if (!sql) return null;
+    await ensureCacheTable(sql);
+    const rows = await sql`
+      SELECT data, updated_at FROM movieflix_content_cache
+      WHERE cache_key = ${cacheKey}
+      LIMIT 1;
+    `;
+    if (rows && rows.length > 0 && rows[0].data) {
+      return rows[0].data;
+    }
+  } catch (err) {
+    console.warn('[Neon Cache] Read fallback error:', err.message);
+  }
+  return null;
+}
+
+function saveToNeonCacheAsync(cacheKey, endpoint, data) {
+  if (!cacheKey || !data) return;
+  // Non-blocking asynchronous save to Neon PostgreSQL
+  (async () => {
+    try {
+      const sql = getDb();
+      if (!sql) return;
+      await ensureCacheTable(sql);
+      const dataStr = JSON.stringify(data);
+      await sql`
+        INSERT INTO movieflix_content_cache (cache_key, endpoint, data, updated_at, expires_at)
+        VALUES (${cacheKey}, ${endpoint}, ${dataStr}::jsonb, NOW(), NOW() + INTERVAL '14 days')
+        ON CONFLICT (cache_key) DO UPDATE
+        SET data = EXCLUDED.data, updated_at = NOW(), expires_at = EXCLUDED.expires_at;
+      `;
+    } catch (err) {
+      console.warn('[Neon Cache] Write error:', err.message);
+    }
+  })().catch(() => {});
+}
+
 const UPSTREAM_BASE = (
   process.env.MOVIE_PROVIDER_URL ||
   process.env.UPSTREAM_API_BASE ||
@@ -525,6 +587,7 @@ export default async function handler(req, res) {
 
         const responseData = { status: 'success', page, count: shots.length, items: shots, has_more: true };
         cacheMap.set(cacheKey, { data: responseData, expiresAt: Date.now() + 60 * 1000 });
+        saveToNeonCacheAsync(cacheKey, 'shots', responseData);
         res.setHeader('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=1800');
         return res.status(200).json(responseData);
       } catch (err) {
@@ -549,6 +612,21 @@ export default async function handler(req, res) {
     }
   }
 
+  // 6b. Check Neon database persistent cache directly if preferred or under emergency quota saver mode
+  const preferNeon =
+    req.headers['x-prefer-neon'] === '1' ||
+    process.env.FORCE_NEON_FALLBACK === 'true' ||
+    query.prefer_neon === '1';
+
+  if (cacheKey && preferNeon) {
+    const neonCached = await getFromNeonCache(cacheKey);
+    if (neonCached) {
+      res.setHeader('X-Cache', 'NEON-DIRECT');
+      setOptimalCaching(res, endpoint);
+      return res.status(200).json(neonCached);
+    }
+  }
+
   // 7. Perform upstream request with server-side authentication
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
@@ -569,6 +647,17 @@ export default async function handler(req, res) {
     if (!upstreamRes.ok) {
       const errText = await upstreamRes.text().catch(() => '');
       console.warn(`Upstream error [${upstreamRes.status}] for ${endpoint}:`, errText.slice(0, 100));
+
+      // Check Neon Database persistent cache fallback for rate limit (429) or upstream outage (5xx)
+      if (cacheKey) {
+        const neonFallback = await getFromNeonCache(cacheKey);
+        if (neonFallback) {
+          res.setHeader('X-Cache', 'NEON-FALLBACK');
+          res.setHeader('X-Fallback-Reason', `Upstream-Status-${upstreamRes.status}`);
+          setOptimalCaching(res, endpoint);
+          return res.status(200).json(neonFallback);
+        }
+      }
 
       if (endpoint === 'stream') {
         const id = (query.id || '').replace(/[^a-zA-Z0-9_\-]/g, '').slice(0, 50).trim();
@@ -610,7 +699,7 @@ export default async function handler(req, res) {
       }
     }
 
-    // Cache successful static catalog results
+    // Cache successful static catalog results in-memory and asynchronously in Neon DB
     if (cacheKey && data) {
       const ttl = ['detail', 'dubs', 'metadata', 'captions'].includes(endpoint)
         ? 60 * 60 * 1000 // 1 hour in-memory for static details
@@ -619,6 +708,7 @@ export default async function handler(req, res) {
         data,
         expiresAt: Date.now() + ttl,
       });
+      saveToNeonCacheAsync(cacheKey, endpoint, data);
     }
 
     res.setHeader('X-Cache', 'MISS');
@@ -626,6 +716,20 @@ export default async function handler(req, res) {
     return res.status(200).json(data);
   } catch (err) {
     clearTimeout(timeoutId);
+
+    // Neon Database fallback on network error, upstream abort, or rate limiting
+    if (cacheKey) {
+      try {
+        const neonFallback = await getFromNeonCache(cacheKey);
+        if (neonFallback) {
+          res.setHeader('X-Cache', 'NEON-FALLBACK');
+          res.setHeader('X-Fallback-Reason', `Network-Error-${err.name || 'Unknown'}`);
+          setOptimalCaching(res, endpoint);
+          return res.status(200).json(neonFallback);
+        }
+      } catch (_) {}
+    }
+
     if (endpoint === 'stream') {
       try {
         const id = (query.id || '').replace(/[^a-zA-Z0-9_\-]/g, '').slice(0, 50).trim();

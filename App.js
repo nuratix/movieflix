@@ -2891,7 +2891,15 @@ function ReelApp() {
   }, []);
 
   // Sync access token to module-level var so apiFetch picks it up automatically
-  useEffect(() => { _authToken = authAccessToken; }, [authAccessToken]);
+  useEffect(() => {
+    _authToken = authAccessToken;
+    if (Platform.OS === 'web' && authAccessToken && typeof document !== 'undefined') {
+      try {
+        const cfEl = document.getElementById('cf-challenge-wrap');
+        if (cfEl) cfEl.remove();
+      } catch (_) {}
+    }
+  }, [authAccessToken]);
   // Keep ref in sync with state so async functions always see latest authUser
   useEffect(() => { authUserRef.current = authUser; }, [authUser]);
 
