@@ -82,7 +82,7 @@ function verifyJwt(token) {
 }
 
 const ALLOWED_ORIGINS = new Set([
-  'https://movieflix-pi-six.vercel.app',
+  'https://mws.wallpaperdomain.xyz',
   'https://netfilm.world',
   'http://localhost:3000',
   'http://localhost:8081',
@@ -94,7 +94,7 @@ function setCors(req, res) {
   if (origin && ALLOWED_ORIGINS.has(origin)) {
     res.setHeader('Access-Control-Allow-Origin', origin);
   } else {
-    res.setHeader('Access-Control-Allow-Origin', 'https://movieflix-pi-six.vercel.app');
+    res.setHeader('Access-Control-Allow-Origin', 'https://mws.wallpaperdomain.xyz');
   }
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');

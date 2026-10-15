@@ -116,7 +116,7 @@ function removeMemoryLike(shotId, id) {
 
 // ─── CORS Configuration ──────────────────────────────────────────────────────
 const ALLOWED_ORIGINS = new Set([
-  'https://movieflix-pi-six.vercel.app',
+  'https://mws.wallpaperdomain.xyz',
   'https://netfilm.world',
   'https://mws.wallpaperdomain.xyz',
   'http://mws.wallpaperdomain.xyz',

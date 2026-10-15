@@ -6,61 +6,61 @@ export default async function handler(req, res) {
   const sitemapXml = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <loc>https://movieflix-pi-six.vercel.app/</loc>
+    <loc>https://mws.wallpaperdomain.xyz/</loc>
     <lastmod>2026-10-02</lastmod>
     <changefreq>hourly</changefreq>
     <priority>1.0</priority>
   </url>
   <url>
-    <loc>https://movieflix-pi-six.vercel.app/download</loc>
+    <loc>https://mws.wallpaperdomain.xyz/download</loc>
     <lastmod>2026-10-02</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.95</priority>
   </url>
   <url>
-    <loc>https://movieflix-pi-six.vercel.app/movies</loc>
+    <loc>https://mws.wallpaperdomain.xyz/movies</loc>
     <lastmod>2026-10-02</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
-    <loc>https://movieflix-pi-six.vercel.app/series</loc>
+    <loc>https://mws.wallpaperdomain.xyz/series</loc>
     <lastmod>2026-10-02</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
-    <loc>https://movieflix-pi-six.vercel.app/animation</loc>
+    <loc>https://mws.wallpaperdomain.xyz/animation</loc>
     <lastmod>2026-10-02</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.85</priority>
   </url>
   <url>
-    <loc>https://movieflix-pi-six.vercel.app/privacy</loc>
+    <loc>https://mws.wallpaperdomain.xyz/privacy</loc>
     <lastmod>2026-10-02</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
-    <loc>https://movieflix-pi-six.vercel.app/movie/lust-stories-q7N2fLtaTA2</loc>
+    <loc>https://mws.wallpaperdomain.xyz/movie/lust-stories-q7N2fLtaTA2</loc>
     <lastmod>2026-10-02</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://movieflix-pi-six.vercel.app/movie/rrr-eBB3mO4mYV6</loc>
+    <loc>https://mws.wallpaperdomain.xyz/movie/rrr-eBB3mO4mYV6</loc>
     <lastmod>2026-10-02</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://movieflix-pi-six.vercel.app/movie/animal-c8zmSROvma7</loc>
+    <loc>https://mws.wallpaperdomain.xyz/movie/animal-c8zmSROvma7</loc>
     <lastmod>2026-10-02</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://movieflix-pi-six.vercel.app/tv/neagley-kgfRKfjK46</loc>
+    <loc>https://mws.wallpaperdomain.xyz/tv/neagley-kgfRKfjK46</loc>
     <lastmod>2026-10-02</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>

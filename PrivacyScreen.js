@@ -12,7 +12,7 @@ import {
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-export const PRIVACY_POLICY_URL = 'https://movieflix-pi-six.vercel.app/privacy';
+export const PRIVACY_POLICY_URL = 'https://mws.wallpaperdomain.xyz/privacy';
 
 export default function PrivacyScreen({ onClose }) {
   const insets = useSafeAreaInsets();

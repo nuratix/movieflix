@@ -9,4 +9,4 @@ Allow: /api/download
 Allow: /api/sitemap
 Disallow: /api/
 
-Sitemap: https://movieflix-pi-six.vercel.app/sitemap.xml
+Sitemap: https://mws.wallpaperdomain.xyz/sitemap.xml

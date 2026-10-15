@@ -15,7 +15,7 @@
         "gradleCommand": ":app:assembleRelease"
       },
       "env": {
-        "EXPO_PUBLIC_API_BASE": "https://movieflix-pi-six.vercel.app"
+        "EXPO_PUBLIC_API_BASE": "https://mws.wallpaperdomain.xyz"
       }
     },
     "production": {
@@ -23,7 +23,7 @@
         "buildType": "app-bundle"
       },
       "env": {
-        "EXPO_PUBLIC_API_BASE": "https://movieflix-pi-six.vercel.app"
+        "EXPO_PUBLIC_API_BASE": "https://mws.wallpaperdomain.xyz"
       }
     }
   },

@@ -19,7 +19,7 @@ function safeFetchUrl(url) {
   return url;
 }
 
-const API_BASE = (process.env.EXPO_PUBLIC_API_BASE || (Platform.OS === 'web' ? '' : 'https://movieflix-pi-six.vercel.app')).trim().replace(/\/+$/, '');
+const API_BASE = (process.env.EXPO_PUBLIC_API_BASE || (Platform.OS === 'web' ? '' : 'https://mws.wallpaperdomain.xyz')).trim().replace(/\/+$/, '');
 
 // Clean title for search (removes year, parentheticals, S1/E1, resolution tags)
 export function sanitizeTitle(rawTitle) {

@@ -52,6 +52,62 @@ export async function initSecureStorage() {
   }
 }
 
+export function getItemId(item) {
+  if (!item) return '';
+  if (typeof item === 'string') return item.trim();
+  return String(item.movieId || item.slug || item.subject_id || item.id || '').trim();
+}
+
+export function mergeWatchlists(localList = [], remoteList = []) {
+  const map = new Map();
+  for (const item of (remoteList || [])) {
+    const id = getItemId(item);
+    if (id) {
+      map.set(id, {
+        ...item,
+        movieId: id,
+        id,
+        slug: item.slug || id,
+        name: item.name || item.title || 'Untitled',
+        poster_url: item.poster_url || '',
+      });
+    }
+  }
+  for (const item of (localList || [])) {
+    const id = getItemId(item);
+    if (id && !map.has(id)) {
+      map.set(id, {
+        ...item,
+        movieId: id,
+        id,
+        slug: item.slug || id,
+        name: item.name || item.title || 'Untitled',
+        poster_url: item.poster_url || '',
+      });
+    }
+  }
+  return Array.from(map.values()).sort(
+    (a, b) => new Date(b.addedAt || 0) - new Date(a.addedAt || 0)
+  );
+}
+
+export function mergeWatchHistories(localHist = [], remoteHist = []) {
+  const map = new Map();
+  for (const item of (remoteHist || [])) {
+    const id = item.historyId || item.id || getItemId(item?.movie);
+    if (id) map.set(id, item);
+  }
+  for (const item of (localHist || [])) {
+    const id = item.historyId || item.id || getItemId(item?.movie);
+    if (id && !map.has(id)) {
+      map.set(id, item);
+    }
+  }
+  return Array.from(map.values()).sort(
+    (a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0)
+  );
+}
+
 /**
  * WATCH HISTORY (Cloud Sync with AWS Server + Local Fast Cache)
  */
@@ -60,7 +116,9 @@ export async function getWatchHistory() {
     const raw = await AsyncStorage.getItem(KEYS.WATCH_HISTORY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      memoryStore.watchHistory = Array.isArray(parsed) ? parsed : [];
+      if (Array.isArray(parsed)) {
+        memoryStore.watchHistory = parsed;
+      }
     }
 
     // If authenticated, sync securely with AWS server in background
@@ -77,9 +135,10 @@ export async function getWatchHistory() {
         if (res.ok) {
           const data = await res.json();
           if (Array.isArray(data.history)) {
-            memoryStore.watchHistory = data.history;
-            await AsyncStorage.setItem(KEYS.WATCH_HISTORY, JSON.stringify(data.history));
-            return data.history;
+            const merged = mergeWatchHistories(memoryStore.watchHistory, data.history);
+            memoryStore.watchHistory = merged;
+            await AsyncStorage.setItem(KEYS.WATCH_HISTORY, JSON.stringify(merged));
+            return merged;
           }
         }
       } catch (syncErr) {
@@ -218,10 +277,12 @@ export async function getMyList() {
     const raw = await AsyncStorage.getItem(KEYS.MY_LIST);
     if (raw) {
       const parsed = JSON.parse(raw);
-      memoryStore.myList = Array.isArray(parsed) ? parsed : [];
+      if (Array.isArray(parsed)) {
+        memoryStore.myList = parsed;
+      }
     }
 
-    // If authenticated, sync securely with AWS server in background
+    // If authenticated, sync securely with AWS DynamoDB
     const token = await getAuthToken();
     if (token) {
       try {
@@ -235,9 +296,28 @@ export async function getMyList() {
         if (res.ok) {
           const data = await res.json();
           if (Array.isArray(data.watchlist)) {
-            memoryStore.myList = data.watchlist;
-            await AsyncStorage.setItem(KEYS.MY_LIST, JSON.stringify(data.watchlist));
-            return data.watchlist;
+            // MERGE server watchlist with local watchlist so NO item is ever lost or removed!
+            const merged = mergeWatchlists(memoryStore.myList, data.watchlist);
+            memoryStore.myList = merged;
+            await AsyncStorage.setItem(KEYS.MY_LIST, JSON.stringify(merged));
+
+            // Sync any local-only items up to AWS DynamoDB in the background
+            const remoteIds = new Set(data.watchlist.map((m) => getItemId(m)));
+            for (const item of memoryStore.myList) {
+              const localId = getItemId(item);
+              if (localId && !remoteIds.has(localId)) {
+                fetch(`${getApiBase()}/api/auth?action=save-watchlist`, {
+                  method: 'POST',
+                  headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({ movie: item }),
+                }).catch(() => {});
+              }
+            }
+
+            return merged;
           }
         }
       } catch (syncErr) {
@@ -257,22 +337,22 @@ export async function toggleMyList(movie) {
 
   try {
     const currentList = memoryStore.myList || [];
-    const exists = currentList.some(
-      m => (m.slug && m.slug === movie.slug) || (m.subject_id && m.subject_id === movie.subject_id) || (m.movieId && (m.movieId === movie.slug || m.movieId === movie.subject_id))
-    );
+    const targetId = getItemId(movie);
+    if (!targetId) return { myList: currentList, isAdded: false };
+
+    const exists = currentList.some(m => getItemId(m) === targetId);
 
     let updatedList;
     let isAdded = false;
 
     if (exists) {
-      updatedList = currentList.filter(
-        m => !((m.slug && m.slug === movie.slug) || (m.subject_id && m.subject_id === movie.subject_id) || (m.movieId && (m.movieId === movie.slug || m.movieId === movie.subject_id)))
-      );
+      updatedList = currentList.filter(m => getItemId(m) !== targetId);
     } else {
       const cleanMovie = {
-        movieId: movie.slug || movie.subject_id || '',
-        name: movie.name || '',
-        slug: movie.slug || '',
+        movieId: targetId,
+        id: targetId,
+        name: movie.name || movie.title || '',
+        slug: movie.slug || targetId,
         subject_id: movie.subject_id || '',
         poster_url: movie.poster_url || '',
         badge: movie.badge || null,
@@ -298,7 +378,9 @@ export async function toggleMyList(movie) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ movie }),
-      }).catch(() => {});
+      }).catch((err) => {
+        console.warn('AWS Watchlist sync error:', err);
+      });
     }
 
     return { myList: updatedList, isAdded };
@@ -310,8 +392,9 @@ export async function toggleMyList(movie) {
 
 export async function isInMyList(slugOrId) {
   if (!slugOrId) return false;
+  const targetId = typeof slugOrId === 'object' ? getItemId(slugOrId) : String(slugOrId).trim();
   const list = memoryStore.myList || [];
-  return list.some(m => m.slug === slugOrId || m.subject_id === slugOrId || m.movieId === slugOrId);
+  return list.some(m => getItemId(m) === targetId);
 }
 
 /**

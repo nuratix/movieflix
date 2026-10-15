@@ -121,7 +121,7 @@ const triggerHaptic = (type = 'selection') => {
 
 // ─── Backend API Base (Public Movieflix Server Proxy) ────────────────────────
 // On web: relative '' (same-origin, zero CORS issues, instant)
-// On native/APK: official backend server (https://movieflix-pi-six.vercel.app)
+// On native/APK: official backend server (https://mws.wallpaperdomain.xyz)
 const API_BASE =
   Platform.OS === 'web'
     ? ''
@@ -2122,7 +2122,7 @@ function buildPureHtmlShotsPage({ initialShots, apiBase, isMuted, targetShortId,
         shareBtn.addEventListener('click', function(e) {
           e.stopPropagation();
           var activeSlug = item.slug || item.subject_id || item.id;
-          var shareUrl = 'https://movieflix-pi-six.vercel.app/short/' + encodeURIComponent(activeSlug);
+          var shareUrl = 'https://mws.wallpaperdomain.xyz/short/' + encodeURIComponent(activeSlug);
           postToNative({ type: 'share', item: item, url: shareUrl, slug: activeSlug });
         });
 
@@ -2537,7 +2537,7 @@ function ShotsFeedView({
 
   // Generate the standalone pure HTML/CSS/JS page
   useEffect(() => {
-    const apiBase = Platform.OS === 'web' ? '' : 'https://movieflix-pi-six.vercel.app';
+    const apiBase = Platform.OS === 'web' ? '' : 'https://mws.wallpaperdomain.xyz';
     const rankedShots = typeof rankShotsFeed === 'function'
       ? rankShotsFeed(INITIAL_SHOTS, null, new Set(), Date.now() % 100000)
       : INITIAL_SHOTS;
@@ -2614,7 +2614,7 @@ function ShotsFeedView({
     } else if (data.type === 'share' && data.item) {
       triggerHaptic?.('selection');
       const activeSlug = data.slug || data.item.slug || data.item.subject_id || data.item.id;
-      const shareUrl = data.url || `https://movieflix-pi-six.vercel.app/short/${encodeURIComponent(activeSlug)}`;
+      const shareUrl = data.url || `https://mws.wallpaperdomain.xyz/short/${encodeURIComponent(activeSlug)}`;
       Share.share({
         message: `Watch "${data.item.title || 'Movieflix Shorts'}" on Movieflix Shorts! 🎬🍿\n${shareUrl}`,
         url: shareUrl,
@@ -2937,6 +2937,7 @@ function ReelApp() {
             setAuthUser(refreshed.user);
             setAuthAccessToken(refreshed.access_token);
             setAuthRefreshToken(refreshed.refresh_token);
+            _authToken = refreshed.access_token;
             await AsyncStorage.setItem('@mf_session', JSON.stringify({
               user: refreshed.user,
               accessToken: refreshed.access_token,
@@ -2947,10 +2948,12 @@ function ReelApp() {
             setAuthUser(user);
             setAuthAccessToken(accessToken);
             setAuthRefreshToken(refreshToken);
+            _authToken = accessToken;
           }
         }
       } catch (_) {}
       setAuthInitDone(true);
+      loadAllLocalData();
     })();
   }, []);
 
@@ -3141,6 +3144,7 @@ function ReelApp() {
       setAuthUser(data.user);
       setAuthAccessToken(data.access_token);
       setAuthRefreshToken(data.refresh_token);
+      _authToken = data.access_token;
       setSplashFinished(true);
       await AsyncStorage.setItem('@mf_session', JSON.stringify({
         user: data.user,
@@ -3150,6 +3154,14 @@ function ReelApp() {
       setIsAuthPageOpen(false);
       setAuthEmail('');
       setAuthPassword('');
+
+      // Fetch user's cloud watchlist and history from DynamoDB immediately and merge seamlessly
+      getMyList().then((list) => {
+        if (Array.isArray(list)) setMyList([...list]);
+      }).catch(() => {});
+      getWatchHistory().then((hist) => {
+        if (Array.isArray(hist)) setWatchHistory([...hist]);
+      }).catch(() => {});
 
       const returnPath = authRedirectPathRef.current;
       authRedirectPathRef.current = null;
@@ -3204,6 +3216,15 @@ function ReelApp() {
     setAuthRefreshToken(null);
     _authToken = null;
     await AsyncStorage.removeItem('@mf_session');
+
+    // NOTE: Keep listed items and watch history intact locally so items are never removed on logout!
+    try {
+      const localList = await getMyList();
+      if (Array.isArray(localList)) setMyList([...localList]);
+      const localHist = await getWatchHistory();
+      if (Array.isArray(localHist)) setWatchHistory([...localHist]);
+    } catch (_) {}
+    showToast('Signed out successfully');
   };
   // ─── End Auth State ────────────────────────────────────────────────────────
 
@@ -4600,42 +4621,42 @@ function ReelApp() {
       updateWebMetaTags(
         '404 - Page Not Found | MovieFlix',
         'The page you are looking for does not exist on MovieFlix. Browse thousands of free movies and TV shows or download our Android APK.',
-        'https://movieflix-pi-six.vercel.app/assets/og-banner.png',
-        typeof window !== 'undefined' ? window.location.href : 'https://movieflix-pi-six.vercel.app/404'
+        'https://mws.wallpaperdomain.xyz/assets/og-banner.png',
+        typeof window !== 'undefined' ? window.location.href : 'https://mws.wallpaperdomain.xyz/404'
       );
     } else if (isDownloadPageOpen) {
       updateWebMetaTags(
         'Download MovieFlix APK v1.1.8 (Official) - Free Android Movies & TV App',
         'Download official MovieFlix Android APK (v1.1.8). Stream and download unlimited 4K/1080p movies, TV series, anime, and shorts with multi-audio dubs and zero ads. 100% Safe & Verified.',
-        'https://movieflix-pi-six.vercel.app/assets/og-banner.png',
-        'https://movieflix-pi-six.vercel.app/download'
+        'https://mws.wallpaperdomain.xyz/assets/og-banner.png',
+        'https://mws.wallpaperdomain.xyz/download'
       );
     } else if (isPrivacyPageOpen) {
       updateWebMetaTags(
         'Privacy Policy - MovieFlix Official Streaming Platform',
         'Read the MovieFlix Privacy Policy. Learn about our strict zero-tracking principles, encrypted local storage, no-log guarantee, and user data protections.',
-        'https://movieflix-pi-six.vercel.app/assets/og-banner.png',
-        'https://movieflix-pi-six.vercel.app/privacy'
+        'https://mws.wallpaperdomain.xyz/assets/og-banner.png',
+        'https://mws.wallpaperdomain.xyz/privacy'
       );
     } else if (mainTab === 'Shots') {
       updateWebMetaTags(
         'MovieFlix Shorts - Endless 9:16 Vertical Short Dramas & Viral Reels',
         'Watch trending vertical 9:16 short dramas, viral mini-episodes, romance reels, and thrilling cliffhangers on MovieFlix Shorts. Instant playback with zero buffering.',
-        'https://movieflix-pi-six.vercel.app/assets/og-banner.png',
-        'https://movieflix-pi-six.vercel.app/shorts'
+        'https://mws.wallpaperdomain.xyz/assets/og-banner.png',
+        'https://mws.wallpaperdomain.xyz/shorts'
       );
     } else if (detailMovie) {
       const title = `${detailMovie.name || 'Movie'} - Watch & Download Free on MovieFlix`;
       const desc = detailMovie.desc || `Watch ${detailMovie.name || 'this title'} in full HD with subtitles and multi-audio on MovieFlix. 100% free streaming.`;
-      const img = detailMovie.poster_url || 'https://movieflix-pi-six.vercel.app/assets/og-banner.png';
-      const url = `https://movieflix-pi-six.vercel.app/movie/${encodeURIComponent(detailMovie.slug || 'watch')}`;
+      const img = detailMovie.poster_url || 'https://mws.wallpaperdomain.xyz/assets/og-banner.png';
+      const url = `https://mws.wallpaperdomain.xyz/movie/${encodeURIComponent(detailMovie.slug || 'watch')}`;
       updateWebMetaTags(title, desc, img, url);
     } else {
       updateWebMetaTags(
         'MovieFlix - Watch & Download Free Movies, TV Series & Official APK (v1.1.8)',
         'Stream and download thousands of HD movies, web series, Hindi dubbed blockbusters, and anime in 4K/1080p with zero ads. Download the official MovieFlix Android APK.',
-        'https://movieflix-pi-six.vercel.app/assets/og-banner.png',
-        'https://movieflix-pi-six.vercel.app/'
+        'https://mws.wallpaperdomain.xyz/assets/og-banner.png',
+        'https://mws.wallpaperdomain.xyz/'
       );
     }
   }, [isDownloadPageOpen, isPrivacyPageOpen, is404PageOpen, mainTab, detailMovie]);
@@ -5073,7 +5094,12 @@ function ReelApp() {
 
   const isInMyList = (movie) => {
     if (!movie) return false;
-    return myList.some(m => (m.slug && m.slug === movie.slug) || (m.subject_id && m.subject_id === movie.subject_id));
+    const targetId = String(movie.movieId || movie.slug || movie.subject_id || movie.id || '').trim();
+    if (!targetId) return false;
+    return myList.some(m => {
+      const mid = String(m.movieId || m.slug || m.subject_id || m.id || '').trim();
+      return mid === targetId || (m.slug && m.slug === movie.slug) || (m.subject_id && m.subject_id === movie.subject_id);
+    });
   };
 
   // Watch History Handlers
@@ -5309,7 +5335,7 @@ function ReelApp() {
 
   const handleOpenUpdate = () => {
     setIsUpdateModalOpen(false);
-    Linking.openURL('https://movieflix-pi-six.vercel.app/download');
+    Linking.openURL('https://mws.wallpaperdomain.xyz/download');
   };
   // ─────────────────────────────────────────────────────────────────────────
 
@@ -5462,7 +5488,7 @@ function ReelApp() {
           </View>
           <TouchableOpacity
             style={styles.securityTamperBtn}
-            onPress={() => Linking.openURL('https://movieflix-pi-six.vercel.app')}
+            onPress={() => Linking.openURL('https://mws.wallpaperdomain.xyz')}
             activeOpacity={0.8}
           >
             <Text style={styles.securityTamperBtnText}>Download</Text>

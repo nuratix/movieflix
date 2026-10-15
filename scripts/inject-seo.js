@@ -26,7 +26,7 @@ const rawTemplateHtml = fs.readFileSync(indexPath, 'utf8')
   .replace(/<style id="(?:cf-challenge-styles|mf-verify-styles)">[\s\S]*?<\/style>/gi, '')
   .replace(/<!-- Instant Login\/Verification Bypass Check -->[\s\S]*?<\/script>\s*(?=<noscript|<div id="root")/gi, '');
 
-const BASE_URL = 'https://movieflix-pi-six.vercel.app';
+const BASE_URL = 'https://mws.wallpaperdomain.xyz';
 const OG_BANNER = `${BASE_URL}/assets/og-banner.png`;
 const ICON_512 = `${BASE_URL}/assets/icon-512.png`;
 const FAVICON = `${BASE_URL}/favicon.png`;

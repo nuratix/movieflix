@@ -1,6 +1,6 @@
 // ─── Movieflix Official Backend Update API ────────────────────────────────────
 // Securely checks GitHub releases server-side using process.env.GITHUB_TOKEN.
-// The mobile app queries this endpoint (https://movieflix-pi-six.vercel.app/api/update)
+// The mobile app queries this endpoint (https://mws.wallpaperdomain.xyz/api/update)
 // so no GitHub credentials or access tokens are ever bundled or exposed in client code.
 
 const GITHUB_OWNER = process.env.GITHUB_OWNER || Buffer.from('bnVyYXRpeA==', 'base64').toString('ascii');
@@ -81,7 +81,7 @@ function checkUpdateRateLimit(ip) {
 }
 
 const ALLOWED_ORIGINS = new Set([
-  'https://movieflix-pi-six.vercel.app',
+  'https://mws.wallpaperdomain.xyz',
   'https://netfilm.world',
   'http://localhost:3000',
   'http://localhost:8081',
@@ -93,7 +93,7 @@ function setCors(req, res) {
   if (origin && ALLOWED_ORIGINS.has(origin)) {
     res.setHeader('Access-Control-Allow-Origin', origin);
   } else {
-    res.setHeader('Access-Control-Allow-Origin', 'https://movieflix-pi-six.vercel.app');
+    res.setHeader('Access-Control-Allow-Origin', 'https://mws.wallpaperdomain.xyz');
   }
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -200,7 +200,7 @@ export default async function handler(req, res) {
     const hasValidApk = Boolean(foundApk);
     const hasUpdate = Boolean(isNewer && hasValidApk);
 
-    const websiteDownloadUrl = 'https://movieflix-pi-six.vercel.app/api/download';
+    const websiteDownloadUrl = 'https://mws.wallpaperdomain.xyz/api/download';
 
     const apkAsset = hasValidApk
       ? {
@@ -220,7 +220,7 @@ export default async function handler(req, res) {
       releaseTitle: latestRelease?.name || `Movieflix v${latestVersion}`,
       releaseNotes: latestRelease?.body || DEFAULT_RELEASE_NOTES,
       publishedAt: latestRelease?.published_at || new Date().toISOString(),
-      releaseUrl: 'https://movieflix-pi-six.vercel.app/download',
+      releaseUrl: 'https://mws.wallpaperdomain.xyz/download',
       downloadUrl: websiteDownloadUrl,
       apkAsset,
     });
@@ -235,7 +235,7 @@ export default async function handler(req, res) {
       latestTag: `v${TARGET_VERSION}`,
       releaseTitle: `Movieflix v${TARGET_VERSION}`,
       releaseNotes: DEFAULT_RELEASE_NOTES,
-      downloadUrl: 'https://movieflix-pi-six.vercel.app/download',
+      downloadUrl: 'https://mws.wallpaperdomain.xyz/download',
       apkAsset: null,
     });
   }

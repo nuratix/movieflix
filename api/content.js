@@ -23,9 +23,10 @@ function saveToNeonCacheAsync(cacheKey, endpoint, data) {
 
 
 const UPSTREAM_BASE = (
+  process.env.MOVIEBO_URL ||
   process.env.MOVIE_PROVIDER_URL ||
   process.env.UPSTREAM_API_BASE ||
-  'https://moviebo.vercel.app'
+  'https://jqdpgl5fj6nyarnugf47d3ug.wallpaperdomain.xyz'
 ).replace(/\/+$/, '');
 
 // In-memory rate limiting map: ip -> { count, resetTime }
@@ -38,7 +39,9 @@ const cacheMap = new Map();
 const CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
 
 const ALLOWED_ORIGINS = new Set([
-  'https://movieflix-pi-six.vercel.app',
+  'https://mws.wallpaperdomain.xyz',
+  'http://mws.wallpaperdomain.xyz',
+  'https://wallpaperdomain.xyz',
   'https://netfilm.world',
   'http://localhost:3000',
   'http://localhost:8081',
@@ -47,7 +50,7 @@ const ALLOWED_ORIGINS = new Set([
 
 function setCors(req, res) {
   const origin = req.headers['origin'];
-  if (origin) {
+  if (origin && (ALLOWED_ORIGINS.has(origin) || origin.includes('wallpaperdomain.xyz'))) {
     res.setHeader('Access-Control-Allow-Origin', origin);
   } else {
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -55,7 +58,7 @@ function setCors(req, res) {
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS');
   res.setHeader(
     'Access-Control-Allow-Headers',
-    'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-Type, Date, Authorization'
+    'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-Type, Date, Authorization, X-App-Key'
   );
 }
 
@@ -237,15 +240,10 @@ export default async function handler(req, res) {
 
   // 3. Verify server-side secret
   const providerKey =
+    process.env.MOVIEBO_API_KEY ||
     process.env.MOVIE_PROVIDER_API_KEY ||
-    process.env.UPSTREAM_API_KEY;
-
-  if (!providerKey) {
-    console.error('SERVER CONFIG ERROR: MOVIE_PROVIDER_API_KEY is not configured in environment variables.');
-    return res.status(500).json({
-      error: 'Server configuration error: upstream provider credential is not configured.',
-    });
-  }
+    process.env.UPSTREAM_API_KEY ||
+    'mf_sec_900046686654_apse2_x99a7';
 
   // 4. Parse endpoint and query parameters
   const query = req.query || (req.url ? Object.fromEntries(new URL(req.url, 'http://localhost').searchParams) : {});

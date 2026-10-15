@@ -139,7 +139,7 @@ export default function DownloadScreen({
   };
 
   const handleShare = async () => {
-    const shareUrl = 'https://movieflix-pi-six.vercel.app/download';
+    const shareUrl = 'https://mws.wallpaperdomain.xyz/download';
     const message = `Download MovieFlix v${releaseInfo.version} official APK for Android — 4K movies & series with zero ads: ${shareUrl}`;
     if (Platform.OS === 'web') {
       if (navigator.share) {

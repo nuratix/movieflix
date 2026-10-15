@@ -39,7 +39,7 @@ jobs:
       - name: Prebuild Native Android Project
         run: npx expo prebuild --platform android --clean
         env:
-          EXPO_PUBLIC_API_BASE: https://movieflix-pi-six.vercel.app
+          EXPO_PUBLIC_API_BASE: https://mws.wallpaperdomain.xyz
 
       - name: Build Android Release APK
         run: |
@@ -47,7 +47,7 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleRelease --no-daemon -Dorg.gradle.jvmargs="-Xmx4096m -XX:MaxMetaspaceSize=1024m" -x lint -x test
         env:
-          EXPO_PUBLIC_API_BASE: https://movieflix-pi-six.vercel.app
+          EXPO_PUBLIC_API_BASE: https://mws.wallpaperdomain.xyz
 
       - name: Prepare APK Output
         id: prepare_apk

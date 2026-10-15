@@ -132,7 +132,7 @@ export default async function handler(req, res) {
 }
 
 const ALLOWED_ORIGINS = new Set([
-  'https://movieflix-pi-six.vercel.app',
+  'https://mws.wallpaperdomain.xyz',
   'https://netfilm.world',
   'http://localhost:3000',
   'http://localhost:8081',

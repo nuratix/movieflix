@@ -9,7 +9,7 @@ import { Platform } from 'react-native';
 const STATUS_ENDPOINT =
   Platform.OS === 'web'
     ? '/api/status'
-    : 'https://movieflix-pi-six.vercel.app/api/status';
+    : 'https://mws.wallpaperdomain.xyz/api/status';
 
 export async function checkSystemStatusAsync() {
   try {

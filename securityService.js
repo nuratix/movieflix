@@ -2,7 +2,7 @@ import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export const OFFICIAL_PACKAGE_NAME = 'com.movieflix.app';
-export const OFFICIAL_DOWNLOAD_ORIGIN = 'https://movieflix-pi-six.vercel.app';
+export const OFFICIAL_DOWNLOAD_ORIGIN = 'https://mws.wallpaperdomain.xyz';
 export const OFFICIAL_BUILD_VERSION = '1.1.8';
 export const OFFICIAL_VERSION_CODE = 9;
 export const OFFICIAL_BUILD_FINGERPRINT =

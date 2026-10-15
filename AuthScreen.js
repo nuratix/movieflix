@@ -69,7 +69,7 @@ export default function AuthScreen({
     if (onOpenPrivacy) {
       onOpenPrivacy();
     } else if (Platform.OS !== 'web') {
-      Linking.openURL('https://movieflix-pi-six.vercel.app/privacy').catch(() => {});
+      Linking.openURL('https://mws.wallpaperdomain.xyz/privacy').catch(() => {});
     }
   };
 

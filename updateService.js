@@ -9,8 +9,8 @@ export const CURRENT_APP_VERSION = '1.1.8';
 // Secure Backend Update & Download Endpoints (Hosted on Vercel)
 // The client APK communicates exclusively with the backend service.
 // Zero GitHub credentials or personal access tokens are stored in the client APK.
-export const UPDATE_API_ENDPOINT = 'https://movieflix-pi-six.vercel.app/api/update';
-export const APK_DOWNLOAD_ENDPOINT = 'https://movieflix-pi-six.vercel.app/api/download';
+export const UPDATE_API_ENDPOINT = 'https://mws.wallpaperdomain.xyz/api/update';
+export const APK_DOWNLOAD_ENDPOINT = 'https://mws.wallpaperdomain.xyz/api/download';
 
 /**
  * Clean & compare semantic versions (e.g., "v1.1.4" vs "1.1.3")
