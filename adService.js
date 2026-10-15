@@ -31,18 +31,29 @@ export function getCleanDomain(url) {
   }
 }
 
+let lastServedAdId = null;
+try {
+  if (typeof window !== 'undefined' && window.sessionStorage) {
+    lastServedAdId = window.sessionStorage.getItem('movieflix_last_ad_id') || null;
+  }
+} catch (_) {}
+
 /**
  * Fetch a random active ad for player or shorts display
- * @param {Object} options - { format: '16:9' | '9:16', placement: 'player' | 'shorts', mediaType: 'video' | 'image' }
+ * @param {Object} options - { format: '16:9' | '9:16', placement: 'player' | 'shorts', mediaType: 'video' | 'image', exclude_id?: string }
  */
 export async function fetchRandomAd(options = {}) {
-  const { format = '16:9', placement = 'player', mediaType = '' } = options;
+  const { format = '16:9', placement = 'player', mediaType = '', exclude_id = null } = options;
   try {
     const params = new URLSearchParams();
     if (format) params.set('aspect_ratio', format);
     if (placement) params.set('placement', placement);
     if (mediaType) params.set('media_type', mediaType);
-    const qs = params.toString() ? `?${params.toString()}` : '';
+    const exclude = exclude_id || lastServedAdId;
+    if (exclude) params.set('exclude_id', exclude);
+    params.set('_t', `${Date.now()}_${Math.random().toString(36).substring(2, 7)}`);
+
+    const qs = `?${params.toString()}`;
 
     // On web or when proxy is available, use server /api/ads proxy to protect secret key
     const useProxy = Platform.OS === 'web' || !DIRECT_ADS_API;
@@ -61,6 +72,7 @@ export async function fetchRandomAd(options = {}) {
     const res = await fetch(url, {
       method: 'GET',
       headers,
+      cache: 'no-store',
       signal: controller.signal,
     });
     clearTimeout(timeout);
@@ -71,6 +83,12 @@ export async function fetchRandomAd(options = {}) {
 
     const data = await res.json();
     if (data && data.status === 'success' && data.ad && (data.ad.video_url || data.ad.poster_url)) {
+      lastServedAdId = data.ad.id;
+      try {
+        if (typeof window !== 'undefined' && window.sessionStorage) {
+          window.sessionStorage.setItem('movieflix_last_ad_id', data.ad.id);
+        }
+      } catch (_) {}
       return data.ad;
     }
     return null;
@@ -86,19 +104,28 @@ export async function fetchRandomAd(options = {}) {
 export async function fetchShortsAds() {
   try {
     const useProxy = Platform.OS === 'web' || !DIRECT_ADS_API;
+    const cacheBuster = `_t=${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const url = useProxy
-      ? `${API_BASE}/api/ads?action=list&aspect_ratio=9:16&placement=shorts`
-      : `${DIRECT_ADS_API}/api/v1/ads?aspect_ratio=9:16&placement=shorts`;
+      ? `${API_BASE}/api/ads?action=list&aspect_ratio=9:16&placement=shorts&${cacheBuster}`
+      : `${DIRECT_ADS_API}/api/v1/ads?aspect_ratio=9:16&placement=shorts&${cacheBuster}`;
 
     const headers = { Accept: 'application/json' };
     if (!useProxy && DIRECT_ADS_KEY) {
       headers['X-Ad-Secret-Key'] = DIRECT_ADS_KEY;
     }
 
-    const res = await fetch(url, { method: 'GET', headers });
+    const res = await fetch(url, { method: 'GET', headers, cache: 'no-store' });
     if (!res.ok) return [];
     const data = await res.json();
-    return Array.isArray(data.ads) ? data.ads : [];
+    const ads = Array.isArray(data.ads) ? data.ads.slice() : [];
+    // Shuffle ads so order is randomized
+    for (let i = ads.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      const temp = ads[i];
+      ads[i] = ads[j];
+      ads[j] = temp;
+    }
+    return ads;
   } catch {
     return [];
   }

@@ -1968,6 +1968,12 @@ function buildPureHtmlShotsPage({ initialShots, initialAds, apiBase, isMuted, ta
 
       // ─── MovieAds 9:16 Feed Management & Interleaving ───
       var adsPool = Array.isArray(initialAds) ? initialAds.slice() : [];
+      for (var p = adsPool.length - 1; p > 0; p--) {
+        var r = Math.floor(Math.random() * (p + 1));
+        var tmp = adsPool[p];
+        adsPool[p] = adsPool[r];
+        adsPool[r] = tmp;
+      }
       var adCursor = 0;
       var AD_INTERVAL = 6; // Spacing: Ads appear during scrolling but NOT again and again (every 6th item)
 
@@ -2011,10 +2017,16 @@ function buildPureHtmlShotsPage({ initialShots, initialAds, apiBase, isMuted, ta
 
       async function refreshAdsPool() {
         try {
-          var res = await fetch(API_BASE + '/api/ads?action=list&aspect_ratio=9:16&placement=shorts');
+          var res = await fetch(API_BASE + '/api/ads?action=list&aspect_ratio=9:16&placement=shorts&_t=' + Date.now(), { cache: 'no-store' });
           var data = await res.json();
           if (data && Array.isArray(data.ads) && data.ads.length > 0) {
-            adsPool = data.ads;
+            adsPool = data.ads.slice();
+            for (var p = adsPool.length - 1; p > 0; p--) {
+              var r = Math.floor(Math.random() * (p + 1));
+              var tmp = adsPool[p];
+              adsPool[p] = adsPool[r];
+              adsPool[r] = tmp;
+            }
             var hasAnyAd = shots.some(function(s) { return s.isAd; });
             if (!hasAnyAd && shots.length >= AD_INTERVAL) {
               shots = injectAdsIntoList(shots, 0);
