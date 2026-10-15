@@ -125,9 +125,9 @@ const triggerHaptic = (type = 'selection') => {
 const API_BASE =
   Platform.OS === 'web'
     ? ''
-    : (process.env.EXPO_PUBLIC_API_BASE || 'https://movieflix-pi-six.vercel.app').trim().replace(/\/+$/, '');
+    : (process.env.EXPO_PUBLIC_API_BASE || 'https://mws.wallpaperdomain.xyz').trim().replace(/\/+$/, '');
 
-// Auth API endpoint (connected to Neon Database on movieflix)
+// Auth API endpoint (connected to AWS Cognito & DynamoDB on Movieflix)
 const AUTH_API_URL = `${API_BASE}/api/auth`;
 
 // Module-level auth token — updated by App component via useEffect

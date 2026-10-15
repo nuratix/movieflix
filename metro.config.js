@@ -1,12 +1,36 @@
 const { getDefaultConfig } = require('expo/metro-config');
 const path = require('path');
+const url = require('url');
 
 const config = getDefaultConfig(__dirname);
 
 // Enable automatic cache invalidation on every run so stale code is never served
 config.resetCache = true;
 
-// Enhance Metro Connect middleware to handle /api/proxy locally and enforce zero-cache headers
+// Helper to buffer and parse body for connect middleware
+async function parseBody(req) {
+  if (req.body !== undefined) return req.body;
+  return new Promise((resolve) => {
+    let data = '';
+    req.on('data', (chunk) => {
+      data += chunk;
+    });
+    req.on('end', () => {
+      if (!data) {
+        req.body = {};
+        return resolve({});
+      }
+      try {
+        req.body = JSON.parse(data);
+      } catch (_) {
+        req.body = data;
+      }
+      resolve(req.body);
+    });
+  });
+}
+
+// Enhance Metro Connect middleware to handle /api/* endpoints natively
 config.server = {
   ...config.server,
   enhanceMiddleware: (metroMiddleware) => {
@@ -17,20 +41,68 @@ config.server = {
       res.setHeader('Expires', '0');
       res.setHeader('Surrogate-Control', 'no-store');
 
-      if (req.url && req.url.startsWith('/api/proxy')) {
-        try {
-          const proxyModule = await import('./api/proxy.js');
-          const handler = proxyModule.default || proxyModule;
-          return handler(req, res);
-        } catch (err) {
-          console.error('[Metro Proxy Error]', err);
-          if (!res.headersSent) {
-            res.statusCode = 500;
+      const parsedUrl = url.parse(req.url, true);
+      const pathname = parsedUrl.pathname || '';
+
+      if (pathname.startsWith('/api/')) {
+        // Polyfill standard serverless methods on res
+        if (!res.status) {
+          res.status = (code) => {
+            res.statusCode = code;
+            return res;
+          };
+        }
+        if (!res.json) {
+          res.json = (data) => {
+            if (!res.headersSent) {
+              res.setHeader('Content-Type', 'application/json; charset=utf-8');
+            }
+            res.end(JSON.stringify(data));
+            return res;
+          };
+        }
+        if (!res.redirect) {
+          res.redirect = (statusOrUrl, targetUrl) => {
+            const status = typeof statusOrUrl === 'number' ? statusOrUrl : 302;
+            const dest = typeof statusOrUrl === 'string' ? statusOrUrl : targetUrl;
+            res.statusCode = status;
+            res.setHeader('Location', dest);
+            res.end();
+            return res;
+          };
+        }
+
+        req.query = parsedUrl.query || {};
+        if (req.method === 'POST' || req.method === 'PUT' || req.method === 'PATCH') {
+          await parseBody(req);
+        }
+
+        let modulePath = null;
+        if (pathname.startsWith('/api/auth')) modulePath = './api/auth.js';
+        else if (pathname.startsWith('/api/content')) modulePath = './api/content.js';
+        else if (pathname.startsWith('/api/download')) modulePath = './api/download.js';
+        else if (pathname.startsWith('/api/proxy')) modulePath = './api/proxy.js';
+        else if (pathname.startsWith('/api/update')) modulePath = './api/update.js';
+        else if (pathname.startsWith('/api/imdb')) modulePath = './api/imdb.js';
+        else if (pathname.startsWith('/api/status')) modulePath = './api/status.js';
+
+        if (modulePath) {
+          try {
+            const mod = await import(modulePath);
+            const handler = mod.default || mod;
+            return await handler(req, res);
+          } catch (err) {
+            console.error(`[API Error in ${pathname}]`, err);
+            if (!res.headersSent) {
+              res.statusCode = 500;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({ error: err.message || 'Internal API Error' }));
+            }
+            return;
           }
-          res.end(`Internal proxy error: ${err.message}`);
-          return;
         }
       }
+
       return metroMiddleware(req, res, next);
     };
   },

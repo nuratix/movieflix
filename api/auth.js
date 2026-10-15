@@ -1,288 +1,137 @@
-import { neon } from '@neondatabase/serverless';
-import crypto from 'crypto';
+import {
+  CognitoIdentityProviderClient,
+  AdminCreateUserCommand,
+  AdminSetUserPasswordCommand,
+  InitiateAuthCommand,
+  GetUserCommand,
+  GlobalSignOutCommand,
+} from '@aws-sdk/client-cognito-identity-provider';
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import {
+  DynamoDBDocumentClient,
+  GetCommand,
+  PutCommand,
+  DeleteCommand,
+  QueryCommand,
+  BatchWriteCommand,
+} from '@aws-sdk/lib-dynamodb';
 
-// ─── Security & JWT Helpers ──────────────────────────────────────────────────
-function getJwtSecret() {
-  const secret = process.env.JWT_SECRET;
-  if (!secret) {
-    throw new Error('Server configuration error: JWT_SECRET environment variable is missing.');
-  }
-  return secret;
-}
-const ACCESS_TOKEN_HOURS = 2;
-const REFRESH_TOKEN_DAYS = 30;
+// ─── AWS Clients & Configuration ─────────────────────────────────────────────
+const AWS_REGION = process.env.AWS_DEFAULT_REGION || process.env.AWS_REGION || 'ap-southeast-2';
+const COGNITO_USER_POOL_ID = process.env.COGNITO_USER_POOL_ID || 'ap-southeast-2_u439PunGB';
+const COGNITO_CLIENT_ID = process.env.COGNITO_CLIENT_ID || 'ohrgclhcm98kbrimrtttss2a4';
 
-// Rate limiting for sensitive auth actions (login, register)
+const cognitoClient = new CognitoIdentityProviderClient({ region: AWS_REGION });
+const rawDdbClient = new DynamoDBClient({ region: AWS_REGION });
+const ddbDoc = DynamoDBDocumentClient.from(rawDdbClient);
+
+const WATCHLIST_TABLE = process.env.DYNAMODB_WATCHLIST_TABLE || 'movieflix_watchlist';
+const HISTORY_TABLE = process.env.DYNAMODB_HISTORY_TABLE || 'movieflix_watch_history';
+
+// ─── Rate Limiting for Auth ──────────────────────────────────────────────────
 const authRateLimitMap = new Map();
-const AUTH_RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
-const MAX_AUTH_ATTEMPTS_PER_WINDOW = 10;
-
-// In-memory resilient store for shots likes (JavaScript backend)
-const memoryLikes = new Map(); // shot_id -> Set of identifiers
-
-function getMemoryLikesCount(shotId) {
-  return memoryLikes.has(shotId) ? memoryLikes.get(shotId).size : 0;
-}
-function hasMemoryLiked(shotId, identifier) {
-  return memoryLikes.has(shotId) ? memoryLikes.get(shotId).has(identifier) : false;
-}
-function addMemoryLike(shotId, identifier) {
-  if (!memoryLikes.has(shotId)) memoryLikes.set(shotId, new Set());
-  memoryLikes.get(shotId).add(identifier);
-  return memoryLikes.get(shotId).size;
-}
-function removeMemoryLike(shotId, identifier) {
-  if (memoryLikes.has(shotId)) {
-    memoryLikes.get(shotId).delete(identifier);
-    return memoryLikes.get(shotId).size;
-  }
-  return 0;
-}
+const AUTH_RATE_LIMIT_WINDOW_MS = 60 * 1000;
+const MAX_AUTH_ATTEMPTS = 15;
 
 function getClientIp(req) {
-  const realIp = req.headers['x-real-ip'];
-  if (realIp && typeof realIp === 'string') {
-    return realIp.trim();
-  }
-  const forwarded = req.headers['x-forwarded-for'];
-  if (forwarded && typeof forwarded === 'string') {
-    return forwarded.split(',')[0].trim();
-  }
+  const realIp = req.headers?.['x-real-ip'];
+  if (realIp && typeof realIp === 'string') return realIp.trim();
+  const forwarded = req.headers?.['x-forwarded-for'];
+  if (forwarded && typeof forwarded === 'string') return forwarded.split(',')[0].trim();
   return req.socket?.remoteAddress || '127.0.0.1';
 }
 
-function checkAuthRateLimit(ip) {
+function checkRateLimit(ip) {
   const now = Date.now();
   const record = authRateLimitMap.get(ip);
   if (!record || now > record.resetTime) {
     authRateLimitMap.set(ip, { count: 1, resetTime: now + AUTH_RATE_LIMIT_WINDOW_MS });
     return true;
   }
-  if (record.count >= MAX_AUTH_ATTEMPTS_PER_WINDOW) {
+  if (record.count >= MAX_AUTH_ATTEMPTS) {
     return false;
   }
   record.count += 1;
   return true;
 }
 
-function base64UrlEncode(str) {
-  return Buffer.from(str)
-    .toString('base64')
-    .replace(/=/g, '')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_');
-}
-
-function base64UrlDecode(str) {
-  let base64 = str.replace(/-/g, '+').replace(/_/g, '/');
-  while (base64.length % 4) {
-    base64 += '=';
-  }
-  return Buffer.from(base64, 'base64').toString('utf8');
-}
-
-function createJwt(payload) {
-  const header = { alg: 'HS256', typ: 'JWT' };
-  const exp = Math.floor(Date.now() / 1000) + ACCESS_TOKEN_HOURS * 3600;
-  const fullPayload = { ...payload, exp, iat: Math.floor(Date.now() / 1000) };
-
-  const encodedHeader = base64UrlEncode(JSON.stringify(header));
-  const encodedPayload = base64UrlEncode(JSON.stringify(fullPayload));
-  const signatureInput = `${encodedHeader}.${encodedPayload}`;
-
-  const signature = crypto
-    .createHmac('sha256', getJwtSecret())
-    .update(signatureInput)
-    .digest('base64')
-    .replace(/=/g, '')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_');
-
-  return `${signatureInput}.${signature}`;
-}
-
-function verifyJwt(token) {
+// ─── Token Verification (AWS Cognito) ────────────────────────────────────────
+async function authenticateUser(req, body = {}, query = {}) {
+  const authHeader = req.headers?.authorization || body?.token || query?.token || '';
+  const token = authHeader.replace(/^Bearer\s+/i, '').trim();
   if (!token) return null;
-  const parts = token.split('.');
-  if (parts.length !== 3) return null;
 
-  const [encodedHeader, encodedPayload, signature] = parts;
-  let secret;
   try {
-    secret = getJwtSecret();
-  } catch (_) {
+    const res = await cognitoClient.send(new GetUserCommand({ AccessToken: token }));
+    const emailAttr = res.UserAttributes?.find((a) => a.Name === 'email');
+    const email = emailAttr?.Value || res.Username;
+    return {
+      userId: email.toLowerCase(),
+      username: res.Username,
+      email: email.toLowerCase(),
+      attributes: res.UserAttributes,
+    };
+  } catch (err) {
+    // Also support decoding payload if token is valid Cognito ID token
+    try {
+      const parts = token.split('.');
+      if (parts.length === 3) {
+        const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));
+        if (payload && payload.exp && payload.exp * 1000 > Date.now()) {
+          const email = (payload.email || payload['cognito:username'] || payload.sub || '').toLowerCase();
+          if (email) {
+            return {
+              userId: email,
+              username: payload['cognito:username'] || email,
+              email: email,
+            };
+          }
+        }
+      }
+    } catch (_) {}
     return null;
   }
-  const expectedSignature = crypto
-    .createHmac('sha256', secret)
-    .update(`${encodedHeader}.${encodedPayload}`)
-    .digest('base64')
-    .replace(/=/g, '')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_');
+}
 
-  if (signature !== expectedSignature) return null;
-
-  try {
-    const payload = JSON.parse(base64UrlDecode(encodedPayload));
-    if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) {
-      return null; // Expired
-    }
-    return payload;
-  } catch (_) {
-    return null;
+// ─── Shots Likes Store (In-Memory Resilient Store) ───────────────────────────
+const memoryLikes = new Map();
+function getMemoryLikesCount(shotId) {
+  return memoryLikes.has(shotId) ? memoryLikes.get(shotId).size : 0;
+}
+function hasMemoryLiked(shotId, id) {
+  return memoryLikes.has(shotId) ? memoryLikes.get(shotId).has(id) : false;
+}
+function addMemoryLike(shotId, id) {
+  if (!memoryLikes.has(shotId)) memoryLikes.set(shotId, new Set());
+  memoryLikes.get(shotId).add(id);
+  return memoryLikes.get(shotId).size;
+}
+function removeMemoryLike(shotId, id) {
+  if (memoryLikes.has(shotId)) {
+    memoryLikes.get(shotId).delete(id);
+    return memoryLikes.get(shotId).size;
   }
+  return 0;
 }
 
-function hashPassword(password) {
-  const salt = crypto.randomBytes(16).toString('hex');
-  const hash = crypto.pbkdf2Sync(password, salt, 100000, 32, 'sha256').toString('hex');
-  return `${salt}:${hash}`;
-}
-
-function verifyPassword(password, stored) {
-  if (!stored || !stored.includes(':')) return false;
-  const [salt, originalHash] = stored.split(':');
-  const checkHash = crypto.pbkdf2Sync(password, salt, 100000, 32, 'sha256').toString('hex');
-  return crypto.timingSafeEqual(Buffer.from(checkHash), Buffer.from(originalHash));
-}
-
-// ─── Neon DB Connection & Auto-Migration ─────────────────────────────────────
-let tablesInitialized = false;
-
-function getDb() {
-  const dbUrl =
-    process.env.DATABASE_URL ||
-    process.env.POSTGRES_URL ||
-    process.env.POSTGRES_PRISMA_URL ||
-    process.env.DATABASE_URL_UNPOOLED;
-
-  if (!dbUrl) {
-    throw new Error('DATABASE_URL is not configured in environment variables.');
-  }
-  return neon(dbUrl);
-}
-
-async function ensureTables(sql) {
-  if (tablesInitialized) return;
-  try {
-    await sql`
-      CREATE TABLE IF NOT EXISTS mf_users (
-        id SERIAL PRIMARY KEY,
-        email VARCHAR(255) UNIQUE NOT NULL,
-        password_hash VARCHAR(255) NOT NULL,
-        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-        last_login TIMESTAMP WITH TIME ZONE
-      );
-    `;
-    await sql`
-      CREATE TABLE IF NOT EXISTS mf_refresh_tokens (
-        id SERIAL PRIMARY KEY,
-        user_id INTEGER REFERENCES mf_users(id) ON DELETE CASCADE,
-        token VARCHAR(512) UNIQUE NOT NULL,
-        expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
-        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-      );
-    `;
-    await sql`
-      CREATE TABLE IF NOT EXISTS mf_downloads (
-        id SERIAL PRIMARY KEY,
-        user_id INTEGER REFERENCES mf_users(id) ON DELETE SET NULL,
-        user_email VARCHAR(255) NOT NULL,
-        version VARCHAR(50) DEFAULT '1.1.8',
-        ip_address VARCHAR(100),
-        user_agent TEXT,
-        downloaded_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-      );
-    `;
-    await sql`
-      CREATE TABLE IF NOT EXISTS mf_shots_likes (
-        id SERIAL PRIMARY KEY,
-        user_id INTEGER NOT NULL REFERENCES mf_users(id) ON DELETE CASCADE,
-        shot_id VARCHAR(100) NOT NULL,
-        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-        CONSTRAINT unique_user_shot_like UNIQUE (user_id, shot_id)
-      );
-    `;
-    await sql`
-      CREATE TABLE IF NOT EXISTS mf_shots_guest_likes (
-        id SERIAL PRIMARY KEY,
-        guest_id VARCHAR(120) NOT NULL,
-        shot_id VARCHAR(100) NOT NULL,
-        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-        CONSTRAINT unique_guest_shot_like UNIQUE (guest_id, shot_id)
-      );
-    `;
-    await sql`
-      CREATE TABLE IF NOT EXISTS mf_rate_limits (
-        key VARCHAR(255) PRIMARY KEY,
-        count INTEGER DEFAULT 1,
-        reset_time BIGINT NOT NULL
-      );
-    `;
-    await sql`
-      CREATE INDEX IF NOT EXISTS idx_mf_shots_likes_shot ON mf_shots_likes(shot_id);
-    `;
-    await sql`
-      CREATE INDEX IF NOT EXISTS idx_mf_shots_likes_user ON mf_shots_likes(user_id);
-    `;
-    await sql`
-      CREATE INDEX IF NOT EXISTS idx_mf_shots_guest_likes_shot ON mf_shots_guest_likes(shot_id);
-    `;
-    tablesInitialized = true;
-  } catch (err) {
-    console.error('Database migration/init error:', err);
-  }
-}
-
-// ─── Durable Neon Rate Limiter ───────────────────────────────────────────────
-async function checkDurableRateLimit(sql, key, maxAttempts, windowMs) {
-  const now = Date.now();
-  if (!sql) {
-    return checkAuthRateLimit(key);
-  }
-  try {
-    const rows = await sql`
-      INSERT INTO mf_rate_limits (key, count, reset_time)
-      VALUES (${key}, 1, ${now + windowMs})
-      ON CONFLICT (key) DO UPDATE
-      SET count = CASE
-        WHEN mf_rate_limits.reset_time < ${now} THEN 1
-        ELSE mf_rate_limits.count + 1
-      END,
-      reset_time = CASE
-        WHEN mf_rate_limits.reset_time < ${now} THEN ${now + windowMs}
-        ELSE mf_rate_limits.reset_time
-      END
-      RETURNING count, reset_time;
-    `;
-    const record = rows[0];
-    if (record && record.count > maxAttempts) {
-      return false;
-    }
-    return true;
-  } catch (err) {
-    console.warn('[RateLimit] Durable check fallback to memory:', err.message);
-    return checkAuthRateLimit(key);
-  }
-}
-
-// ─── Main API Handler ────────────────────────────────────────────────────────
+// ─── CORS Configuration ──────────────────────────────────────────────────────
 const ALLOWED_ORIGINS = new Set([
   'https://movieflix-pi-six.vercel.app',
   'https://netfilm.world',
+  'https://mws.wallpaperdomain.xyz',
+  'http://mws.wallpaperdomain.xyz',
   'http://localhost:8081',
   'http://localhost:3000',
   'http://localhost:19006',
 ]);
 
 function setCorsHeaders(req, res) {
-  const origin = req.headers.origin;
-  if (origin && ALLOWED_ORIGINS.has(origin)) {
+  const origin = req.headers?.origin;
+  if (origin && (ALLOWED_ORIGINS.has(origin) || origin.includes('wallpaperdomain.xyz'))) {
     res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Access-Control-Allow-Credentials', 'true');
   } else {
-    res.setHeader('Access-Control-Allow-Origin', 'https://movieflix-pi-six.vercel.app');
+    res.setHeader('Access-Control-Allow-Origin', '*');
   }
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
   res.setHeader(
@@ -291,6 +140,7 @@ function setCorsHeaders(req, res) {
   );
 }
 
+// ─── Main Handler ────────────────────────────────────────────────────────────
 export default async function handler(req, res) {
   setCorsHeaders(req, res);
 
@@ -298,15 +148,6 @@ export default async function handler(req, res) {
     return res.status(200).end();
   }
 
-  let sql = null;
-  try {
-    sql = getDb();
-    await ensureTables(sql);
-  } catch (dbErr) {
-    console.warn('Database connection notice:', dbErr?.message);
-  }
-
-  // Parse body safely (supports parsed JSON or raw string)
   let body = req.body || {};
   if (typeof body === 'string') {
     try {
@@ -315,165 +156,292 @@ export default async function handler(req, res) {
   }
   const query = req.query || {};
   const action = (body.action || query.action || '').toLowerCase();
+  const clientIp = getClientIp(req);
 
-  // If this action requires persistent database and DB is down, return 503
-  const isShotLikeAction = ['batch-shot-likes', 'like-shot', 'unlike-shot', 'get-shot-likes'].includes(action);
-  if (!sql && !isShotLikeAction) {
-    return res.status(503).json({
-      error: 'Database connection failed. Please try again later.',
+  // 1. GET: Validate session & return user info
+  if (action === 'me' || (req.method === 'GET' && !action)) {
+    const user = await authenticateUser(req, body, query);
+    if (!user) {
+      return res.status(401).json({ error: 'Unauthorized', detail: 'Invalid or expired AWS session' });
+    }
+    return res.status(200).json({
+      status: 'success',
+      user: { id: user.userId, email: user.email },
     });
   }
 
-  // 1. GET: Validate token & return user info (ONLY when action is 'me' or empty action on GET)
-  if (action === 'me' || (req.method === 'GET' && !action)) {
-    const authHeader = req.headers.authorization || '';
-    const token = authHeader.replace(/^Bearer\s+/i, '');
-    const user = verifyJwt(token);
+  // 2. WATCHLIST: GET (Only authenticated user can see their own saved movies)
+  if (action === 'get-watchlist') {
+    const user = await authenticateUser(req, body, query);
     if (!user) {
-      return res.status(401).json({ error: 'Unauthorized', detail: 'Invalid or expired token' });
+      return res.status(401).json({ error: 'Unauthorized', detail: 'Please sign in to access your saved movies.' });
     }
-    return res.status(200).json({ status: 'success', user: { id: user.id, email: user.email } });
-  }
-
-  // 2. GET or POST: Retrieve likes count for a single shot
-  if (action === 'get-shot-likes') {
-    const shotId = String(body.shot_id || query.shot_id || '').trim();
-    const authHeader = req.headers.authorization || body.token || '';
-    const token = authHeader.replace(/^Bearer\s+/i, '');
-    const user = verifyJwt(token);
 
     try {
-      let userLiked = false;
-      if (user && shotId) {
-        const userCheck = await sql`
-          SELECT 1 FROM mf_shots_likes WHERE user_id = ${user.id} AND shot_id = ${shotId} LIMIT 1
-        `;
-        userLiked = userCheck.length > 0;
+      const qRes = await ddbDoc.send(
+        new QueryCommand({
+          TableName: WATCHLIST_TABLE,
+          KeyConditionExpression: 'userId = :uid',
+          ExpressionAttributeValues: { ':uid': user.userId },
+        })
+      );
+      const items = (qRes.Items || []).sort((a, b) => new Date(b.addedAt || 0) - new Date(a.addedAt || 0));
+      return res.status(200).json({ status: 'success', watchlist: items });
+    } catch (err) {
+      console.error('DynamoDB get-watchlist error:', err);
+      return res.status(500).json({ error: 'Failed to retrieve saved movies.' });
+    }
+  }
+
+  // 3. WATCHLIST: TOGGLE / SAVE
+  if (action === 'toggle-watchlist' || action === 'save-watchlist') {
+    const user = await authenticateUser(req, body, query);
+    if (!user) {
+      return res.status(401).json({ error: 'Unauthorized', detail: 'Please sign in to save movies.' });
+    }
+
+    const movie = body.movie || body;
+    const movieId = String(movie.slug || movie.subject_id || body.movieId || '').trim();
+    if (!movieId) {
+      return res.status(400).json({ error: 'Missing movie identifier (slug or subject_id).' });
+    }
+
+    try {
+      // Check if already in watchlist
+      const existing = await ddbDoc.send(
+        new GetCommand({
+          TableName: WATCHLIST_TABLE,
+          Key: { userId: user.userId, movieId },
+        })
+      );
+
+      let isAdded = false;
+      if (existing.Item && action === 'toggle-watchlist') {
+        // Remove
+        await ddbDoc.send(
+          new DeleteCommand({
+            TableName: WATCHLIST_TABLE,
+            Key: { userId: user.userId, movieId },
+          })
+        );
+        isAdded = false;
+      } else {
+        // Add
+        const item = {
+          userId: user.userId,
+          movieId,
+          name: movie.name || '',
+          slug: movie.slug || '',
+          subject_id: movie.subject_id || '',
+          poster_url: movie.poster_url || '',
+          rating: movie.rating || null,
+          year: movie.year || null,
+          badge: movie.badge || null,
+          isSeries: Boolean(movie.isSeries),
+          addedAt: new Date().toISOString(),
+        };
+        await ddbDoc.send(
+          new PutCommand({
+            TableName: WATCHLIST_TABLE,
+            Item: item,
+          })
+        );
+        isAdded = true;
       }
 
-      const countRes = shotId ? await sql`
-        SELECT COUNT(*)::int AS count FROM mf_shots_likes WHERE shot_id = ${shotId}
-      ` : [{ count: 0 }];
+      // Return updated list
+      const updated = await ddbDoc.send(
+        new QueryCommand({
+          TableName: WATCHLIST_TABLE,
+          KeyConditionExpression: 'userId = :uid',
+          ExpressionAttributeValues: { ':uid': user.userId },
+        })
+      );
+      const items = (updated.Items || []).sort((a, b) => new Date(b.addedAt || 0) - new Date(a.addedAt || 0));
 
       return res.status(200).json({
         status: 'success',
-        shot_id: shotId,
-        likes_count: countRes[0]?.count || 0,
-        user_liked: userLiked,
+        isAdded,
+        watchlist: items,
       });
     } catch (err) {
-      console.error('get-shot-likes error:', err);
-      return res.status(500).json({ error: 'Failed to retrieve shot likes.' });
+      console.error('DynamoDB toggle-watchlist error:', err);
+      return res.status(500).json({ error: 'Failed to update saved movies list.' });
     }
   }
 
-  // 3. GET or POST: Batch retrieve likes count for multiple shots
-  if (action === 'batch-shot-likes') {
-    const rawIds = body.shot_ids || query.shot_ids;
-    let shotIds = [];
-    if (Array.isArray(rawIds)) {
-      shotIds = rawIds.map(String);
-    } else if (typeof rawIds === 'string') {
-      shotIds = rawIds.split(',').map((s) => s.trim()).filter(Boolean);
+  // 4. WATCHLIST: REMOVE
+  if (action === 'remove-watchlist') {
+    const user = await authenticateUser(req, body, query);
+    if (!user) {
+      return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    const authHeader = req.headers.authorization || body.token || '';
-    const token = authHeader.replace(/^Bearer\s+/i, '');
-    const user = verifyJwt(token);
-    const guestId = String(body.device_id || query.device_id || getClientIp(req) || '').trim();
+    const movieId = String(body.movieId || body.slug || query.movieId || '').trim();
+    if (!movieId) {
+      return res.status(400).json({ error: 'Missing movieId to remove.' });
+    }
 
     try {
-      let countsMap = {};
-      let userLikedSet = [];
-
-      if (shotIds.length > 0) {
-        if (sql) {
-          try {
-            const rows = await sql`
-              SELECT shot_id, COUNT(DISTINCT uid)::int AS count
-              FROM (
-                SELECT shot_id, ('u:' || user_id::text) AS uid FROM mf_shots_likes WHERE shot_id = ANY(${shotIds})
-                UNION ALL
-                SELECT shot_id, ('g:' || guest_id::text) AS uid FROM mf_shots_guest_likes WHERE shot_id = ANY(${shotIds})
-              ) combined
-              GROUP BY shot_id
-            `;
-            for (const r of rows) {
-              countsMap[r.shot_id] = r.count;
-            }
-          } catch (_) {
-            try {
-              const rows = await sql`
-                SELECT shot_id, COUNT(*)::int AS count
-                FROM mf_shots_likes
-                WHERE shot_id = ANY(${shotIds})
-                GROUP BY shot_id
-              `;
-              for (const r of rows) {
-                countsMap[r.shot_id] = r.count;
-              }
-            } catch (_) {}
-          }
-        }
-
-        // Merge any in-memory store likes
-        for (const sId of shotIds) {
-          const memCount = getMemoryLikesCount(sId);
-          if (memCount > 0) {
-            countsMap[sId] = Math.max(countsMap[sId] || 0, memCount);
-          }
-        }
-
-        const identifier = user ? `user:${user.id}` : (guestId ? `guest:${guestId}` : '');
-        if (sql && user) {
-          try {
-            const userRows = await sql`
-              SELECT shot_id
-              FROM mf_shots_likes
-              WHERE user_id = ${user.id} AND shot_id = ANY(${shotIds})
-            `;
-            userLikedSet = userRows.map((r) => r.shot_id);
-          } catch (_) {}
-        } else if (sql && guestId) {
-          try {
-            const guestRows = await sql`
-              SELECT shot_id
-              FROM mf_shots_guest_likes
-              WHERE guest_id = ${guestId} AND shot_id = ANY(${shotIds})
-            `;
-            userLikedSet = guestRows.map((r) => r.shot_id);
-          } catch (_) {}
-        }
-
-        if (identifier) {
-          for (const sId of shotIds) {
-            if (hasMemoryLiked(sId, identifier) && !userLikedSet.includes(sId)) {
-              userLikedSet.push(sId);
-            }
-          }
-        }
-      }
-
-      return res.status(200).json({
-        status: 'success',
-        counts: countsMap,
-        user_liked_ids: userLikedSet,
-      });
+      await ddbDoc.send(
+        new DeleteCommand({
+          TableName: WATCHLIST_TABLE,
+          Key: { userId: user.userId, movieId },
+        })
+      );
+      return res.status(200).json({ status: 'success', message: 'Movie removed from saved list.' });
     } catch (err) {
-      console.error('batch-shot-likes error:', err);
-      return res.status(500).json({ error: 'Failed to batch retrieve likes.' });
+      console.error('DynamoDB remove-watchlist error:', err);
+      return res.status(500).json({ error: 'Failed to remove movie from list.' });
     }
   }
 
-  // POST Handlers
+  // 5. WATCH HISTORY: GET (Only authenticated user can see their own history)
+  if (action === 'get-history') {
+    const user = await authenticateUser(req, body, query);
+    if (!user) {
+      return res.status(401).json({ error: 'Unauthorized', detail: 'Please sign in to access watch history.' });
+    }
+
+    try {
+      const qRes = await ddbDoc.send(
+        new QueryCommand({
+          TableName: HISTORY_TABLE,
+          KeyConditionExpression: 'userId = :uid',
+          ExpressionAttributeValues: { ':uid': user.userId },
+        })
+      );
+      const items = (qRes.Items || [])
+        .sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0))
+        .slice(0, 100);
+
+      return res.status(200).json({ status: 'success', history: items });
+    } catch (err) {
+      console.error('DynamoDB get-history error:', err);
+      return res.status(500).json({ error: 'Failed to retrieve watch history.' });
+    }
+  }
+
+  // 6. WATCH HISTORY: SAVE PROGRESS
+  if (action === 'save-progress') {
+    const user = await authenticateUser(req, body, query);
+    if (!user) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const movie = body.movie || {};
+    const movieId = movie.slug || movie.subject_id || body.movieId;
+    if (!movieId) {
+      return res.status(400).json({ error: 'Missing movie details' });
+    }
+
+    const se = Number(body.se) || 0;
+    const ep = Number(body.ep) || 0;
+    const positionMillis = Math.round(Number(body.positionMillis) || 0);
+    const durationMillis = Math.round(Number(body.durationMillis) || 0);
+    const progressPercent =
+      durationMillis > 0
+        ? Math.min(100, Math.max(1, Math.round((positionMillis / durationMillis) * 100)))
+        : 0;
+
+    const historyId = `${movieId}_s${se}_e${ep}`;
+    const entry = {
+      userId: user.userId,
+      historyId,
+      id: historyId,
+      movie: {
+        name: movie.name || 'Untitled Title',
+        slug: movie.slug || '',
+        subject_id: movie.subject_id || '',
+        poster_url: movie.poster_url || '',
+      },
+      isSeries: Boolean(body.isSeries),
+      se,
+      ep,
+      positionMillis,
+      durationMillis,
+      progressPercent,
+      updatedAt: new Date().toISOString(),
+    };
+
+    try {
+      await ddbDoc.send(
+        new PutCommand({
+          TableName: HISTORY_TABLE,
+          Item: entry,
+        })
+      );
+      return res.status(200).json({ status: 'success', entry });
+    } catch (err) {
+      console.error('DynamoDB save-progress error:', err);
+      return res.status(500).json({ error: 'Failed to save watch progress.' });
+    }
+  }
+
+  // 7. WATCH HISTORY: REMOVE ITEM
+  if (action === 'remove-history') {
+    const user = await authenticateUser(req, body, query);
+    if (!user) return res.status(401).json({ error: 'Unauthorized' });
+
+    const historyId = String(body.id || body.historyId || query.id || '').trim();
+    if (!historyId) return res.status(400).json({ error: 'Missing history id to remove.' });
+
+    try {
+      await ddbDoc.send(
+        new DeleteCommand({
+          TableName: HISTORY_TABLE,
+          Key: { userId: user.userId, historyId },
+        })
+      );
+      return res.status(200).json({ status: 'success', message: 'History item removed.' });
+    } catch (err) {
+      console.error('DynamoDB remove-history error:', err);
+      return res.status(500).json({ error: 'Failed to remove history item.' });
+    }
+  }
+
+  // 8. WATCH HISTORY: CLEAR ALL
+  if (action === 'clear-history') {
+    const user = await authenticateUser(req, body, query);
+    if (!user) return res.status(401).json({ error: 'Unauthorized' });
+
+    try {
+      const qRes = await ddbDoc.send(
+        new QueryCommand({
+          TableName: HISTORY_TABLE,
+          KeyConditionExpression: 'userId = :uid',
+          ExpressionAttributeValues: { ':uid': user.userId },
+        })
+      );
+      const items = qRes.Items || [];
+      if (items.length > 0) {
+        const deleteRequests = items.map((it) => ({
+          DeleteRequest: { Key: { userId: user.userId, historyId: it.historyId } },
+        }));
+        // Batch in groups of 25
+        for (let i = 0; i < deleteRequests.length; i += 25) {
+          await ddbDoc.send(
+            new BatchWriteCommand({
+              RequestItems: {
+                [HISTORY_TABLE]: deleteRequests.slice(i, i + 25),
+              },
+            })
+          );
+        }
+      }
+      return res.status(200).json({ status: 'success', message: 'History cleared.' });
+    } catch (err) {
+      console.error('DynamoDB clear-history error:', err);
+      return res.status(500).json({ error: 'Failed to clear watch history.' });
+    }
+  }
+
+  // ─── POST Auth Handlers (AWS Cognito) ────────────────────────────────────────
   if (req.method === 'POST') {
-    const clientIp = getClientIp(req);
-
-    // 1. REGISTER
+    // 9. AWS REGISTER
     if (action === 'register') {
-      const isAllowed = await checkDurableRateLimit(sql, `register:${clientIp}`, 5, 60000);
-      if (!isAllowed) {
-        return res.status(429).json({ error: 'Too many registration attempts. Please try again shortly.' });
+      if (!checkRateLimit(clientIp)) {
+        return res.status(429).json({ error: 'Too many attempts. Please try again shortly.' });
       }
 
       const email = (body.email || '').trim().toLowerCase();
@@ -487,47 +455,66 @@ export default async function handler(req, res) {
       }
 
       try {
-        const existing = await sql`SELECT id FROM mf_users WHERE email = ${email} LIMIT 1`;
-        if (existing.length > 0) {
-          return res.status(409).json({ error: 'This email is already registered. Please sign in.' });
-        }
+        // Create user in AWS Cognito User Pool with email verified
+        await cognitoClient.send(
+          new AdminCreateUserCommand({
+            UserPoolId: COGNITO_USER_POOL_ID,
+            Username: email,
+            UserAttributes: [
+              { Name: 'email', Value: email },
+              { Name: 'email_verified', Value: 'true' },
+            ],
+            MessageAction: 'SUPPRESS',
+          })
+        );
 
-        const passHash = hashPassword(password);
-        const rows = await sql`
-          INSERT INTO mf_users (email, password_hash)
-          VALUES (${email}, ${passHash})
-          RETURNING id, email
-        `;
-        const newUser = rows[0];
+        // Set permanent password
+        await cognitoClient.send(
+          new AdminSetUserPasswordCommand({
+            UserPoolId: COGNITO_USER_POOL_ID,
+            Username: email,
+            Password: password,
+            Permanent: true,
+          })
+        );
 
-        const refreshToken = crypto.randomBytes(40).toString('hex');
-        const expiresAt = new Date(Date.now() + REFRESH_TOKEN_DAYS * 24 * 3600 * 1000);
+        // Authenticate immediately
+        const authRes = await cognitoClient.send(
+          new InitiateAuthCommand({
+            ClientId: COGNITO_CLIENT_ID,
+            AuthFlow: 'USER_PASSWORD_AUTH',
+            AuthParameters: {
+              USERNAME: email,
+              PASSWORD: password,
+            },
+          })
+        );
 
-        await sql`
-          INSERT INTO mf_refresh_tokens (user_id, token, expires_at)
-          VALUES (${newUser.id}, ${refreshToken}, ${expiresAt.toISOString()})
-        `;
-
-        const accessToken = createJwt({ id: newUser.id, email: newUser.email });
-
+        const result = authRes.AuthenticationResult;
         return res.status(200).json({
           status: 'success',
-          user: { id: newUser.id, email: newUser.email },
-          access_token: accessToken,
-          refresh_token: refreshToken,
-          expires_in: ACCESS_TOKEN_HOURS * 3600,
+          user: { id: email, email },
+          access_token: result.AccessToken,
+          refresh_token: result.RefreshToken,
+          id_token: result.IdToken,
+          expires_in: result.ExpiresIn || 3600,
         });
-      } catch (e) {
-        console.error('Registration error:', e);
-        return res.status(500).json({ error: 'Registration failed. Please try again.' });
+      } catch (err) {
+        console.error('AWS Cognito Registration Error:', err);
+        if (err.name === 'UsernameExistsException') {
+          return res.status(409).json({ error: 'This email is already registered. Please sign in.' });
+        }
+        if (err.name === 'InvalidPasswordException') {
+          return res.status(400).json({ error: err.message || 'Password does not meet requirements.' });
+        }
+        return res.status(500).json({ error: err.message || 'Registration failed. Please try again.' });
       }
     }
 
-    // 2. LOGIN
+    // 10. AWS LOGIN
     if (action === 'login') {
-      const isAllowed = await checkDurableRateLimit(sql, `login:${clientIp}`, 10, 60000);
-      if (!isAllowed) {
-        return res.status(429).json({ error: 'Too many login attempts. Please try again shortly.' });
+      if (!checkRateLimit(clientIp)) {
+        return res.status(429).json({ error: 'Too many login attempts. Please wait a moment.' });
       }
 
       const email = (body.email || '').trim().toLowerCase();
@@ -538,47 +525,39 @@ export default async function handler(req, res) {
       }
 
       try {
-        const users = await sql`
-          SELECT id, email, password_hash FROM mf_users WHERE email = ${email} LIMIT 1
-        `;
-        if (users.length === 0) {
-          return res.status(401).json({ error: 'Incorrect email or password.' });
-        }
+        const authRes = await cognitoClient.send(
+          new InitiateAuthCommand({
+            ClientId: COGNITO_CLIENT_ID,
+            AuthFlow: 'USER_PASSWORD_AUTH',
+            AuthParameters: {
+              USERNAME: email,
+              PASSWORD: password,
+            },
+          })
+        );
 
-        const user = users[0];
-        const match = verifyPassword(password, user.password_hash);
-        if (!match) {
-          return res.status(401).json({ error: 'Incorrect email or password.' });
-        }
-
-        // Update last login
-        await sql`UPDATE mf_users SET last_login = NOW() WHERE id = ${user.id}`;
-
-        // Create new refresh token
-        const refreshToken = crypto.randomBytes(40).toString('hex');
-        const expiresAt = new Date(Date.now() + REFRESH_TOKEN_DAYS * 24 * 3600 * 1000);
-
-        await sql`
-          INSERT INTO mf_refresh_tokens (user_id, token, expires_at)
-          VALUES (${user.id}, ${refreshToken}, ${expiresAt.toISOString()})
-        `;
-
-        const accessToken = createJwt({ id: user.id, email: user.email });
-
+        const result = authRes.AuthenticationResult;
         return res.status(200).json({
           status: 'success',
-          user: { id: user.id, email: user.email },
-          access_token: accessToken,
-          refresh_token: refreshToken,
-          expires_in: ACCESS_TOKEN_HOURS * 3600,
+          user: { id: email, email },
+          access_token: result.AccessToken,
+          refresh_token: result.RefreshToken,
+          id_token: result.IdToken,
+          expires_in: result.ExpiresIn || 3600,
         });
-      } catch (e) {
-        console.error('Login error:', e);
-        return res.status(500).json({ error: 'Login failed. Please try again.' });
+      } catch (err) {
+        console.error('AWS Cognito Login Error:', err);
+        if (err.name === 'NotAuthorizedException' || err.name === 'UserNotFoundException') {
+          return res.status(401).json({ error: 'Incorrect email or password.' });
+        }
+        if (err.name === 'UserNotConfirmedException') {
+          return res.status(403).json({ error: 'Account not confirmed. Please check your email.' });
+        }
+        return res.status(500).json({ error: err.message || 'Login failed. Please try again.' });
       }
     }
 
-    // 3. REFRESH TOKEN
+    // 11. AWS REFRESH TOKEN
     if (action === 'refresh') {
       const refreshToken = body.refresh_token;
       if (!refreshToken) {
@@ -586,197 +565,78 @@ export default async function handler(req, res) {
       }
 
       try {
-        const rows = await sql`
-          SELECT r.id, r.user_id, r.expires_at, u.email
-          FROM mf_refresh_tokens r
-          JOIN mf_users u ON r.user_id = u.id
-          WHERE r.token = ${refreshToken}
-          LIMIT 1
-        `;
+        const authRes = await cognitoClient.send(
+          new InitiateAuthCommand({
+            ClientId: COGNITO_CLIENT_ID,
+            AuthFlow: 'REFRESH_TOKEN_AUTH',
+            AuthParameters: {
+              REFRESH_TOKEN: refreshToken,
+            },
+          })
+        );
 
-        if (rows.length === 0) {
-          return res.status(401).json({ error: 'Invalid refresh token.' });
-        }
-
-        const record = rows[0];
-        if (new Date(record.expires_at) < new Date()) {
-          await sql`DELETE FROM mf_refresh_tokens WHERE id = ${record.id}`;
-          return res.status(401).json({ error: 'Refresh token has expired. Please sign in again.' });
-        }
-
-        // Rotate token
-        const newRefreshToken = crypto.randomBytes(40).toString('hex');
-        const expiresAt = new Date(Date.now() + REFRESH_TOKEN_DAYS * 24 * 3600 * 1000);
-
-        await sql`
-          UPDATE mf_refresh_tokens
-          SET token = ${newRefreshToken}, expires_at = ${expiresAt.toISOString()}
-          WHERE id = ${record.id}
-        `;
-
-        const accessToken = createJwt({ id: record.user_id, email: record.email });
-
+        const result = authRes.AuthenticationResult;
         return res.status(200).json({
           status: 'success',
-          user: { id: record.user_id, email: record.email },
-          access_token: accessToken,
-          refresh_token: newRefreshToken,
-          expires_in: ACCESS_TOKEN_HOURS * 3600,
+          access_token: result.AccessToken,
+          id_token: result.IdToken,
+          expires_in: result.ExpiresIn || 3600,
         });
-      } catch (e) {
-        console.error('Refresh error:', e);
-        return res.status(500).json({ error: 'Token refresh failed.' });
+      } catch (err) {
+        console.error('AWS Cognito Refresh Error:', err);
+        return res.status(401).json({ error: 'Token refresh failed. Please sign in again.' });
       }
     }
 
-    // 4. LOGOUT
+    // 12. AWS LOGOUT
     if (action === 'logout') {
-      const refreshToken = body.refresh_token;
-      if (refreshToken) {
+      const token = (body.access_token || req.headers?.authorization || '').replace(/^Bearer\s+/i, '').trim();
+      if (token) {
         try {
-          await sql`DELETE FROM mf_refresh_tokens WHERE token = ${refreshToken}`;
+          await cognitoClient.send(new GlobalSignOutCommand({ AccessToken: token }));
         } catch (_) {}
       }
       return res.status(200).json({ status: 'success', message: 'Logged out successfully.' });
     }
 
-    // 5. SHOTS LIKES SYSTEM (JavaScript Backend: Real-time Neon Database + In-Memory Fallback)
+    // 13. SHOTS LIKES SYSTEM
     if (action === 'like-shot') {
-      const authHeader = req.headers.authorization || body.token || '';
-      const token = authHeader.replace(/^Bearer\s+/i, '');
-      const user = verifyJwt(token);
-      const guestId = String(body.device_id || getClientIp(req) || '').trim();
-
       const shotId = String(body.shot_id || body.shotId || '').trim();
-      if (!shotId) {
-        return res.status(400).json({ error: 'shot_id is required.' });
-      }
-
-      try {
-        const identifier = user ? `user:${user.id}` : (guestId ? `guest:${guestId}` : '');
-        let currentCount = 1;
-        if (user && guestId) {
-          removeMemoryLike(shotId, `guest:${guestId}`);
-        }
-        if (identifier) {
-          currentCount = addMemoryLike(shotId, identifier);
-        }
-
-        if (sql) {
-          try {
-            if (user) {
-              if (guestId) {
-                await sql`
-                  DELETE FROM mf_shots_guest_likes
-                  WHERE guest_id = ${guestId} AND shot_id = ${shotId}
-                `;
-              }
-              await sql`
-                INSERT INTO mf_shots_likes (user_id, shot_id)
-                VALUES (${user.id}, ${shotId})
-                ON CONFLICT (user_id, shot_id) DO NOTHING
-              `;
-            } else if (guestId) {
-              await sql`
-                INSERT INTO mf_shots_guest_likes (guest_id, shot_id)
-                VALUES (${guestId}, ${shotId})
-                ON CONFLICT (guest_id, shot_id) DO NOTHING
-              `;
-            }
-
-            const countRes = await sql`
-              SELECT COUNT(DISTINCT uid)::int AS count
-              FROM (
-                SELECT ('u:' || user_id::text) AS uid FROM mf_shots_likes WHERE shot_id = ${shotId}
-                UNION ALL
-                SELECT ('g:' || guest_id::text) AS uid FROM mf_shots_guest_likes WHERE shot_id = ${shotId}
-              ) combined
-            `;
-            if (countRes && countRes[0]?.count) {
-              currentCount = Math.max(currentCount, countRes[0].count);
-            }
-          } catch (_) {}
-        }
-
-        return res.status(200).json({
-          status: 'success',
-          liked: true,
-          shot_id: shotId,
-          likes_count: currentCount,
-        });
-      } catch (err) {
-        console.error('like-shot error:', err);
-        return res.status(500).json({ error: 'Failed to record like.' });
-      }
+      const identifier = String(body.device_id || clientIp).trim();
+      if (!shotId) return res.status(400).json({ error: 'Missing shot_id' });
+      const likesCount = addMemoryLike(shotId, identifier);
+      return res.status(200).json({ status: 'success', liked: true, likes_count: likesCount });
     }
 
     if (action === 'unlike-shot') {
-      const authHeader = req.headers.authorization || body.token || '';
-      const token = authHeader.replace(/^Bearer\s+/i, '');
-      const user = verifyJwt(token);
-      const guestId = String(body.device_id || getClientIp(req) || '').trim();
-
       const shotId = String(body.shot_id || body.shotId || '').trim();
-      if (!shotId) {
-        return res.status(400).json({ error: 'shot_id is required.' });
+      const identifier = String(body.device_id || clientIp).trim();
+      if (!shotId) return res.status(400).json({ error: 'Missing shot_id' });
+      const likesCount = removeMemoryLike(shotId, identifier);
+      return res.status(200).json({ status: 'success', liked: false, likes_count: likesCount });
+    }
+
+    if (action === 'get-shot-likes') {
+      const shotId = String(body.shot_id || query.shot_id || '').trim();
+      const identifier = String(body.device_id || clientIp).trim();
+      const likesCount = getMemoryLikesCount(shotId);
+      const userLiked = hasMemoryLiked(shotId, identifier);
+      return res.status(200).json({ status: 'success', likes_count: likesCount, user_liked: userLiked });
+    }
+
+    if (action === 'batch-shot-likes') {
+      const idsRaw = body.shot_ids || query.shot_ids || '';
+      const shotIds = Array.isArray(idsRaw) ? idsRaw : String(idsRaw).split(',').filter(Boolean);
+      const identifier = String(body.device_id || clientIp).trim();
+      const countsMap = {};
+      const userLikedSet = [];
+      for (const id of shotIds) {
+        countsMap[id] = getMemoryLikesCount(id);
+        if (hasMemoryLiked(id, identifier)) userLikedSet.push(id);
       }
-
-      try {
-        const identifier = user ? `user:${user.id}` : (guestId ? `guest:${guestId}` : '');
-        let currentCount = 0;
-        if (identifier) {
-          currentCount = removeMemoryLike(shotId, identifier);
-        }
-        if (user && guestId) {
-          removeMemoryLike(shotId, `guest:${guestId}`);
-        }
-
-        if (sql) {
-          try {
-            if (user) {
-              await sql`
-                DELETE FROM mf_shots_likes
-                WHERE user_id = ${user.id} AND shot_id = ${shotId}
-              `;
-              if (guestId) {
-                await sql`
-                  DELETE FROM mf_shots_guest_likes
-                  WHERE guest_id = ${guestId} AND shot_id = ${shotId}
-                `;
-              }
-            } else if (guestId) {
-              await sql`
-                DELETE FROM mf_shots_guest_likes
-                WHERE guest_id = ${guestId} AND shot_id = ${shotId}
-              `;
-            }
-
-            const countRes = await sql`
-              SELECT COUNT(DISTINCT uid)::int AS count
-              FROM (
-                SELECT ('u:' || user_id::text) AS uid FROM mf_shots_likes WHERE shot_id = ${shotId}
-                UNION ALL
-                SELECT ('g:' || guest_id::text) AS uid FROM mf_shots_guest_likes WHERE shot_id = ${shotId}
-              ) combined
-            `;
-            if (countRes && countRes[0]?.count !== undefined) {
-              currentCount = countRes[0].count;
-            }
-          } catch (_) {}
-        }
-
-        return res.status(200).json({
-          status: 'success',
-          liked: false,
-          shot_id: shotId,
-          likes_count: currentCount,
-        });
-      } catch (err) {
-        console.error('unlike-shot error:', err);
-        return res.status(500).json({ error: 'Failed to remove like.' });
-      }
+      return res.status(200).json({ status: 'success', counts: countsMap, user_liked_ids: userLikedSet });
     }
   }
 
-  return res.status(400).json({ error: 'Invalid request or action' });
+  return res.status(400).json({ error: `Unknown or unhandled action: '${action}'` });
 }

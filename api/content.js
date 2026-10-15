@@ -1,81 +1,26 @@
-import { neon } from '@neondatabase/serverless';
-
 // ─── Server-Side Content API Proxy for Movieflix ────────────────────────────
 // Securely proxies requests to the upstream movie catalog and stream provider.
 // Upstream provider API credentials exist ONLY in server environment variables
 // (MOVIE_PROVIDER_API_KEY) and are NEVER exposed to the client or mobile APK.
 
-function getDb() {
-  const dbUrl =
-    process.env.DATABASE_URL ||
-    process.env.POSTGRES_URL ||
-    process.env.POSTGRES_PRISMA_URL ||
-    process.env.DATABASE_URL_UNPOOLED;
-  if (!dbUrl) return null;
-  return neon(dbUrl);
-}
-
-// ─── Neon Database Persistent Cache & Rate Limit Fallback ────────────────────
-let cacheTableInitialized = false;
-
-async function ensureCacheTable(sql) {
-  if (cacheTableInitialized || !sql) return;
-  try {
-    await sql`
-      CREATE TABLE IF NOT EXISTS movieflix_content_cache (
-        cache_key VARCHAR(255) PRIMARY KEY,
-        endpoint VARCHAR(50) NOT NULL,
-        data JSONB NOT NULL,
-        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-        expires_at TIMESTAMP WITH TIME ZONE
-      );
-    `;
-    cacheTableInitialized = true;
-  } catch (err) {
-    console.warn('[Neon Cache] ensureCacheTable error:', err.message);
-  }
-}
+// In-Memory Fast Cache for Movieflix Content
+const contentMemoryCache = new Map();
+const CONTENT_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
 
 async function getFromNeonCache(cacheKey) {
   if (!cacheKey) return null;
-  try {
-    const sql = getDb();
-    if (!sql) return null;
-    await ensureCacheTable(sql);
-    const rows = await sql`
-      SELECT data, updated_at FROM movieflix_content_cache
-      WHERE cache_key = ${cacheKey}
-      LIMIT 1;
-    `;
-    if (rows && rows.length > 0 && rows[0].data) {
-      return rows[0].data;
-    }
-  } catch (err) {
-    console.warn('[Neon Cache] Read fallback error:', err.message);
+  const entry = contentMemoryCache.get(cacheKey);
+  if (entry && Date.now() - entry.time < CONTENT_CACHE_TTL_MS) {
+    return entry.data;
   }
   return null;
 }
 
 function saveToNeonCacheAsync(cacheKey, endpoint, data) {
   if (!cacheKey || !data) return;
-  // Non-blocking asynchronous save to Neon PostgreSQL
-  (async () => {
-    try {
-      const sql = getDb();
-      if (!sql) return;
-      await ensureCacheTable(sql);
-      const dataStr = JSON.stringify(data);
-      await sql`
-        INSERT INTO movieflix_content_cache (cache_key, endpoint, data, updated_at, expires_at)
-        VALUES (${cacheKey}, ${endpoint}, ${dataStr}::jsonb, NOW(), NOW() + INTERVAL '14 days')
-        ON CONFLICT (cache_key) DO UPDATE
-        SET data = EXCLUDED.data, updated_at = NOW(), expires_at = EXCLUDED.expires_at;
-      `;
-    } catch (err) {
-      console.warn('[Neon Cache] Write error:', err.message);
-    }
-  })().catch(() => {});
+  contentMemoryCache.set(cacheKey, { data, time: Date.now() });
 }
+
 
 const UPSTREAM_BASE = (
   process.env.MOVIE_PROVIDER_URL ||

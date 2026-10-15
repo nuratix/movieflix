@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
+import { Platform } from 'react-native';
 
 const KEYS = {
   WATCH_HISTORY: '@reel_watch_history_v2',
@@ -7,6 +8,7 @@ const KEYS = {
   DOWNLOADS: '@reel_downloads_v2',
   HOME_CACHE: '@reel_home_cache_v2',
   DEVICE_KEY: 'reel_device_secret_token_v2',
+  SESSION: '@mf_session',
 };
 
 // Safe fallback in-memory store
@@ -15,6 +17,24 @@ const memoryStore = {
   myList: [],
   downloads: [],
 };
+
+function getApiBase() {
+  if (Platform.OS === 'web' && typeof window !== 'undefined' && window.location?.origin) {
+    return window.location.origin;
+  }
+  return (process.env.EXPO_PUBLIC_API_BASE || 'https://mws.wallpaperdomain.xyz').trim().replace(/\/+$/, '');
+}
+
+async function getAuthToken() {
+  try {
+    const raw = await AsyncStorage.getItem(KEYS.SESSION);
+    if (!raw) return null;
+    const session = JSON.parse(raw);
+    return session?.accessToken || null;
+  } catch (_) {
+    return null;
+  }
+}
 
 /**
  * Initialize device secure storage key
@@ -28,20 +48,45 @@ export async function initSecureStorage() {
     }
     return { success: true, deviceKey, secure: true };
   } catch (e) {
-    console.log('SecureStore notice (fallback to software security):', e?.message);
     return { success: true, deviceKey: 'software_key_default', secure: false };
   }
 }
 
 /**
- * WATCH HISTORY
+ * WATCH HISTORY (Cloud Sync with AWS Server + Local Fast Cache)
  */
 export async function getWatchHistory() {
   try {
     const raw = await AsyncStorage.getItem(KEYS.WATCH_HISTORY);
-    if (!raw) return memoryStore.watchHistory;
-    const parsed = JSON.parse(raw);
-    memoryStore.watchHistory = Array.isArray(parsed) ? parsed : [];
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      memoryStore.watchHistory = Array.isArray(parsed) ? parsed : [];
+    }
+
+    // If authenticated, sync securely with AWS server in background
+    const token = await getAuthToken();
+    if (token) {
+      try {
+        const res = await fetch(`${getApiBase()}/api/auth?action=get-history`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data.history)) {
+            memoryStore.watchHistory = data.history;
+            await AsyncStorage.setItem(KEYS.WATCH_HISTORY, JSON.stringify(data.history));
+            return data.history;
+          }
+        }
+      } catch (syncErr) {
+        // Fallback to local cache if network is slow/offline
+      }
+    }
+
     return memoryStore.watchHistory;
   } catch (e) {
     console.warn('Failed to load watch history:', e);
@@ -60,7 +105,7 @@ export async function saveWatchProgress({
   if (!movie || (!movie.slug && !movie.subject_id)) return null;
 
   try {
-    const history = await getWatchHistory();
+    const history = memoryStore.watchHistory || [];
     const id = `${movie.slug || movie.subject_id}_s${se}_e${ep}`;
     const progressPercent = durationMillis > 0
       ? Math.min(100, Math.max(1, Math.round((positionMillis / durationMillis) * 100)))
@@ -68,6 +113,7 @@ export async function saveWatchProgress({
 
     const entry = {
       id,
+      historyId: id,
       movie: {
         name: movie.name || 'Untitled Title',
         slug: movie.slug || '',
@@ -84,9 +130,30 @@ export async function saveWatchProgress({
     };
 
     // Filter out existing and put newest at top
-    const updated = [entry, ...history.filter(item => item.id !== id)].slice(0, 50);
+    const updated = [entry, ...history.filter(item => item.id !== id && item.historyId !== id)].slice(0, 50);
     memoryStore.watchHistory = updated;
     await AsyncStorage.setItem(KEYS.WATCH_HISTORY, JSON.stringify(updated));
+
+    // Asynchronously sync watch progress to AWS DynamoDB on server
+    const token = await getAuthToken();
+    if (token) {
+      fetch(`${getApiBase()}/api/auth?action=save-progress`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          movie,
+          isSeries,
+          se,
+          ep,
+          positionMillis,
+          durationMillis,
+        }),
+      }).catch(() => {});
+    }
+
     return entry;
   } catch (e) {
     console.warn('Failed to save watch progress:', e);
@@ -96,10 +163,23 @@ export async function saveWatchProgress({
 
 export async function removeWatchHistory(id) {
   try {
-    const history = await getWatchHistory();
-    const updated = history.filter(item => item.id !== id);
+    const history = memoryStore.watchHistory || [];
+    const updated = history.filter(item => item.id !== id && item.historyId !== id);
     memoryStore.watchHistory = updated;
     await AsyncStorage.setItem(KEYS.WATCH_HISTORY, JSON.stringify(updated));
+
+    const token = await getAuthToken();
+    if (token) {
+      fetch(`${getApiBase()}/api/auth?action=remove-history`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ id, historyId: id }),
+      }).catch(() => {});
+    }
+
     return updated;
   } catch (e) {
     console.warn('Failed to remove watch history item:', e);
@@ -111,6 +191,18 @@ export async function clearWatchHistory() {
   try {
     memoryStore.watchHistory = [];
     await AsyncStorage.setItem(KEYS.WATCH_HISTORY, JSON.stringify([]));
+
+    const token = await getAuthToken();
+    if (token) {
+      fetch(`${getApiBase()}/api/auth?action=clear-history`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      }).catch(() => {});
+    }
+
     return [];
   } catch (e) {
     console.warn('Failed to clear watch history:', e);
@@ -119,14 +211,40 @@ export async function clearWatchHistory() {
 }
 
 /**
- * MY LIST / WATCHLIST
+ * MY LIST / WATCHLIST (Cloud Sync with AWS Server + Local Fast Cache)
  */
 export async function getMyList() {
   try {
     const raw = await AsyncStorage.getItem(KEYS.MY_LIST);
-    if (!raw) return memoryStore.myList;
-    const parsed = JSON.parse(raw);
-    memoryStore.myList = Array.isArray(parsed) ? parsed : [];
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      memoryStore.myList = Array.isArray(parsed) ? parsed : [];
+    }
+
+    // If authenticated, sync securely with AWS server in background
+    const token = await getAuthToken();
+    if (token) {
+      try {
+        const res = await fetch(`${getApiBase()}/api/auth?action=get-watchlist`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data.watchlist)) {
+            memoryStore.myList = data.watchlist;
+            await AsyncStorage.setItem(KEYS.MY_LIST, JSON.stringify(data.watchlist));
+            return data.watchlist;
+          }
+        }
+      } catch (syncErr) {
+        // Fallback to local cache
+      }
+    }
+
     return memoryStore.myList;
   } catch (e) {
     console.warn('Failed to load my list:', e);
@@ -138,9 +256,9 @@ export async function toggleMyList(movie) {
   if (!movie) return { myList: memoryStore.myList, isAdded: false };
 
   try {
-    const currentList = await getMyList();
+    const currentList = memoryStore.myList || [];
     const exists = currentList.some(
-      m => (m.slug && m.slug === movie.slug) || (m.subject_id && m.subject_id === movie.subject_id)
+      m => (m.slug && m.slug === movie.slug) || (m.subject_id && m.subject_id === movie.subject_id) || (m.movieId && (m.movieId === movie.slug || m.movieId === movie.subject_id))
     );
 
     let updatedList;
@@ -148,10 +266,11 @@ export async function toggleMyList(movie) {
 
     if (exists) {
       updatedList = currentList.filter(
-        m => !((m.slug && m.slug === movie.slug) || (m.subject_id && m.subject_id === movie.subject_id))
+        m => !((m.slug && m.slug === movie.slug) || (m.subject_id && m.subject_id === movie.subject_id) || (m.movieId && (m.movieId === movie.slug || m.movieId === movie.subject_id)))
       );
     } else {
       const cleanMovie = {
+        movieId: movie.slug || movie.subject_id || '',
         name: movie.name || '',
         slug: movie.slug || '',
         subject_id: movie.subject_id || '',
@@ -168,6 +287,20 @@ export async function toggleMyList(movie) {
 
     memoryStore.myList = updatedList;
     await AsyncStorage.setItem(KEYS.MY_LIST, JSON.stringify(updatedList));
+
+    // Asynchronously sync to AWS DynamoDB
+    const token = await getAuthToken();
+    if (token) {
+      fetch(`${getApiBase()}/api/auth?action=toggle-watchlist`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ movie }),
+      }).catch(() => {});
+    }
+
     return { myList: updatedList, isAdded };
   } catch (e) {
     console.warn('Failed to toggle my list:', e);
@@ -177,8 +310,8 @@ export async function toggleMyList(movie) {
 
 export async function isInMyList(slugOrId) {
   if (!slugOrId) return false;
-  const list = await getMyList();
-  return list.some(m => m.slug === slugOrId || m.subject_id === slugOrId);
+  const list = memoryStore.myList || [];
+  return list.some(m => m.slug === slugOrId || m.subject_id === slugOrId || m.movieId === slugOrId);
 }
 
 /**
@@ -192,7 +325,6 @@ export async function getDownloads() {
     memoryStore.downloads = Array.isArray(parsed) ? parsed : [];
     return memoryStore.downloads;
   } catch (e) {
-    console.warn('Failed to load downloads:', e);
     return memoryStore.downloads;
   }
 }
@@ -200,72 +332,24 @@ export async function getDownloads() {
 export async function saveDownload(downloadItem) {
   if (!downloadItem || !downloadItem.id) return null;
   try {
-    const downloads = await getDownloads();
-    const filtered = downloads.filter(d => d.id !== downloadItem.id);
-    const updated = [downloadItem, ...filtered];
+    const current = await getDownloads();
+    const updated = [downloadItem, ...current.filter(d => d.id !== downloadItem.id)];
     memoryStore.downloads = updated;
     await AsyncStorage.setItem(KEYS.DOWNLOADS, JSON.stringify(updated));
-    return updated;
+    return downloadItem;
   } catch (e) {
-    console.warn('Failed to save download record:', e);
-    return null;
-  }
-}
-
-export async function updateDownloadProgress(id, progress, status, localVideoUri = null, totalBytes = null) {
-  try {
-    const downloads = await getDownloads();
-    const idx = downloads.findIndex(d => d.id === id);
-    if (idx === -1) return null;
-
-    const current = downloads[idx];
-    current.progress = progress;
-    if (status) current.status = status;
-    if (localVideoUri) current.localVideoUri = localVideoUri;
-    if (totalBytes) current.sizeBytes = totalBytes;
-
-    downloads[idx] = current;
-    memoryStore.downloads = downloads;
-    await AsyncStorage.setItem(KEYS.DOWNLOADS, JSON.stringify(downloads));
-    return current;
-  } catch (e) {
-    console.warn('Failed to update download progress:', e);
     return null;
   }
 }
 
 export async function removeDownload(id) {
   try {
-    const downloads = await getDownloads();
-    const updated = downloads.filter(d => d.id !== id);
+    const current = await getDownloads();
+    const updated = current.filter(d => d.id !== id);
     memoryStore.downloads = updated;
     await AsyncStorage.setItem(KEYS.DOWNLOADS, JSON.stringify(updated));
     return updated;
   } catch (e) {
-    console.warn('Failed to remove download:', e);
     return memoryStore.downloads;
-  }
-}
-
-/**
- * HOME FEED LOCAL CACHE FOR INSTANT LOADING
- */
-export async function getHomeFeedCache() {
-  try {
-    const raw = await AsyncStorage.getItem(KEYS.HOME_CACHE);
-    if (!raw) return null;
-    return JSON.parse(raw);
-  } catch (e) {
-    console.warn('Failed to load home cache:', e);
-    return null;
-  }
-}
-
-export async function saveHomeFeedCache(data) {
-  if (!data) return;
-  try {
-    await AsyncStorage.setItem(KEYS.HOME_CACHE, JSON.stringify(data));
-  } catch (e) {
-    console.warn('Failed to save home cache:', e);
   }
 }
