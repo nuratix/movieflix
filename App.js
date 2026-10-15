@@ -94,6 +94,8 @@ import NowPaymentsButton from './components/NowPaymentsButton';
 import MaintenanceScreen from './components/MaintenanceScreen';
 import ServerCrashDonateScreen from './components/ServerCrashDonateScreen';
 import { checkSystemStatusAsync } from './statusService';
+import PlayerAdOverlay from './components/PlayerAdOverlay';
+import { fetchRandomAd, recordImpression } from './adService';
 import * as SplashScreen from 'expo-splash-screen';
 
 // Prevent native splash screen from hiding before custom splash animation mounts
@@ -8367,6 +8369,13 @@ function ReelCustomPlayer({
   // Picture in Picture State
   const [isInPiP, setIsInPiP] = useState(false);
 
+  // ─── Video Player Ads State (10s Pre-roll after intro, 5s Mid-roll every 30m) ───
+  const [activeAd, setActiveAd] = useState(null);
+  const [isAdShowing, setIsAdShowing] = useState(false);
+  const [adSkipSeconds, setAdSkipSeconds] = useState(10);
+  const hasTriggeredPreRollRef = useRef(false);
+  const accumulatedPlaybackSecRef = useRef(0);
+
   // Gesture Tracking Refs
   const showControlsRef = useRef(true);
   const currentSpeedRef = useRef('1.0×');
@@ -8768,6 +8777,90 @@ function ReelCustomPlayer({
       }
     };
   }, [player]);
+
+  // ─── Video Player Ads Handlers & Lifecycle ───
+  const handleSkipAd = useCallback(() => {
+    setIsAdShowing(false);
+    setActiveAd(null);
+    accumulatedPlaybackSecRef.current = 0;
+    try {
+      playerRef.current?.play();
+    } catch (_) {}
+  }, []);
+
+  // 1. Initial Pre-Roll Ad: Appears when movie playback starts (after intro) with 10s skip
+  useEffect(() => {
+    let isCancelled = false;
+
+    const triggerInitialAd = async () => {
+      if (hasTriggeredPreRollRef.current) return;
+      hasTriggeredPreRollRef.current = true;
+
+      try {
+        const ad = await fetchRandomAd();
+        if (isCancelled || !ad) return;
+
+        // Immediately pause movie playback while the ad is showing
+        try {
+          playerRef.current?.pause();
+        } catch (_) {}
+
+        setActiveAd(ad);
+        setAdSkipSeconds(10);
+        setIsAdShowing(true);
+        recordImpression(ad);
+      } catch (err) {
+        console.warn('[Player] Initial ad note:', err?.message);
+      }
+    };
+
+    const t = setTimeout(triggerInitialAd, 150);
+
+    return () => {
+      isCancelled = true;
+      clearTimeout(t);
+    };
+  }, []);
+
+  // 2. 30-Minute Mid-Roll Ad Loop: Triggers every 30 minutes of playback with 5s skip
+  useEffect(() => {
+    const MIDROLL_INTERVAL_SEC = 1800; // 30 minutes in seconds
+
+    const intervalId = setInterval(async () => {
+      if (isPlaying && !isAdShowing && playerRef.current) {
+        accumulatedPlaybackSecRef.current += 1;
+
+        if (accumulatedPlaybackSecRef.current >= MIDROLL_INTERVAL_SEC) {
+          accumulatedPlaybackSecRef.current = 0; // Reset counter for the next 30-minute loop
+          try {
+            const ad = await fetchRandomAd();
+            if (ad) {
+              try {
+                playerRef.current?.pause();
+              } catch (_) {}
+              setActiveAd(ad);
+              setAdSkipSeconds(5); // 5 sec skip for midroll ads
+              setIsAdShowing(true);
+              recordImpression(ad);
+            }
+          } catch (e) {
+            console.warn('[Player] Mid-roll ad note:', e?.message);
+          }
+        }
+      }
+    }, 1000);
+
+    return () => clearInterval(intervalId);
+  }, [isPlaying, isAdShowing]);
+
+  // Keep player paused if ad is currently showing
+  useEffect(() => {
+    if (isAdShowing && player) {
+      try {
+        player.pause();
+      } catch (_) {}
+    }
+  }, [isAdShowing, player]);
 
   // Keep ref updated
   useEffect(() => {
@@ -9314,7 +9407,7 @@ function ReelCustomPlayer({
       {/* Hardware brightness controls device screen backlight directly */}
 
       {/* REAL ON-SCREEN SUBTITLE OVERLAY */}
-      {Boolean(currentSubtitleText && selectedSubtitle !== 'Off' && !isInPiP) && (
+      {Boolean(currentSubtitleText && selectedSubtitle !== 'Off' && !isInPiP && !isAdShowing) && (
         <View
           style={[
             styles.subtitleOverlayContainer,
@@ -9329,7 +9422,7 @@ function ReelCustomPlayer({
       )}
 
       {/* GESTURE DETECTOR: DOUBLE TAP (±10s), LONG PRESS (2×), VERTICAL SWIPES (VOL/BRIGHTNESS), SINGLE TAP (SHOW/HIDE) */}
-      {!isInPiP && (
+      {!isInPiP && !isAdShowing && (
         <View
           style={[StyleSheet.absoluteFill, { zIndex: 4 }]}
           {...panResponder.panHandlers}
@@ -9389,7 +9482,7 @@ function ReelCustomPlayer({
       )}
 
       {/* STREAM BUFFERING / FETCHING LOADER OVERLAY */}
-      {!isInPiP && isBufferingOrLoading && (
+      {!isInPiP && !isAdShowing && isBufferingOrLoading && (
         <View style={styles.playerLoaderCenteredOverlay} pointerEvents="none">
           <View style={styles.playerLoaderBox}>
             <ActivityIndicator size="large" color="#e50914" />
@@ -9403,7 +9496,7 @@ function ReelCustomPlayer({
       )}
 
       {/* OVERLAY CONTROLS (FULLSCREEN SAFE-AREA POSITIONING) */}
-      {!isInPiP && showControls && (
+      {!isInPiP && !isAdShowing && showControls && (
         <View
           style={[
             StyleSheet.absoluteFill,
@@ -9969,6 +10062,16 @@ function ReelCustomPlayer({
           </TouchableWithoutFeedback>
         </TouchableOpacity>
       </Modal>
+
+      {/* ─── FULLSCREEN VIDEO PLAYER AD OVERLAY (PRE-ROLL 10s & 30-MIN LOOP 5s) ─── */}
+      {Boolean(isAdShowing && activeAd) && (
+        <PlayerAdOverlay
+          ad={activeAd}
+          initialSkipSeconds={adSkipSeconds}
+          onSkip={handleSkipAd}
+          onClose={onClose}
+        />
+      )}
 
     </View>
   );
