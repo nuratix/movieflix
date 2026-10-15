@@ -14,14 +14,16 @@ import { Image as ExpoImage } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather, MaterialIcons } from '@expo/vector-icons';
 import { useVideoPlayer, VideoView } from 'expo-video';
-import { getCleanDomain, recordClick } from '../adService';
+import { recordClick } from '../adService';
 
 /**
  * PlayerAdOverlay - Fullscreen Video Player Ad Interstitial
- * Supports:
- * - 16:9 and 9:16 Poster Images
- * - 16:9 and 9:16 Video Ads (with countdown skip timer)
- * - Video completion blur state with center "Try Now" button (does not replay)
+ * Features:
+ * - Full landscape screen coverage (no small center box)
+ * - Clean interface: NO URLs displayed anywhere
+ * - Only "Get Started" call-to-action button
+ * - Video completion blur state with center "Get Started" button (does not replay)
+ * - Skip timer countdown (unlocked after skip_seconds)
  */
 export default function PlayerAdOverlay({
   ad,
@@ -74,7 +76,7 @@ export default function PlayerAdOverlay({
   const nativePlayer = useVideoPlayer(videoSource, (p) => {
     if (!p) return;
     try {
-      p.loop = false; // Do not replay when video ends
+      p.loop = false; // Never replay when video ends
       p.play();
     } catch (_) {}
   });
@@ -124,34 +126,6 @@ export default function PlayerAdOverlay({
 
   if (!ad) return null;
 
-  const cleanDomain = getCleanDomain(ad.target_url);
-  const isShortsRatio = ad.aspect_ratio === '9:16';
-  const isLandscape = windowWidth > windowHeight;
-
-  // Calculate responsive dimensions (16:9 or 9:16)
-  let frameWidth = 0;
-  let frameHeight = 0;
-
-  if (isShortsRatio) {
-    // 9:16 Vertical frame
-    const maxH = windowHeight - Math.max(insets.top, 16) - Math.max(insets.bottom, 16) - 120;
-    frameHeight = Math.min(Math.max(maxH, 240), 480);
-    frameWidth = Math.round(frameHeight * (9 / 16));
-  } else if (isLandscape) {
-    // 16:9 Landscape frame
-    const maxAvailableHeight = windowHeight - Math.max(insets.top, 16) - Math.max(insets.bottom, 16) - 130;
-    frameHeight = Math.min(Math.max(maxAvailableHeight, 180), 380);
-    frameWidth = Math.round(frameHeight * (16 / 9));
-    if (frameWidth > windowWidth * 0.88) {
-      frameWidth = Math.round(windowWidth * 0.88);
-      frameHeight = Math.round(frameWidth * (9 / 16));
-    }
-  } else {
-    // 16:9 Portrait frame
-    frameWidth = Math.min(windowWidth - 32, 540);
-    frameHeight = Math.round(frameWidth * (9 / 16));
-  }
-
   return (
     <Animated.View
       style={[
@@ -160,14 +134,84 @@ export default function PlayerAdOverlay({
         { opacity: fadeAnim },
       ]}
     >
-      {/* ─── Top Bar: Sponsored Badge & Skip Ad Button ─── */}
+      {/* ─── FULLSCREEN LANDSCAPE BACKGROUND MEDIA (POSTER OR VIDEO) ─── */}
+      <TouchableWithoutFeedback onPress={handlePressAd}>
+        <View style={StyleSheet.absoluteFillObject}>
+          {isVideo && ad.video_url ? (
+            // Fullscreen Video Player
+            Platform.OS === 'web' ? (
+              <video
+                ref={webVideoRef}
+                src={ad.video_url}
+                poster={ad.poster_url || ''}
+                autoPlay
+                playsInline
+                controls={false}
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'cover',
+                  display: 'block',
+                  filter: isVideoEnded ? 'blur(22px) brightness(0.45)' : 'none',
+                  transition: 'filter 0.45s ease',
+                }}
+                onEnded={() => setIsVideoEnded(true)}
+              />
+            ) : (
+              <VideoView
+                style={[
+                  StyleSheet.absoluteFill,
+                  isVideoEnded && { opacity: 0.35 },
+                ]}
+                player={nativePlayer}
+                nativeControls={false}
+                contentFit="cover"
+              />
+            )
+          ) : (
+            // Fullscreen Poster Image
+            <ExpoImage
+              source={{ uri: ad.poster_url }}
+              style={StyleSheet.absoluteFill}
+              contentFit="cover"
+              transition={200}
+            />
+          )}
+
+          {/* Vignettes for readability of top bar & bottom CTA */}
+          <View style={styles.topVignette} pointerEvents="none" />
+          <View style={styles.bottomVignette} pointerEvents="none" />
+
+          {/* Video Completed State: Blurred Video with Center "Get Started" Button (Does not replay) */}
+          {Boolean(isVideo && isVideoEnded) && (
+            <View style={styles.videoEndedOverlay}>
+              <TouchableOpacity
+                style={styles.centerTryNowBtn}
+                onPress={handlePressAd}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.centerTryNowText}>Get Started</Text>
+                <Feather name="arrow-up-right" size={20} color="#FFFFFF" style={{ marginLeft: 6 }} />
+              </TouchableOpacity>
+              <Text style={styles.centerTryNowTitle} numberOfLines={2}>
+                {ad.name || 'Sponsored Promotion'}
+              </Text>
+            </View>
+          )}
+        </View>
+      </TouchableWithoutFeedback>
+
+      {/* ─── TOP BAR: SPONSORED BADGE & SKIP AD BUTTON ─── */}
       <View
         style={[
           styles.topBar,
           {
-            top: Math.max(insets.top, 14),
-            left: Math.max(insets.left, 18),
-            right: Math.max(insets.right, 18),
+            top: Math.max(insets.top, 16),
+            left: Math.max(insets.left, 20),
+            right: Math.max(insets.right, 20),
           },
         ]}
       >
@@ -183,7 +227,7 @@ export default function PlayerAdOverlay({
             </TouchableOpacity>
           )}
           <View style={styles.sponsoredBadge}>
-            <MaterialIcons name="campaign" size={15} color="#e50914" style={{ marginRight: 5 }} />
+            <MaterialIcons name="campaign" size={15} color="#e50914" style={{ marginRight: 6 }} />
             <Text style={styles.sponsoredText}>
               {isVideo ? 'SPONSORED VIDEO' : 'SPONSORED'}
             </Text>
@@ -215,135 +259,41 @@ export default function PlayerAdOverlay({
         </TouchableOpacity>
       </View>
 
-      {/* ─── Center: 16:9 or 9:16 Ad Card ─── */}
-      <View style={styles.cardWrapper}>
-        <TouchableWithoutFeedback onPress={handlePressAd}>
-          <View
-            style={[
-              styles.posterFrame,
-              { width: frameWidth, height: frameHeight },
-            ]}
-          >
-            {isVideo && ad.video_url ? (
-              // Video Ad Player
-              Platform.OS === 'web' ? (
-                <video
-                  ref={webVideoRef}
-                  src={ad.video_url}
-                  poster={ad.poster_url || ''}
-                  autoPlay
-                  playsInline
-                  controls={false}
-                  style={{
-                    width: '100%',
-                    height: '100%',
-                    objectFit: 'cover',
-                    display: 'block',
-                    filter: isVideoEnded ? 'blur(16px)' : 'none',
-                    transition: 'filter 0.4s ease',
-                  }}
-                  onEnded={() => setIsVideoEnded(true)}
-                />
-              ) : (
-                <VideoView
-                  style={[
-                    StyleSheet.absoluteFill,
-                    isVideoEnded && { opacity: 0.3 },
-                  ]}
-                  player={nativePlayer}
-                  nativeControls={false}
-                  contentFit="cover"
-                />
-              )
-            ) : (
-              // Poster Image Ad
-              <ExpoImage
-                source={{ uri: ad.poster_url }}
-                style={StyleSheet.absoluteFill}
-                contentFit="cover"
-                transition={200}
-              />
-            )}
-
-            {/* Video Completed State: Blurred Video with Center "Try Now" Button (Does not replay) */}
-            {Boolean(isVideo && isVideoEnded) && (
-              <View style={styles.videoEndedOverlay}>
-                <TouchableOpacity
-                  style={styles.centerTryNowBtn}
-                  onPress={handlePressAd}
-                  activeOpacity={0.85}
-                >
-                  <Text style={styles.centerTryNowText}>Try Now</Text>
-                  <Feather name="arrow-up-right" size={18} color="#FFFFFF" style={{ marginLeft: 6 }} />
-                </TouchableOpacity>
-                <Text style={styles.centerTryNowTitle} numberOfLines={1}>
-                  {ad.name || 'Learn More'}
-                </Text>
-                {Boolean(cleanDomain) && (
-                  <View style={styles.centerDomainPill}>
-                    <Feather name="globe" size={11} color="#9CA3AF" style={{ marginRight: 4 }} />
-                    <Text style={styles.centerDomainText}>{cleanDomain}</Text>
-                  </View>
-                )}
-              </View>
-            )}
-
-            {/* Subtle Gradient Vignette & Tap Indicator when not ended */}
-            {!isVideoEnded && (
-              <View style={styles.posterOverlayGlow}>
-                <View style={styles.posterTapHint}>
-                  <Feather name="external-link" size={13} color="#FFFFFF" style={{ marginRight: 5 }} />
-                  <Text style={styles.posterTapHintText}>Tap to visit</Text>
-                </View>
-              </View>
-            )}
-          </View>
-        </TouchableWithoutFeedback>
-
-        {/* ─── Bottom Ad Details & Call-To-Action Row ─── */}
-        <View style={[styles.bottomInfoBar, { width: frameWidth }]}>
-          <View style={styles.infoLeftCol}>
-            {/* Ad Title / Message */}
+      {/* ─── BOTTOM FLOATING BAR: ONLY GET STARTED BUTTON & TITLE (NO URL) ─── */}
+      {!isVideoEnded && (
+        <View
+          style={[
+            styles.bottomFloatingBar,
+            {
+              bottom: Math.max(insets.bottom, 22),
+              left: Math.max(insets.left, 24),
+              right: Math.max(insets.right, 24),
+            },
+          ]}
+        >
+          <View style={styles.bottomInfoLeft}>
             <Text style={styles.adTitleText} numberOfLines={1}>
               {ad.name || 'Sponsored Promotion'}
             </Text>
-
-            {/* Clean URL Button */}
-            {Boolean(cleanDomain) && (
-              <TouchableOpacity
-                style={styles.cleanUrlButton}
-                onPress={handlePressAd}
-                activeOpacity={0.75}
-              >
-                <Feather name="globe" size={11} color="#9CA3AF" style={{ marginRight: 5 }} />
-                <Text style={styles.cleanUrlText} numberOfLines={1}>
-                  {cleanDomain}
-                </Text>
-                <Feather name="external-link" size={10} color="#9CA3AF" style={{ marginLeft: 4 }} />
-              </TouchableOpacity>
-            )}
           </View>
 
-          {/* "Get Started" / "Try Now" CTA Button */}
           <TouchableOpacity
             style={styles.getStartedButton}
             onPress={handlePressAd}
             activeOpacity={0.85}
           >
-            <Text style={styles.getStartedText}>
-              {isVideo ? 'Try Now' : 'Get Started'}
-            </Text>
-            <Feather name="arrow-up-right" size={14} color="#FFFFFF" style={{ marginLeft: 4 }} />
+            <Text style={styles.getStartedText}>Get Started</Text>
+            <Feather name="arrow-up-right" size={16} color="#FFFFFF" style={{ marginLeft: 6 }} />
           </TouchableOpacity>
         </View>
-      </View>
+      )}
     </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
   overlayContainer: {
-    backgroundColor: 'rgba(5, 5, 5, 0.94)',
+    backgroundColor: '#000000',
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 99999,
@@ -353,32 +303,32 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    zIndex: 10,
+    zIndex: 30,
   },
   topBarLeftGroup: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   closeBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 10,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.18)',
+    borderColor: 'rgba(255, 255, 255, 0.2)',
   },
   sponsoredBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.14)',
+    borderColor: 'rgba(255, 255, 255, 0.2)',
   },
   sponsoredText: {
     color: '#E5E7EB',
@@ -387,26 +337,26 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
   },
   skipButton: {
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
   },
   skipButtonDisabled: {
-    backgroundColor: 'rgba(18, 18, 18, 0.88)',
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.18)',
+    borderColor: 'rgba(255, 255, 255, 0.2)',
   },
   skipButtonActive: {
     backgroundColor: '#e50914',
     borderWidth: 1,
     borderColor: '#ff333f',
     shadowColor: '#e50914',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.5,
-    shadowRadius: 6,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.55,
+    shadowRadius: 8,
+    elevation: 5,
   },
   skipContentRow: {
     flexDirection: 'row',
@@ -423,145 +373,98 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 0.4,
   },
-  cardWrapper: {
+  topVignette: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 120,
+    backgroundColor: 'rgba(0, 0, 0, 0.45)',
+    zIndex: 5,
+  },
+  bottomVignette: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 140,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    zIndex: 5,
+  },
+  bottomFloatingBar: {
+    position: 'absolute',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    justifyContent: 'center',
+    zIndex: 25,
   },
-  posterFrame: {
-    borderRadius: 14,
-    overflow: 'hidden',
-    backgroundColor: '#171717',
-    borderWidth: 1.5,
-    borderColor: 'rgba(255, 255, 255, 0.16)',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.7,
-    shadowRadius: 18,
-    elevation: 10,
-    position: 'relative',
+  bottomInfoLeft: {
+    flex: 1,
+    marginRight: 16,
   },
-  posterOverlayGlow: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.18)',
-    justifyContent: 'flex-end',
-    alignItems: 'flex-end',
-    padding: 10,
-    pointerEvents: 'none',
+  adTitleText: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '800',
+    textShadowColor: 'rgba(0, 0, 0, 0.95)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 6,
   },
-  posterTapHint: {
+  getStartedButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.65)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.15)',
+    backgroundColor: '#e50914',
+    paddingHorizontal: 22,
+    paddingVertical: 11,
+    borderRadius: 24,
+    shadowColor: '#e50914',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.55,
+    shadowRadius: 8,
+    elevation: 4,
   },
-  posterTapHintText: {
-    color: '#F3F4F6',
-    fontSize: 10,
-    fontWeight: '600',
+  getStartedText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '800',
+    letterSpacing: 0.4,
   },
   videoEndedOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 20,
+    padding: 24,
     zIndex: 20,
   },
   centerTryNowBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#e50914',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 10,
+    paddingHorizontal: 32,
+    paddingVertical: 14,
+    borderRadius: 30,
     shadowColor: '#e50914',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.6,
-    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.65,
+    shadowRadius: 14,
     elevation: 8,
-    marginBottom: 10,
+    marginBottom: 12,
   },
   centerTryNowText: {
     color: '#FFFFFF',
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '800',
     letterSpacing: 0.5,
   },
   centerTryNowTitle: {
     color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 6,
+    fontSize: 16,
+    fontWeight: '700',
     textAlign: 'center',
-  },
-  centerDomainPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  centerDomainText: {
-    color: '#9CA3AF',
-    fontSize: 11,
-    fontWeight: '500',
-  },
-  bottomInfoBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 12,
-    paddingHorizontal: 4,
-  },
-  infoLeftCol: {
-    flex: 1,
-    marginRight: 12,
-  },
-  adTitleText: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '700',
-    marginBottom: 4,
-  },
-  cleanUrlButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.14)',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  cleanUrlText: {
-    color: '#9CA3AF',
-    fontSize: 11,
-    fontWeight: '500',
-    maxWidth: 220,
-  },
-  getStartedButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#e50914',
-    paddingHorizontal: 15,
-    paddingVertical: 8,
-    borderRadius: 8,
-    shadowColor: '#e50914',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.4,
-    shadowRadius: 5,
-    elevation: 3,
-  },
-  getStartedText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '700',
-    letterSpacing: 0.3,
+    textShadowColor: 'rgba(0, 0, 0, 0.95)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 6,
+    maxWidth: '85%',
   },
 });

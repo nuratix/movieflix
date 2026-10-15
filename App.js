@@ -2166,14 +2166,12 @@ function buildPureHtmlShotsPage({ initialShots, initialAds, apiBase, isMuted, ta
             '</div>' +
             '<div class="ad-ended-center-box" style="display: none;">' +
               '<button class="ad-center-try-now-btn">' +
-                '<span>Try Now</span>' +
+                '<span>Get Started</span>' +
                 '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="7" y1="17" x2="17" y2="7"></line><polyline points="7 7 17 7 17 17"></polyline></svg>' +
               '</button>' +
               '<div class="ad-center-title">' + (item.name || 'Sponsored Promotion') + '</div>' +
-              (domain ? ('<div class="ad-center-domain"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg><span>' + domain + '</span></div>') : '') +
             '</div>' +
             '<div class="ad-bottom-info">' +
-              (domain ? ('<div class="ad-domain-pill"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1 4-10z"></path></svg><span>' + domain + '</span></div>') : '') +
               '<div class="shot-title">' + (item.name || '') + '</div>' +
               '<button class="ad-cta-btn">' +
                 '<span>Get Started</span>' +
@@ -2196,7 +2194,6 @@ function buildPureHtmlShotsPage({ initialShots, initialAds, apiBase, isMuted, ta
         var skipText = slide.querySelector('.skip-btn-text');
         var ctaBtn = slide.querySelector('.ad-cta-btn');
         var centerBtn = slide.querySelector('.ad-center-try-now-btn');
-        var domainPill = slide.querySelector('.ad-domain-pill');
         var progressFill = slide.querySelector('.progress-bar-fill');
 
         var initialSec = Number(item.skip_seconds) || 5;
@@ -2226,12 +2223,6 @@ function buildPureHtmlShotsPage({ initialShots, initialAds, apiBase, isMuted, ta
         }
         if (centerBtn) {
           centerBtn.addEventListener('click', function(e) {
-            e.stopPropagation();
-            openAd();
-          });
-        }
-        if (domainPill) {
-          domainPill.addEventListener('click', function(e) {
             e.stopPropagation();
             openAd();
           });
