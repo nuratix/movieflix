@@ -436,3 +436,20 @@ export async function removeDownload(id) {
     return memoryStore.downloads;
   }
 }
+
+export async function getHomeFeedCache() {
+  try {
+    const raw = await AsyncStorage.getItem(KEYS.HOME_CACHE);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch (_) {
+    return null;
+  }
+}
+
+export async function saveHomeFeedCache(data) {
+  try {
+    if (!data) return;
+    await AsyncStorage.setItem(KEYS.HOME_CACHE, JSON.stringify(data));
+  } catch (_) {}
+}
