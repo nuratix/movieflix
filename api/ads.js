@@ -47,8 +47,15 @@ export default async function handler(req, res) {
       return res.redirect(302, `${ADS_API_URL}/api/v1/click/${encodeURIComponent(adId)}`);
     }
 
-    // 3. Fetch active random ad: GET /api/ads or GET /api/ads/random
-    const remoteUrl = `${ADS_API_URL}/api/v1/ads/random`;
+    // 3. Fetch active ads: list or random
+    const isList = pathname.includes('/list') || (req.query && req.query.action === 'list') || parsed.searchParams.get('action') === 'list';
+    const searchParams = new URLSearchParams(parsed.search);
+    searchParams.delete('action');
+    const qs = searchParams.toString() ? `?${searchParams.toString()}` : '';
+    const remoteUrl = isList
+      ? `${ADS_API_URL}/api/v1/ads${qs}`
+      : `${ADS_API_URL}/api/v1/ads/random${qs}`;
+
     const remoteRes = await fetch(remoteUrl, {
       method: 'GET',
       headers: {

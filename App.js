@@ -95,7 +95,7 @@ import MaintenanceScreen from './components/MaintenanceScreen';
 import ServerCrashDonateScreen from './components/ServerCrashDonateScreen';
 import { checkSystemStatusAsync } from './statusService';
 import PlayerAdOverlay from './components/PlayerAdOverlay';
-import { fetchRandomAd, recordImpression } from './adService';
+import { fetchRandomAd, fetchShortsAds, recordImpression, recordClick } from './adService';
 import * as SplashScreen from 'expo-splash-screen';
 
 // Prevent native splash screen from hiding before custom splash animation mounts
@@ -1302,8 +1302,9 @@ function formatShotCount(num) {
   return String(num);
 }
 
-function buildPureHtmlShotsPage({ initialShots, apiBase, isMuted, targetShortId, authToken }) {
+function buildPureHtmlShotsPage({ initialShots, initialAds, apiBase, isMuted, targetShortId, authToken }) {
   const safeShotsJson = JSON.stringify(initialShots || []);
+  const safeInitialAdsJson = JSON.stringify(initialAds || []);
   const safeTargetId = JSON.stringify(targetShortId || '');
   const safeApiBase = JSON.stringify(apiBase || '');
   const safeAuthToken = JSON.stringify(authToken || '');
@@ -1725,6 +1726,193 @@ function buildPureHtmlShotsPage({ initialShots, apiBase, isMuted, targetShortId,
     @keyframes spin {
       to { transform: translate(-50%, -50%) rotate(360deg); }
     }
+    /* ─── MovieAds Shorts Ad Slide Styles ─── */
+    .slide.ad-slide {
+      background: #000000;
+    }
+    .slide.ad-slide video.player {
+      object-fit: cover;
+      transition: filter 0.45s ease, transform 0.45s ease;
+    }
+    .slide.ad-slide video.player.video-blurred {
+      filter: blur(20px) brightness(0.5);
+      transform: scale(1.06);
+      pointer-events: none;
+    }
+    .ad-poster-img {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      z-index: 2;
+      background: #000000;
+    }
+    .ad-top-bar {
+      position: absolute;
+      top: env(safe-area-inset-top, 14px);
+      left: 14px;
+      right: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      z-index: 45;
+      pointer-events: none;
+    }
+    .ad-top-bar * {
+      pointer-events: auto;
+    }
+    .ad-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      background: rgba(0, 0, 0, 0.72);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 14px;
+      padding: 4px 11px;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      color: #e50914;
+    }
+    .ad-skip-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 700;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      background: rgba(0, 0, 0, 0.65);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      color: #a3a3a3;
+      cursor: not-allowed;
+      transition: all 0.2s ease;
+    }
+    .ad-skip-btn.active {
+      background: #e50914;
+      border-color: #ff3b30;
+      color: #ffffff;
+      cursor: pointer;
+      box-shadow: 0 4px 16px rgba(229, 9, 20, 0.5);
+    }
+    .ad-skip-btn.active:hover, .ad-skip-btn.active:active {
+      transform: scale(1.05);
+      background: #f40612;
+    }
+    .ad-ended-center-box {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      z-index: 40;
+      text-align: center;
+      width: 86%;
+      max-width: 320px;
+      animation: adFadeInScale 0.35s ease forwards;
+    }
+    @keyframes adFadeInScale {
+      from { opacity: 0; transform: translate(-50%, -46%) scale(0.92); }
+      to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+    }
+    .ad-center-try-now-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      background: linear-gradient(135deg, #e50914 0%, #b20710 100%);
+      color: #ffffff;
+      border: 1.5px solid rgba(255, 255, 255, 0.35);
+      padding: 14px 34px;
+      border-radius: 32px;
+      font-size: 16px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      cursor: pointer;
+      box-shadow: 0 8px 30px rgba(229, 9, 20, 0.65);
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+    .ad-center-try-now-btn:active {
+      transform: scale(0.94);
+      box-shadow: 0 4px 14px rgba(229, 9, 20, 0.4);
+    }
+    .ad-center-title {
+      font-size: 17px;
+      font-weight: 700;
+      color: #ffffff;
+      text-shadow: 0 2px 10px rgba(0, 0, 0, 0.95);
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .ad-center-domain {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      background: rgba(0, 0, 0, 0.65);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 12px;
+      padding: 3px 10px;
+      font-size: 12px;
+      color: #9ca3af;
+    }
+    .ad-bottom-info {
+      position: absolute;
+      left: 16px;
+      right: 16px;
+      bottom: calc(env(safe-area-inset-bottom, 16px) + 26px);
+      z-index: 25;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .ad-domain-pill {
+      display: inline-flex;
+      align-items: center;
+      align-self: flex-start;
+      gap: 5px;
+      background: rgba(0, 0, 0, 0.65);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 12px;
+      padding: 3px 10px;
+      font-size: 11px;
+      color: #9ca3af;
+      cursor: pointer;
+    }
+    .ad-cta-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      align-self: flex-start;
+      gap: 6px;
+      background: #e50914;
+      color: #ffffff;
+      border: none;
+      border-radius: 20px;
+      padding: 9px 22px;
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: 0.3px;
+      cursor: pointer;
+      box-shadow: 0 4px 14px rgba(229, 9, 20, 0.5);
+      transition: transform 0.15s ease;
+    }
+    .ad-cta-btn:active {
+      transform: scale(0.95);
+    }
   </style>
 </head>
 <body>
@@ -1771,12 +1959,72 @@ function buildPureHtmlShotsPage({ initialShots, apiBase, isMuted, targetShortId,
     (function() {
       var API_BASE = ${safeApiBase};
       var initialShots = ${safeShotsJson};
+      var initialAds = ${safeInitialAdsJson};
       var targetShortId = ${safeTargetId};
       var isMuted = ${safeIsMuted};
       var authToken = ${safeAuthToken};
       var currentActiveIdx = -1;
       var streamCache = {};
-      var shots = initialShots.slice();
+
+      // ─── MovieAds 9:16 Feed Management & Interleaving ───
+      var adsPool = Array.isArray(initialAds) ? initialAds.slice() : [];
+      var adCursor = 0;
+      var AD_INTERVAL = 6; // Spacing: Ads appear during scrolling but NOT again and again (every 6th item)
+
+      function getDomain(url) {
+        try {
+          var raw = String(url || '').trim();
+          if (!raw) return '';
+          var full = (raw.indexOf('http://') === 0 || raw.indexOf('https://') === 0) ? raw : ('https://' + raw);
+          var u = new URL(full);
+          return u.hostname.replace(/^www\./i, '');
+        } catch (_) {
+          return (url || '').replace(/^https?:\/\//i, '').replace(/^www\./i, '').split('/')[0];
+        }
+      }
+
+      function injectAdsIntoList(itemList, startOrganicOffset) {
+        if (!adsPool.length) return itemList;
+        var result = [];
+        var organicCount = startOrganicOffset || 0;
+        for (var i = 0; i < itemList.length; i++) {
+          var itm = itemList[i];
+          result.push(itm);
+          if (!itm.isAd) {
+            organicCount++;
+            if (organicCount % AD_INTERVAL === 0) {
+              var rawAd = adsPool[adCursor % adsPool.length];
+              adCursor++;
+              var adItem = Object.assign({}, rawAd, {
+                isAd: true,
+                subject_id: 'ad_' + (rawAd.id || ('sh_' + organicCount)),
+                id: rawAd.id || ('ad_' + organicCount)
+              });
+              result.push(adItem);
+            }
+          }
+        }
+        return result;
+      }
+
+      var shots = injectAdsIntoList(initialShots.slice(), 0);
+
+      async function refreshAdsPool() {
+        try {
+          var res = await fetch(API_BASE + '/api/ads?action=list&aspect_ratio=9:16&placement=shorts');
+          var data = await res.json();
+          if (data && Array.isArray(data.ads) && data.ads.length > 0) {
+            adsPool = data.ads;
+            var hasAnyAd = shots.some(function(s) { return s.isAd; });
+            if (!hasAnyAd && shots.length >= AD_INTERVAL) {
+              shots = injectAdsIntoList(shots, 0);
+              renderFeed();
+            }
+          }
+        } catch (_) {}
+      }
+      refreshAdsPool();
+
       var feed = document.getElementById('feed');
       var muteBtn = document.getElementById('muteBtn');
       var muteIcon = document.getElementById('muteIcon');
@@ -1842,7 +2090,8 @@ function buildPureHtmlShotsPage({ initialShots, apiBase, isMuted, targetShortId,
 
       async function fetchLikesForShots(shotList) {
         if (!shotList || shotList.length === 0) return;
-        var ids = shotList.map(function(s) { return String(s.subject_id || s.id); });
+        var ids = shotList.filter(function(s) { return !s.isAd; }).map(function(s) { return String(s.subject_id || s.id); });
+        if (ids.length === 0) return;
         try {
           var headers = {};
           if (authToken) {
@@ -1884,9 +2133,211 @@ function buildPureHtmlShotsPage({ initialShots, apiBase, isMuted, targetShortId,
         } catch (e) {
           console.warn('Batch likes fetch error:', e);
         }
+      function createAdSlideElement(item, idx) {
+        var isVid = item.media_type === 'video' || Boolean(item.video_url);
+        var domain = getDomain(item.target_url);
+        var skipSec = Number(item.skip_seconds) || 5;
+
+        var slide = document.createElement('div');
+        slide.className = 'slide ad-slide';
+        slide.dataset.index = idx;
+        slide.dataset.id = item.id;
+        slide.dataset.isAd = 'true';
+
+        var mediaHtml = isVid
+          ? '<video class="player" playsinline webkit-playsinline preload="auto" src="' + (item.video_url || '') + '" poster="' + (item.poster_url || '') + '"></video>'
+          : '<img class="ad-poster-img" src="' + (item.poster_url || '') + '" alt="' + (item.name || '') + '" />';
+
+        slide.innerHTML =
+          '<img class="ambient-backdrop" src="' + (item.poster_url || '') + '" alt="" />' +
+          '<div class="stage">' +
+            mediaHtml +
+            '<div class="gradient-overlay"></div>' +
+            '<div class="buffer-spinner"></div>' +
+            '<div class="ad-top-bar">' +
+              '<div class="ad-badge">' +
+                '<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M18 11V9l-4-4H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2l4 4V7l-4 4z"/></svg>' +
+                '<span>SPONSORED ' + (isVid ? 'VIDEO' : 'AD') + '</span>' +
+              '</div>' +
+              '<button class="ad-skip-btn disabled" aria-label="Skip">' +
+                '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>' +
+                '<span class="skip-btn-text">Ad · Skip in ' + skipSec + 's</span>' +
+              '</button>' +
+            '</div>' +
+            '<div class="ad-ended-center-box" style="display: none;">' +
+              '<button class="ad-center-try-now-btn">' +
+                '<span>Try Now</span>' +
+                '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="7" y1="17" x2="17" y2="7"></line><polyline points="7 7 17 7 17 17"></polyline></svg>' +
+              '</button>' +
+              '<div class="ad-center-title">' + (item.name || 'Sponsored Promotion') + '</div>' +
+              (domain ? ('<div class="ad-center-domain"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg><span>' + domain + '</span></div>') : '') +
+            '</div>' +
+            '<div class="ad-bottom-info">' +
+              (domain ? ('<div class="ad-domain-pill"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1 4-10z"></path></svg><span>' + domain + '</span></div>') : '') +
+              '<div class="shot-title">' + (item.name || '') + '</div>' +
+              '<button class="ad-cta-btn">' +
+                '<span>Get Started</span>' +
+                '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>' +
+              '</button>' +
+            '</div>' +
+            (isVid ? '<div class="progress-bar-track"><div class="progress-bar-fill"></div></div>' : '') +
+          '</div>';
+
+        setupAdSlideEvents(slide, item, idx);
+        return slide;
+      }
+
+      function setupAdSlideEvents(slide, item, idx) {
+        var video = slide.querySelector('video.player');
+        var poster = slide.querySelector('.ad-poster-img');
+        var spinner = slide.querySelector('.buffer-spinner');
+        var endedBox = slide.querySelector('.ad-ended-center-box');
+        var skipBtn = slide.querySelector('.ad-skip-btn');
+        var skipText = slide.querySelector('.skip-btn-text');
+        var ctaBtn = slide.querySelector('.ad-cta-btn');
+        var centerBtn = slide.querySelector('.ad-center-try-now-btn');
+        var domainPill = slide.querySelector('.ad-domain-pill');
+        var progressFill = slide.querySelector('.progress-bar-fill');
+
+        var initialSec = Number(item.skip_seconds) || 5;
+        var remaining = initialSec;
+        var canSkip = false;
+        var skipTimer = null;
+
+        function openAd() {
+          if (item.id) {
+            try {
+              fetch(API_BASE + '/api/ads/click/' + encodeURIComponent(item.id)).catch(function() {});
+            } catch (_) {}
+          }
+          postToNative({ type: 'open-ad', ad: item });
+          var target = item.target_url || '';
+          if (target) {
+            var fullUrl = (target.indexOf('http://') === 0 || target.indexOf('https://') === 0) ? target : ('https://' + target);
+            try { window.open(fullUrl, '_blank'); } catch (_) {}
+          }
+        }
+
+        if (ctaBtn) {
+          ctaBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            openAd();
+          });
+        }
+        if (centerBtn) {
+          centerBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            openAd();
+          });
+        }
+        if (domainPill) {
+          domainPill.addEventListener('click', function(e) {
+            e.stopPropagation();
+            openAd();
+          });
+        }
+        if (poster) {
+          poster.addEventListener('click', function(e) {
+            e.stopPropagation();
+            openAd();
+          });
+        }
+
+        function unlockSkip() {
+          canSkip = true;
+          if (skipBtn) {
+            skipBtn.classList.remove('disabled');
+            skipBtn.classList.add('active');
+            skipBtn.innerHTML = '<span>Skip Ad</span><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>';
+          }
+        }
+
+        function startSkipCountdown() {
+          if (canSkip) return;
+          if (remaining <= 0) {
+            unlockSkip();
+            return;
+          }
+          if (skipTimer) clearInterval(skipTimer);
+          skipTimer = setInterval(function() {
+            remaining--;
+            if (remaining <= 0) {
+              clearInterval(skipTimer);
+              unlockSkip();
+            } else if (skipText) {
+              skipText.textContent = 'Ad · Skip in ' + remaining + 's';
+            }
+          }, 1000);
+        }
+
+        function stopSkipCountdown() {
+          if (skipTimer) {
+            clearInterval(skipTimer);
+            skipTimer = null;
+          }
+        }
+
+        slide._startSkipCountdown = startSkipCountdown;
+        slide._stopSkipCountdown = stopSkipCountdown;
+
+        if (skipBtn) {
+          skipBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            if (!canSkip) return;
+            if (video) {
+              video.pause();
+            }
+            var nextSlide = feed.children[idx + 1];
+            if (nextSlide) {
+              nextSlide.scrollIntoView({ behavior: 'smooth' });
+            }
+          });
+        }
+
+        if (video) {
+          video.loop = false; // Never replay automatically
+
+          video.addEventListener('playing', function() {
+            if (spinner) spinner.classList.remove('active');
+          });
+
+          video.addEventListener('timeupdate', function() {
+            if (spinner && video.currentTime > 0) spinner.classList.remove('active');
+            if (progressFill && video.duration > 0) {
+              var pct = (video.currentTime / video.duration) * 100;
+              progressFill.style.width = pct + '%';
+            }
+          });
+
+          // Video completion: blur video, show Try Now button in center, DONT play again
+          video.addEventListener('ended', function() {
+            item._ended = true;
+            video.pause();
+            video.classList.add('video-blurred');
+            if (endedBox) endedBox.style.display = 'flex';
+            unlockSkip();
+          });
+
+          video.addEventListener('click', function(e) {
+            e.stopPropagation();
+            if (item._ended) {
+              // Video has completed: do not restart, open ad instead!
+              openAd();
+              return;
+            }
+            if (video.paused) {
+              video.play().catch(function() {});
+            } else {
+              video.pause();
+            }
+          });
+        }
       }
 
       function createSlideElement(item, idx) {
+        if (item.isAd) {
+          return createAdSlideElement(item, idx);
+        }
         var isSeries = Boolean(item.isSeries);
         var supportsEpisodes = isSeries && (item.total_episodes > 1 || item.episodes_count > 1);
         item.currentEp = supportsEpisodes ? (item.ep || 1) : 0;
@@ -2326,6 +2777,9 @@ function buildPureHtmlShotsPage({ initialShots, apiBase, isMuted, targetShortId,
             if (oldVid) {
               oldVid.pause();
             }
+            if (typeof oldSlide._stopSkipCountdown === 'function') {
+              oldSlide._stopSkipCountdown();
+            }
           }
         }
         currentActiveIdx = idx;
@@ -2369,11 +2823,52 @@ function buildPureHtmlShotsPage({ initialShots, apiBase, isMuted, targetShortId,
         return null;
       }
 
+      function playAdSlide(slide, item, idx) {
+        var video = slide.querySelector('video.player');
+        var spinner = slide.querySelector('.buffer-spinner');
+        if (spinner) spinner.classList.remove('active');
+
+        // Impression tracking (once per ad session)
+        if (!item._impressionSent && item.id) {
+          item._impressionSent = true;
+          try {
+            fetch(API_BASE + '/api/ads/impression/' + encodeURIComponent(item.id), { method: 'POST' }).catch(function() {});
+          } catch (_) {}
+          postToNative({ type: 'ad-impression', ad: item });
+        }
+
+        // Start skip countdown timer
+        if (typeof slide._startSkipCountdown === 'function') {
+          slide._startSkipCountdown();
+        }
+
+        // Play video if not ended yet
+        if (video && item.video_url && !item._ended) {
+          video.muted = isMuted;
+          video.loop = false;
+          var p = video.play();
+          if (p && typeof p.then === 'function') {
+            p.catch(function(err) {
+              console.warn('Ad autoplay failed, retrying muted:', err);
+              video.muted = true;
+              isMuted = true;
+              updateMuteIcon();
+              video.play().catch(function() {});
+            });
+          }
+        }
+      }
+
       async function playSlide(idx) {
         var slide = feed.children[idx];
         if (!slide) return;
         var item = shots[idx];
         if (!item) return;
+
+        if (item.isAd) {
+          playAdSlide(slide, item, idx);
+          return;
+        }
 
         var video = slide.querySelector('video.player');
         var poster = slide.querySelector('.poster-img');
@@ -2445,10 +2940,11 @@ function buildPureHtmlShotsPage({ initialShots, apiBase, isMuted, targetShortId,
           if (data && Array.isArray(data.items) && data.items.length > 0) {
             var existingIds = new Set(shots.map(function(s) { return String(s.subject_id || s.id); }));
             var newItems = data.items.filter(function(s) { return !existingIds.has(String(s.subject_id || s.id)); });
-            for (var j = 0; j < newItems.length; j++) {
+            var interleaved = injectAdsIntoList(newItems, shots.length);
+            for (var j = 0; j < interleaved.length; j++) {
               var newIdx = shots.length;
-              shots.push(newItems[j]);
-              var newSlide = createSlideElement(newItems[j], newIdx);
+              shots.push(interleaved[j]);
+              var newSlide = createSlideElement(interleaved[j], newIdx);
               feed.appendChild(newSlide);
               observer.observe(newSlide);
             }
@@ -2539,18 +3035,33 @@ function ShotsFeedView({
 
   // Generate the standalone pure HTML/CSS/JS page
   useEffect(() => {
-    const apiBase = Platform.OS === 'web' ? '' : 'https://mws.wallpaperdomain.xyz';
-    const rankedShots = typeof rankShotsFeed === 'function'
-      ? rankShotsFeed(INITIAL_SHOTS, null, new Set(), Date.now() % 100000)
-      : INITIAL_SHOTS;
-    const html = buildPureHtmlShotsPage({
-      initialShots: rankedShots,
-      apiBase,
-      isMuted: Platform.OS === 'web',
-      targetShortId,
-      authToken: authAccessToken || '',
-    });
-    setShotsHtml(html);
+    let isCancelled = false;
+    async function initFeed() {
+      const apiBase = Platform.OS === 'web' ? '' : 'https://mws.wallpaperdomain.xyz';
+      const rankedShots = typeof rankShotsFeed === 'function'
+        ? rankShotsFeed(INITIAL_SHOTS, null, new Set(), Date.now() % 100000)
+        : INITIAL_SHOTS;
+
+      let shortsAds = [];
+      try {
+        shortsAds = await fetchShortsAds();
+      } catch (_) {}
+
+      if (isCancelled) return;
+
+      const html = buildPureHtmlShotsPage({
+        initialShots: rankedShots,
+        initialAds: shortsAds,
+        apiBase,
+        isMuted: Platform.OS === 'web',
+        targetShortId,
+        authToken: authAccessToken || '',
+      });
+      setShotsHtml(html);
+    }
+
+    initFeed();
+    return () => { isCancelled = true; };
   }, [targetShortId, authAccessToken]);
 
   // Tab switching: pause video when moving away from Shots, resume when returning
@@ -2585,6 +3096,16 @@ function ShotsFeedView({
       showToast?.(data.message);
     } else if (data.type === 'haptic') {
       triggerHaptic?.(data.style || 'selection');
+    } else if (data.type === 'open-ad' && data.ad) {
+      triggerHaptic?.('selection');
+      recordClick(data.ad);
+      const target = data.ad.target_url || '';
+      if (target) {
+        const fullUrl = target.startsWith('http://') || target.startsWith('https://') ? target : `https://${target}`;
+        Linking.openURL(fullUrl).catch(() => {});
+      }
+    } else if (data.type === 'ad-impression' && data.ad) {
+      recordImpression(data.ad);
     } else if (data.type === 'active-short') {
       if (Platform.OS === 'web' && typeof window !== 'undefined' && window.history?.replaceState && data.slug) {
         try {

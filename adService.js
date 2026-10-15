@@ -32,15 +32,23 @@ export function getCleanDomain(url) {
 }
 
 /**
- * Fetch a random active 16:9 ad for player display
+ * Fetch a random active ad for player or shorts display
+ * @param {Object} options - { format: '16:9' | '9:16', placement: 'player' | 'shorts', mediaType: 'video' | 'image' }
  */
-export async function fetchRandomAd() {
+export async function fetchRandomAd(options = {}) {
+  const { format = '16:9', placement = 'player', mediaType = '' } = options;
   try {
+    const params = new URLSearchParams();
+    if (format) params.set('aspect_ratio', format);
+    if (placement) params.set('placement', placement);
+    if (mediaType) params.set('media_type', mediaType);
+    const qs = params.toString() ? `?${params.toString()}` : '';
+
     // On web or when proxy is available, use server /api/ads proxy to protect secret key
     const useProxy = Platform.OS === 'web' || !DIRECT_ADS_API;
     const url = useProxy
-      ? `${API_BASE}/api/ads`
-      : `${DIRECT_ADS_API}/api/v1/ads/random`;
+      ? `${API_BASE}/api/ads${qs}`
+      : `${DIRECT_ADS_API}/api/v1/ads/random${qs}`;
 
     const headers = { Accept: 'application/json' };
     if (!useProxy && DIRECT_ADS_KEY) {
@@ -62,13 +70,37 @@ export async function fetchRandomAd() {
     }
 
     const data = await res.json();
-    if (data && data.status === 'success' && data.ad && data.ad.poster_url) {
+    if (data && data.status === 'success' && data.ad && (data.ad.video_url || data.ad.poster_url)) {
       return data.ad;
     }
     return null;
   } catch (err) {
     console.warn('[AdService] Standby notification:', err?.message);
     return null;
+  }
+}
+
+/**
+ * Fetch active vertical 9:16 ads for Movieflix Shorts feed
+ */
+export async function fetchShortsAds() {
+  try {
+    const useProxy = Platform.OS === 'web' || !DIRECT_ADS_API;
+    const url = useProxy
+      ? `${API_BASE}/api/ads?action=list&aspect_ratio=9:16&placement=shorts`
+      : `${DIRECT_ADS_API}/api/v1/ads?aspect_ratio=9:16&placement=shorts`;
+
+    const headers = { Accept: 'application/json' };
+    if (!useProxy && DIRECT_ADS_KEY) {
+      headers['X-Ad-Secret-Key'] = DIRECT_ADS_KEY;
+    }
+
+    const res = await fetch(url, { method: 'GET', headers });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data.ads) ? data.ads : [];
+  } catch {
+    return [];
   }
 }
 
