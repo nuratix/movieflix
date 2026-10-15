@@ -15,7 +15,9 @@
         "gradleCommand": ":app:assembleRelease"
       },
       "env": {
-        "EXPO_PUBLIC_API_BASE": "https://mws.wallpaperdomain.xyz"
+        "EXPO_PUBLIC_API_BASE": "https://mws.wallpaperdomain.xyz",
+        "EXPO_PUBLIC_ADS_API_URL": "https://ads.wallpaperdomain.xyz",
+        "EXPO_PUBLIC_ADS_SECRET_KEY": "mf_ad_sec_89a31bc09e"
       }
     },
     "production": {
@@ -23,7 +25,9 @@
         "buildType": "app-bundle"
       },
       "env": {
-        "EXPO_PUBLIC_API_BASE": "https://mws.wallpaperdomain.xyz"
+        "EXPO_PUBLIC_API_BASE": "https://mws.wallpaperdomain.xyz",
+        "EXPO_PUBLIC_ADS_API_URL": "https://ads.wallpaperdomain.xyz",
+        "EXPO_PUBLIC_ADS_SECRET_KEY": "mf_ad_sec_89a31bc09e"
       }
     }
   },
