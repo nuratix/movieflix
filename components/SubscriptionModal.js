@@ -96,8 +96,8 @@ export default function SubscriptionModal({
 
       if (result.invoiceUrl) {
         if (Platform.OS === 'web' && typeof window !== 'undefined') {
-          // Open NOWPayments hosted checkout
-          window.open(result.invoiceUrl, '_blank');
+          // Redirect directly to NOWPayments hosted checkout website
+          window.location.href = result.invoiceUrl;
         } else {
           Linking.openURL(result.invoiceUrl).catch(() => {});
         }

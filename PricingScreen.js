@@ -79,12 +79,12 @@ export default function PricingScreen({
     try {
       const res = await createSubscriptionInvoice(selectedPlanId, authAccessToken);
       if (res.invoiceUrl) {
-        if (isWeb) {
-          window.open(res.invoiceUrl, '_blank');
+        setSuccessMessage('Redirecting to NOWPayments hosted checkout...');
+        if (isWeb && typeof window !== 'undefined') {
+          window.location.href = res.invoiceUrl;
         } else {
           await Linking.openURL(res.invoiceUrl);
         }
-        setSuccessMessage('Payment page opened in browser! Complete crypto payment to activate Pro.');
       } else {
         setErrorMessage(res.error || 'Failed to generate crypto payment invoice.');
       }
@@ -95,31 +95,34 @@ export default function PricingScreen({
     }
   };
 
-  const handleSimulatePayment = async () => {
+  const handleSandboxRedirect = async () => {
     setErrorMessage('');
     setSuccessMessage('');
+
+    if (!authUser || !authAccessToken) {
+      if (onOpenAuth) {
+        onOpenAuth('login');
+      } else {
+        setErrorMessage('Please sign in or create an account to test Movieflix Pro payment.');
+      }
+      return;
+    }
+
     setSimulating(true);
     try {
-      const res = await simulateSandboxPayment(
-        selectedPlanId,
-        authAccessToken,
-        authUser?.email || authUser?.sub || 'test_user'
-      );
-      if (res.success && res.is_premium) {
-        setSuccessMessage('🎉 Test payment simulated! Movieflix Pro is now ACTIVE in DynamoDB.');
-        if (onSubscriptionUpdated) {
-          onSubscriptionUpdated({
-            is_premium: true,
-            plan: res.plan,
-            expires_at: res.expiresAt,
-            days_left: selectedPlanId === '6_months' ? 180 : selectedPlanId === '3_months' ? 90 : 30,
-          });
+      const res = await createSubscriptionInvoice(selectedPlanId, authAccessToken);
+      if (res.invoiceUrl) {
+        setSuccessMessage('Redirecting to NOWPayments payment website...');
+        if (isWeb && typeof window !== 'undefined') {
+          window.location.href = res.invoiceUrl;
+        } else {
+          await Linking.openURL(res.invoiceUrl);
         }
       } else {
-        setErrorMessage(res.error || 'Sandbox simulation failed.');
+        setErrorMessage(res.error || 'Failed to generate payment invoice.');
       }
     } catch (err) {
-      setErrorMessage(err.message || 'Sandbox simulation error.');
+      setErrorMessage(err.message || 'Payment redirection failed.');
     } finally {
       setSimulating(false);
     }
@@ -409,7 +412,7 @@ export default function PricingScreen({
         {/* ─── INSTANT TEST SIMULATION BUTTON (FOR TEST MODE) ─── */}
         <TouchableOpacity
           style={styles.sandboxSimulateBtn}
-          onPress={handleSimulatePayment}
+          onPress={handleSandboxRedirect}
           disabled={simulating || loadingPay}
           activeOpacity={0.8}
         >
@@ -417,9 +420,9 @@ export default function PricingScreen({
             <ActivityIndicator size="small" color="#e50914" />
           ) : (
             <View style={styles.sandboxSimulateInner}>
-              <Feather name="play-circle" size={15} color="#e50914" style={{ marginRight: 8 }} />
+              <Feather name="external-link" size={15} color="#e50914" style={{ marginRight: 8 }} />
               <Text style={styles.sandboxSimulateText}>
-                Test Instant Activation (Sandbox Simulation)
+                Open NOWPayments Sandbox Checkout
               </Text>
             </View>
           )}

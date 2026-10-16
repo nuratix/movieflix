@@ -576,11 +576,27 @@ export default async function handler(req, res) {
         );
 
         const result = authRes.AuthenticationResult;
+        let userInfo = null;
+        try {
+          if (result.IdToken) {
+            const parts = result.IdToken.split('.');
+            if (parts.length === 3) {
+              const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));
+              const email = (payload.email || payload['cognito:username'] || payload.sub || '').toLowerCase();
+              if (email) {
+                userInfo = { id: email, email };
+              }
+            }
+          }
+        } catch (_) {}
+
         return res.status(200).json({
           status: 'success',
           access_token: result.AccessToken,
+          refresh_token: result.RefreshToken || refreshToken,
           id_token: result.IdToken,
           expires_in: result.ExpiresIn || 3600,
+          user: userInfo,
         });
       } catch (err) {
         console.error('AWS Cognito Refresh Error:', err);

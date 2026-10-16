@@ -302,19 +302,18 @@ export default async function handler(req, res) {
             cancel_url: cancelUrl,
           };
 
-          let npRes = await fetch(`${NOWPAYMENTS_BASE_URL}/invoice`, {
-            method: 'POST',
-            headers: {
-              'x-api-key': NOWPAYMENTS_API_KEY,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(invoicePayload),
-          });
+          const candidateEndpoints = [
+            'https://api.nowpayments.io/v1/invoice',
+            'https://api-sandbox.nowpayments.io/v1/invoice',
+          ];
 
-          // Intelligent endpoint fallback: if sandbox rejected the key with 403, retry on live endpoint
-          if (!npRes.ok && npRes.status === 403 && NOWPAYMENTS_BASE_URL.includes('sandbox')) {
+          let npRes = null;
+          let lastErrStatus = 500;
+          let lastErrText = '';
+
+          for (const endpoint of candidateEndpoints) {
             try {
-              const liveRes = await fetch('https://api.nowpayments.io/v1/invoice', {
+              const candidateRes = await fetch(endpoint, {
                 method: 'POST',
                 headers: {
                   'x-api-key': NOWPAYMENTS_API_KEY,
@@ -322,18 +321,23 @@ export default async function handler(req, res) {
                 },
                 body: JSON.stringify(invoicePayload),
               });
-              if (liveRes.ok) {
-                npRes = liveRes;
+              if (candidateRes.ok) {
+                npRes = candidateRes;
+                break;
+              } else {
+                lastErrStatus = candidateRes.status;
+                lastErrText = await candidateRes.text().catch(() => '');
               }
-            } catch (_) {}
+            } catch (err) {
+              lastErrText = err?.message || 'Network error';
+            }
           }
 
-          if (!npRes.ok) {
-            const errText = await npRes.text().catch(() => '');
-            console.error('[NOWPayments Invoice Error]', npRes.status, errText);
+          if (!npRes || !npRes.ok) {
+            console.error('[NOWPayments Invoice Error]', lastErrStatus, lastErrText);
             return res.status(502).json({
               error: 'Failed to create payment invoice with NOWPayments.',
-              detail: errText,
+              detail: lastErrText,
             });
           }
 

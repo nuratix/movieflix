@@ -36,7 +36,9 @@ export default function PlayerAdOverlay({
   const insets = useSafeAreaInsets();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
 
-  const isVideo = ad?.media_type === 'video' || Boolean(ad?.video_url);
+  const isVideo = (ad?.media_type === 'video' || Boolean(ad?.video_url)) && !mediaError;
+  const [mediaError, setMediaError] = useState(false);
+  const [isMuted, setIsMuted] = useState(true);
   const [remainingSeconds, setRemainingSeconds] = useState(
     Number(ad?.skip_seconds) || initialSkipSeconds
   );
@@ -88,8 +90,15 @@ export default function PlayerAdOverlay({
       setIsVideoEnded(true);
       try { nativePlayer.pause(); } catch (_) {}
     });
+    const statusSub = nativePlayer.addListener?.('statusChange', (status) => {
+      if (status?.status === 'error') {
+        console.warn('[PlayerAdOverlay] Native ad video playback error, switching to poster');
+        setMediaError(true);
+      }
+    });
     return () => {
       try { endSub?.remove?.(); } catch (_) {}
+      try { statusSub?.remove?.(); } catch (_) {}
     };
   }, [nativePlayer]);
 
@@ -127,6 +136,9 @@ export default function PlayerAdOverlay({
 
   if (!ad) return null;
 
+  const fallbackPoster = 'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=crop&w=1920&q=80';
+  const effectivePoster = ad.poster_url || fallbackPoster;
+
   return (
     <Animated.View
       style={[
@@ -139,14 +151,15 @@ export default function PlayerAdOverlay({
       <TouchableWithoutFeedback onPress={handlePressAd}>
         <View style={StyleSheet.absoluteFillObject}>
           {isVideo && ad.video_url ? (
-            // Fullscreen Video Player
+            // Fullscreen Video Player with muted autoplay so browsers NEVER block it!
             Platform.OS === 'web' ? (
               <video
                 ref={webVideoRef}
                 src={ad.video_url}
-                poster={ad.poster_url || ''}
+                poster={effectivePoster}
                 autoPlay
                 playsInline
+                muted={isMuted}
                 controls={false}
                 style={{
                   position: 'absolute',
@@ -158,6 +171,10 @@ export default function PlayerAdOverlay({
                   display: 'block',
                   filter: isVideoEnded ? 'blur(22px) brightness(0.45)' : 'none',
                   transition: 'filter 0.45s ease',
+                }}
+                onError={() => {
+                  console.warn('[PlayerAdOverlay] HTML5 video error, falling back to poster');
+                  setMediaError(true);
                 }}
                 onEnded={() => setIsVideoEnded(true)}
               />
@@ -175,7 +192,7 @@ export default function PlayerAdOverlay({
           ) : (
             // Fullscreen Poster Image
             <ExpoImage
-              source={{ uri: ad.poster_url }}
+              source={{ uri: effectivePoster }}
               style={StyleSheet.absoluteFill}
               contentFit="cover"
               transition={200}
@@ -233,6 +250,22 @@ export default function PlayerAdOverlay({
               {isVideo ? 'SPONSORED VIDEO' : 'SPONSORED'}
             </Text>
           </View>
+          {Boolean(isVideo && Platform.OS === 'web') && (
+            <TouchableOpacity
+              style={styles.muteBtn}
+              onPress={() => {
+                const nextMuted = !isMuted;
+                setIsMuted(nextMuted);
+                if (webVideoRef.current) {
+                  webVideoRef.current.muted = nextMuted;
+                }
+              }}
+              activeOpacity={0.7}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Feather name={isMuted ? "volume-x" : "volume-2"} size={16} color="#FFFFFF" />
+            </TouchableOpacity>
+          )}
         </View>
 
         <View style={styles.topBarRightGroup}>
@@ -501,5 +534,16 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 6,
     maxWidth: '85%',
+  },
+  muteBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 8,
   },
 });

@@ -3479,29 +3479,48 @@ function ReelApp() {
         }
       }
 
-      // 2. Load saved session
+      // 2. Load saved session with unbreakable persistence
       try {
         const saved = await AsyncStorage.getItem('@mf_session');
         if (saved) {
-          const { user, accessToken, refreshToken } = JSON.parse(saved);
-          // Try to refresh immediately since access token may be expired
-          const refreshed = await _authRefresh(refreshToken, true);
-          if (refreshed) {
-            setAuthUser(refreshed.user);
-            setAuthAccessToken(refreshed.access_token);
-            setAuthRefreshToken(refreshed.refresh_token);
-            _authToken = refreshed.access_token;
-            await AsyncStorage.setItem('@mf_session', JSON.stringify({
-              user: refreshed.user,
-              accessToken: refreshed.access_token,
-              refreshToken: refreshed.refresh_token,
-            }));
-          } else {
-            // Fallback: use stored token as-is
-            setAuthUser(user);
-            setAuthAccessToken(accessToken);
-            setAuthRefreshToken(refreshToken);
-            _authToken = accessToken;
+          const parsed = JSON.parse(saved);
+          const storedUser = parsed?.user;
+          const storedAccessToken = parsed?.accessToken;
+          const storedRefreshToken = parsed?.refreshToken;
+
+          if (storedUser) {
+            setAuthUser(storedUser);
+            authUserRef.current = storedUser;
+            if (storedAccessToken) {
+              setAuthAccessToken(storedAccessToken);
+              _authToken = storedAccessToken;
+            }
+            if (storedRefreshToken) {
+              setAuthRefreshToken(storedRefreshToken);
+            }
+          }
+
+          // In background: silently refresh access token without clearing user if refresh fails
+          if (storedRefreshToken) {
+            try {
+              const refreshed = await _authRefresh(storedRefreshToken, true);
+              if (refreshed && refreshed.access_token) {
+                const activeUser = refreshed.user || storedUser;
+                const activeRefresh = refreshed.refresh_token || storedRefreshToken;
+                setAuthUser(activeUser);
+                authUserRef.current = activeUser;
+                setAuthAccessToken(refreshed.access_token);
+                setAuthRefreshToken(activeRefresh);
+                _authToken = refreshed.access_token;
+                await AsyncStorage.setItem('@mf_session', JSON.stringify({
+                  user: activeUser,
+                  accessToken: refreshed.access_token,
+                  refreshToken: activeRefresh,
+                }));
+              }
+            } catch (refErr) {
+              console.log('[Auth] Session background refresh note:', refErr?.message);
+            }
           }
         }
       } catch (_) {}
@@ -3514,16 +3533,21 @@ function ReelApp() {
   useEffect(() => {
     if (!authRefreshToken) return;
     const interval = setInterval(async () => {
-      const refreshed = await _authRefresh(authRefreshToken, true);
-      if (refreshed) {
-        setAuthAccessToken(refreshed.access_token);
-        setAuthRefreshToken(refreshed.refresh_token);
-        await AsyncStorage.setItem('@mf_session', JSON.stringify({
-          user: authUser,
-          accessToken: refreshed.access_token,
-          refreshToken: refreshed.refresh_token,
-        }));
-      }
+      try {
+        const refreshed = await _authRefresh(authRefreshToken, true);
+        if (refreshed && refreshed.access_token) {
+          const activeUser = authUserRef.current || authUser;
+          const activeRefresh = refreshed.refresh_token || authRefreshToken;
+          setAuthAccessToken(refreshed.access_token);
+          setAuthRefreshToken(activeRefresh);
+          _authToken = refreshed.access_token;
+          await AsyncStorage.setItem('@mf_session', JSON.stringify({
+            user: activeUser,
+            accessToken: refreshed.access_token,
+            refreshToken: activeRefresh,
+          }));
+        }
+      } catch (_) {}
     }, 50 * 60 * 1000);
     return () => clearInterval(interval);
   }, [authRefreshToken, authUser]);
@@ -3724,6 +3748,7 @@ function ReelApp() {
       }
 
       setAuthUser(data.user);
+      authUserRef.current = data.user;
       setAuthAccessToken(data.access_token);
       setAuthRefreshToken(data.refresh_token);
       _authToken = data.access_token;
@@ -4696,13 +4721,25 @@ function ReelApp() {
     if (!rawMovie) return;
     const movie = normalizeMovie(rawMovie);
 
-    // Auth gate: redirect to /auth page if not logged in
+    // Session check: ensure authUserRef is hydrated if stored in AsyncStorage
     if (!authUserRef.current) {
-      pendingPlayRef.current = {
-        rawMovie, se, ep, seriesFlag, resumeTime, offlineVideoUrl, offlineSubUrl, syncHistory,
-      };
-      openAuthPage('login');
-      return;
+      try {
+        const savedSess = await AsyncStorage.getItem('@mf_session');
+        if (savedSess) {
+          const parsed = JSON.parse(savedSess);
+          if (parsed?.user) {
+            setAuthUser(parsed.user);
+            authUserRef.current = parsed.user;
+            if (parsed.accessToken) {
+              setAuthAccessToken(parsed.accessToken);
+              _authToken = parsed.accessToken;
+            }
+            if (parsed.refreshToken) {
+              setAuthRefreshToken(parsed.refreshToken);
+            }
+          }
+        }
+      } catch (_) {}
     }
 
     if (!offlineVideoUrl && isOffline) {
@@ -4828,23 +4865,32 @@ function ReelApp() {
       if (validSources.length > 0) {
         setAvailableStreams(validSources);
         const isUserPro = Boolean(isPremium);
+        const matchRes = (resName) => (s) => {
+          const r = String(s?.resolution || '').toLowerCase();
+          return r === resName || r === `${resName}p` || r.includes(resName);
+        };
+
         let preferred = null;
         if (isUserPro) {
           // Pro user: highest quality available (4K / 1080p)
-          preferred = validSources.find(s => s.resolution === '4k' || s.resolution === '2160p') ||
-                            validSources.find(s => s.resolution === '1080p') ||
-                            validSources.find(s => s.resolution === '720p') ||
-                            validSources[0];
+          preferred = validSources.find(matchRes('4k')) ||
+                      validSources.find(matchRes('2160')) ||
+                      validSources.find(matchRes('1080')) ||
+                      validSources.find(matchRes('720')) ||
+                      validSources[0];
         } else {
           // Basic user: capped to 720p maximum
-          preferred = validSources.find(s => s.resolution === '720p') ||
-                            validSources.find(s => s.resolution === '480p') ||
-                            validSources.find(s => s.resolution === '360p') ||
-                            validSources.find(s => !isPremiumResolution(s.resolution)) ||
-                            validSources[0];
+          preferred = validSources.find(matchRes('720')) ||
+                      validSources.find(matchRes('480')) ||
+                      validSources.find(matchRes('360')) ||
+                      validSources.find(s => !isPremiumResolution(s.resolution)) ||
+                      validSources[0];
         }
-        setActiveStreamUrl(preferred.url);
-        setActiveResolution(preferred.resolution);
+        if (!preferred && validSources.length > 0) {
+          preferred = validSources[0];
+        }
+        setActiveStreamUrl(preferred ? preferred.url : '');
+        setActiveResolution(preferred ? preferred.resolution : '720p');
         setLoadingStream(false);
       } else {
         setStreamError(
@@ -6018,7 +6064,16 @@ function ReelApp() {
 
     // 2. Unauthenticated user:
     if (!authUser) {
-      // If user tapped "Get Started" or "Sign In", display the AuthScreen:
+      // If user has not seen welcome onboarding yet, show WelcomeScreen:
+      if (!hasSeenWelcome) {
+        return (
+          <WelcomeScreen
+            onGetStarted={handleGetStarted}
+          />
+        );
+      }
+
+      // If user opened auth page, display AuthScreen with working close button:
       if (isAuthPageOpen) {
         return (
           <AuthScreen
@@ -6031,27 +6086,6 @@ function ReelApp() {
           />
         );
       }
-
-      // If user has not seen welcome onboarding yet, show WelcomeScreen:
-      if (!hasSeenWelcome) {
-        return (
-          <WelcomeScreen
-            onGetStarted={handleGetStarted}
-          />
-        );
-      }
-
-      // If user already saw welcome before, direct to AuthScreen:
-      return (
-        <AuthScreen
-          initialMode="login"
-          authError={authError}
-          authLoading={authLoading}
-          onSubmit={handleAuthSubmit}
-          onClose={() => setIsAuthPageOpen(false)}
-          onOpenPrivacy={handleOpenPrivacy}
-        />
-      );
     }
   }
 
@@ -9713,12 +9747,15 @@ function ReelCustomPlayer({
     playerStatus === 'idle' ||
     (isPlaying && currentTime === 0 && duration === 0);
 
-  // Auto-hide controls after 4 seconds
+  // Auto-hide controls after 4 seconds (ONLY when actively playing!)
   const wakeControls = () => {
     setShowControls(true);
     if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
     hideTimerRef.current = setTimeout(() => {
-      setShowControls(false);
+      // Keep controls visible if video is paused, buffering, or waiting for first user click
+      if (playerRef.current?.playing && currentTimeRef.current > 0) {
+        setShowControls(false);
+      }
     }, 4000);
   };
 
@@ -10122,6 +10159,7 @@ function ReelCustomPlayer({
         allowsPictureInPicture={true}
         startsPictureInPictureAutomatically={true}
         contentFit={contentFitMode}
+        playsInline={true}
         onPictureInPictureStart={() => {
           setIsInPiP(true);
           setShowControls(false);
@@ -10209,7 +10247,7 @@ function ReelCustomPlayer({
       )}
 
       {/* STREAM BUFFERING / FETCHING LOADER OVERLAY */}
-      {!isInPiP && !isAdShowing && isBufferingOrLoading && (
+      {!isInPiP && !isAdShowing && isBufferingOrLoading && playerStatus !== 'error' && (
         <View style={styles.playerLoaderCenteredOverlay} pointerEvents="none">
           <View style={styles.playerLoaderBox}>
             <ActivityIndicator size="large" color="#e50914" />
@@ -10218,6 +10256,33 @@ function ReelCustomPlayer({
                 ? (isSeries ? `Buffering S${currentSeason}:E${currentEpisode}...` : 'Buffering Stream...')
                 : 'Connecting stream...'}
             </Text>
+          </View>
+        </View>
+      )}
+
+      {/* STREAM ERROR RETRY OVERLAY (NEVER LEAVE SCREEN BLANK) */}
+      {!isInPiP && !isAdShowing && playerStatus === 'error' && (
+        <View style={styles.playerLoaderCenteredOverlay}>
+          <View style={styles.playerLoaderBox}>
+            <Feather name="alert-circle" size={36} color="#e50914" style={{ marginBottom: 10 }} />
+            <Text style={[styles.playerLoaderText, { color: '#ffffff', fontWeight: '700', marginBottom: 14 }]}>
+              Playback Interrupted
+            </Text>
+            <TouchableOpacity
+              style={styles.playerRetryBtn}
+              onPress={() => {
+                setPlayerStatus('loading');
+                const activePlayer = playerRef.current || player;
+                try {
+                  const src = buildVideoSource(videoUrl);
+                  activePlayer?.replace?.(src);
+                  activePlayer?.play?.();
+                } catch (_) {}
+              }}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.playerRetryBtnText}>Retry Connection</Text>
+            </TouchableOpacity>
           </View>
         </View>
       )}
