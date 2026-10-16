@@ -40,8 +40,7 @@ const CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
 
 const ALLOWED_ORIGINS = new Set([
   'https://mws.wallpaperdomain.xyz',
-  'http://mws.wallpaperdomain.xyz',
-  'https://wallpaperdomain.xyz',
+  'https://mws.wallpaperdomain.com',
   'https://netfilm.world',
   'http://localhost:3000',
   'http://localhost:8081',
@@ -50,10 +49,8 @@ const ALLOWED_ORIGINS = new Set([
 
 function setCors(req, res) {
   const origin = req.headers['origin'];
-  if (origin && (ALLOWED_ORIGINS.has(origin) || origin.includes('wallpaperdomain.xyz'))) {
+  if (origin && ALLOWED_ORIGINS.has(origin)) {
     res.setHeader('Access-Control-Allow-Origin', origin);
-  } else {
-    res.setHeader('Access-Control-Allow-Origin', '*');
   }
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS');
   res.setHeader(
@@ -239,11 +236,12 @@ export default async function handler(req, res) {
   }
 
   // 3. Verify server-side secret
-  const providerKey =
+  const providerKey = (
     process.env.MOVIEBO_API_KEY ||
     process.env.MOVIE_PROVIDER_API_KEY ||
     process.env.UPSTREAM_API_KEY ||
-    'mf_sec_900046686654_apse2_x99a7';
+    ''
+  ).trim();
 
   // 4. Parse endpoint and query parameters
   const query = req.query || (req.url ? Object.fromEntries(new URL(req.url, 'http://localhost').searchParams) : {});

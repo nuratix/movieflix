@@ -4,20 +4,22 @@
 
 import crypto from 'crypto';
 
-const RECAPTCHA_SECRET =
-  process.env.RECAPTCHA_SECRET_KEY ||
-  '6Lev_vEtAAAAAG2DdWFnxtUujMLyCZ1yNtfkKTSC';
+const RECAPTCHA_SECRET = (process.env.RECAPTCHA_SECRET_KEY || '').trim();
+const JWT_SECRET = (process.env.JWT_SECRET || '').trim();
 
-const JWT_SECRET =
-  process.env.JWT_SECRET ||
-  'movieflix-secure-recaptcha-session-salt-2026';
+const ALLOWED_ORIGINS = new Set([
+  'https://mws.wallpaperdomain.xyz',
+  'https://mws.wallpaperdomain.com',
+  'https://netfilm.world',
+  'http://localhost:3000',
+  'http://localhost:8081',
+  'http://localhost:19006',
+]);
 
 function setCors(req, res) {
   const origin = req.headers['origin'];
-  if (origin) {
+  if (origin && ALLOWED_ORIGINS.has(origin)) {
     res.setHeader('Access-Control-Allow-Origin', origin);
-  } else {
-    res.setHeader('Access-Control-Allow-Origin', '*');
   }
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
   res.setHeader(
@@ -100,6 +102,13 @@ export default async function handler(req, res) {
     return res.status(400).json({
       success: false,
       error: 'Missing reCAPTCHA token. Please complete the verification.',
+    });
+  }
+
+  if (!RECAPTCHA_SECRET) {
+    return res.status(500).json({
+      success: false,
+      error: 'Server reCAPTCHA configuration missing.',
     });
   }
 

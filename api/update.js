@@ -3,7 +3,7 @@
 // The mobile app queries this endpoint (https://mws.wallpaperdomain.xyz/api/update)
 // so no GitHub credentials or access tokens are ever bundled or exposed in client code.
 
-const GITHUB_OWNER = process.env.GITHUB_OWNER || Buffer.from('bnVyYXRpeA==', 'base64').toString('ascii');
+const GITHUB_OWNER = process.env.GITHUB_OWNER || 'nuratix';
 const GITHUB_REPO = process.env.GITHUB_REPO || 'movieflix';
 const TARGET_VERSION = '1.1.9';
 
@@ -124,7 +124,7 @@ export default async function handler(req, res) {
   }
 
   const currentVersion = (req.query?.current || TARGET_VERSION).replace(/^v/i, '');
-  const token = (process.env.GITHUB_TOKEN || Buffer.from('Z2hwX2dodEM3R2dEQWlERVVsTUV1amU0NVVoUmVmOHUzMzBmbWllWg==', 'base64').toString('ascii')).trim();
+  const token = (process.env.GITHUB_TOKEN || '').trim();
 
   try {
     const headers = {

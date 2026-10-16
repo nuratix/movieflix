@@ -4,10 +4,22 @@
 // Never exposes the private ad secret key to the client browser!
 
 const ADS_API_URL = (process.env.ADS_API_URL || 'https://ads.wallpaperdomain.xyz').replace(/\/+$/, '');
-const ADS_SECRET_KEY = (process.env.ADS_SECRET_KEY || 'mf_ad_sec_89a31bc09e').trim();
+const ADS_SECRET_KEY = (process.env.ADS_SECRET_KEY || '').trim();
+
+const ALLOWED_ORIGINS = new Set([
+  'https://mws.wallpaperdomain.xyz',
+  'https://mws.wallpaperdomain.com',
+  'https://netfilm.world',
+  'http://localhost:3000',
+  'http://localhost:8081',
+  'http://localhost:19006',
+]);
 
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  const origin = req.headers?.origin;
+  if (origin && ALLOWED_ORIGINS.has(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  }
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Ad-Secret-Key');
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');

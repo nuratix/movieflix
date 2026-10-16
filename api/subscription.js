@@ -48,20 +48,13 @@ const SUBSCRIPTIONS_TABLE = process.env.DYNAMODB_SUBSCRIPTIONS_TABLE || 'moviefl
 const ORDERS_TABLE = process.env.DYNAMODB_ORDERS_TABLE || 'movieflix_orders';
 
 // ─── NOWPayments Configuration ───────────────────────────────────────────────
-const IS_SANDBOX = process.env.NOWPAYMENTS_SANDBOX !== 'false';
+const IS_SANDBOX = process.env.NODE_ENV !== 'production' && process.env.NOWPAYMENTS_SANDBOX === 'true';
 const NOWPAYMENTS_BASE_URL = IS_SANDBOX
   ? 'https://api-sandbox.nowpayments.io/v1'
   : 'https://api.nowpayments.io/v1';
 
-const NOWPAYMENTS_API_KEY = (
-  process.env.NOWPAYMENTS_API_KEY ||
-  '47ASYWJ-ENTM4Z1-Q756XAG-KVD68S6'
-).trim();
-
-const NOWPAYMENTS_IPN_SECRET = (
-  process.env.NOWPAYMENTS_IPN_SECRET ||
-  'Gb/xa+XIOCiMcPjEClpUSFYjpl6DYMPq'
-).trim();
+const NOWPAYMENTS_API_KEY = (process.env.NOWPAYMENTS_API_KEY || '').trim();
+const NOWPAYMENTS_IPN_SECRET = (process.env.NOWPAYMENTS_IPN_SECRET || '').trim();
 
 // ─── Ad-Free Subscription Plans ──────────────────────────────────────────────
 export const SUBSCRIPTION_PLANS = {
@@ -117,23 +110,6 @@ async function authenticateUser(req, body = {}, query = {}) {
       attributes: res.UserAttributes,
     };
   } catch (err) {
-    // Decode standard Cognito JWT payload fallback
-    try {
-      const parts = token.split('.');
-      if (parts.length === 3) {
-        const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));
-        if (payload && payload.exp && payload.exp * 1000 > Date.now()) {
-          const email = (payload.email || payload['cognito:username'] || payload.sub || '').toLowerCase().trim();
-          if (email) {
-            return {
-              userId: email,
-              username: payload['cognito:username'] || email,
-              email: email,
-            };
-          }
-        }
-      }
-    } catch (_) {}
     return null;
   }
 }
@@ -157,35 +133,41 @@ export function computeIpnSignature(payload, secretKey) {
   return crypto.createHmac('sha512', secretKey).update(jsonStr).digest('hex');
 }
 
+// ─── CORS Allowlist ──────────────────────────────────────────────────────────
+const ALLOWED_ORIGINS = new Set([
+  'https://mws.wallpaperdomain.xyz',
+  'https://mws.wallpaperdomain.com',
+  'https://netfilm.world',
+  'http://localhost:8081',
+  'http://localhost:3000',
+  'http://localhost:19006',
+]);
+
 // ─── Helper: Verify NOWPayments IPN Signature ────────────────────────────────
 function verifyIpnSignature(req, payload, secretKey) {
   const receivedSig = (req.headers?.['x-nowpayments-sig'] || '').trim();
-  if (!receivedSig) return false;
+  const effectiveSecret = (secretKey || NOWPAYMENTS_IPN_SECRET || '').trim();
+  if (!receivedSig || !effectiveSecret) return false;
 
-  const candidateKeys = [
-    secretKey,
-    NOWPAYMENTS_IPN_SECRET,
-    'Gb/xa+XIOCiMcPjEClpUSFYjpl6DYMPq',
-    'mf_nowpay_sandbox_secret_99x',
-  ].filter(Boolean);
-
-  for (const key of candidateKeys) {
-    const expectedSig = computeIpnSignature(payload, key);
-    if (receivedSig.length === expectedSig.length) {
-      try {
-        if (crypto.timingSafeEqual(Buffer.from(receivedSig, 'hex'), Buffer.from(expectedSig, 'hex'))) {
-          return true;
-        }
-      } catch (_) {}
-    }
+  const expectedSig = computeIpnSignature(payload, effectiveSecret);
+  if (receivedSig.length === expectedSig.length) {
+    try {
+      if (crypto.timingSafeEqual(Buffer.from(receivedSig, 'hex'), Buffer.from(expectedSig, 'hex'))) {
+        return true;
+      }
+    } catch (_) {}
   }
   return false;
 }
 
 // ─── Handler ─────────────────────────────────────────────────────────────────
 export default async function handler(req, res) {
-  // Strict edge no-cache headers
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  // Strict edge no-cache headers and CORS
+  const origin = req.headers?.origin;
+  if (origin && ALLOWED_ORIGINS.has(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  }
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-nowpayments-sig');
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
@@ -343,7 +325,11 @@ export default async function handler(req, res) {
 
       // Call MovieAds Private Redemption API with server-side secret key
       const adsApiUrl = (process.env.ADS_API_URL || 'https://ads.wallpaperdomain.xyz').replace(/\/+$/, '');
-      const adsSecretKey = (process.env.ADS_SECRET_KEY || 'mf_ad_sec_89a31bc09e').trim();
+      const adsSecretKey = (process.env.ADS_SECRET_KEY || '').trim();
+
+      if (!adsSecretKey) {
+        return res.status(500).json({ error: 'Promo redemption service secret is not configured.' });
+      }
 
       let redeemRes;
       let redeemData;
@@ -452,17 +438,7 @@ export default async function handler(req, res) {
     // 3. CREATE INVOICE: /api/subscription?action=create_invoice
     // ─────────────────────────────────────────────────────────────────────────
     if (action === 'create_invoice' || action === 'create-invoice' || pathname.endsWith('/create-invoice')) {
-      let user = await authenticateUser(req, body, query);
-      const isSandboxParam = req.body?.isSandbox === true || req.body?.testMode === true || IS_SANDBOX;
-      const guestEmail = (body.userEmail || body.email || query.email || query.userEmail || '').trim().toLowerCase();
-      if (!user && (isSandboxParam || guestEmail)) {
-        const fallbackEmail = guestEmail || 'sandbox_test_user@gmail.com';
-        user = {
-          userId: fallbackEmail,
-          username: fallbackEmail.split('@')[0],
-          email: fallbackEmail,
-        };
-      }
+      const user = await authenticateUser(req, body, query);
       if (!user) {
         return res.status(401).json({
           error: 'Unauthorized',
@@ -768,11 +744,19 @@ export default async function handler(req, res) {
     // Allows testing the complete cryptographically signed IPN webhook in Sandbox mode
     // ─────────────────────────────────────────────────────────────────────────
     if (action === 'sandbox_simulate' || action === 'sandbox-simulate' || pathname.endsWith('/sandbox-simulate')) {
-      if (!IS_SANDBOX) {
-        return res.status(403).json({ error: 'Sandbox simulator is only available in sandbox mode.' });
+      if (process.env.NODE_ENV === 'production' || !IS_SANDBOX) {
+        return res.status(404).json({ error: 'Endpoint not found.' });
       }
 
       const user = await authenticateUser(req, body, query);
+      if (!user) {
+        return res.status(401).json({ error: 'Authentication required for sandbox testing.' });
+      }
+
+      if (!NOWPAYMENTS_IPN_SECRET) {
+        return res.status(500).json({ error: 'NOWPAYMENTS_IPN_SECRET is not configured.' });
+      }
+
       let targetOrderId = String(body.orderId || query.orderId || '').trim();
       let order = null;
 
@@ -790,8 +774,8 @@ export default async function handler(req, res) {
       if (!order) {
         const planId = String(body.planId || query.planId || '1_month').trim();
         const plan = SUBSCRIPTION_PLANS[planId] || SUBSCRIPTION_PLANS['1_month'];
-        const simulatedUserId = (user?.userId || body.userId || query.userId || 'sandbox_test_user').toLowerCase().trim();
-        const simulatedEmail = (user?.email || body.userEmail || query.userEmail || simulatedUserId).toLowerCase().trim();
+        const simulatedUserId = user.userId;
+        const simulatedEmail = user.email || user.userId;
 
         targetOrderId = `mf_ord_sim_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
         order = {
@@ -814,8 +798,8 @@ export default async function handler(req, res) {
             Item: order,
           })
         );
-      } else if (user && user.userId !== order.userId) {
-        // Verify user owns order if authenticated
+      } else if (user.userId !== order.userId) {
+        // Verify user owns order
         return res.status(403).json({ error: 'You do not own this order.' });
       }
 

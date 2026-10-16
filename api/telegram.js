@@ -21,12 +21,7 @@ try {
   }
 } catch (_) {}
 
-// ─── Environment & Clients ───────────────────────────────────────────────────
-const TELEGRAM_BOT_TOKEN = (
-  process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_BOT_TOKEN.trim().length > 10
-    ? process.env.TELEGRAM_BOT_TOKEN
-    : '8999491309:AAHhg0MQZijkr7umxN-IgcXox7NOJykuxuY'
-).trim();
+const TELEGRAM_BOT_TOKEN = (process.env.TELEGRAM_BOT_TOKEN || '').trim();
 
 const BOT_USERNAME = (
   process.env.EXPO_PUBLIC_TELEGRAM_BOT_USERNAME ||
@@ -98,11 +93,11 @@ export const SUBSCRIPTION_PLANS = {
 
 // ─── Telegram Bot API Helper ─────────────────────────────────────────────────
 async function callTelegram(method, body = {}) {
-  const token = (
-    process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_BOT_TOKEN.trim().length > 10
-      ? process.env.TELEGRAM_BOT_TOKEN
-      : '8999491309:AAHhg0MQZijkr7umxN-IgcXox7NOJykuxuY'
-  ).trim();
+  const token = (process.env.TELEGRAM_BOT_TOKEN || TELEGRAM_BOT_TOKEN || '').trim();
+  if (!token) {
+    console.error('[Telegram API] TELEGRAM_BOT_TOKEN is not configured.');
+    return { ok: false, error: 'TELEGRAM_BOT_TOKEN is not configured' };
+  }
 
   const postData = JSON.stringify(body || {});
 
@@ -293,25 +288,8 @@ async function authenticateUser(req, body = {}, query = {}) {
       email: email,
     };
   } catch (_) {
-    // JWT Payload fallback
-    try {
-      const parts = token.split('.');
-      if (parts.length === 3) {
-        const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));
-        if (payload && payload.exp && payload.exp * 1000 > Date.now()) {
-          const email = (payload.email || payload['cognito:username'] || payload.sub || '').toLowerCase().trim();
-          if (email) {
-            return {
-              userId: email,
-              username: payload['cognito:username'] || email,
-              email: email,
-            };
-          }
-        }
-      }
-    } catch (_) {}
+    return null;
   }
-  return null;
 }
 
 // ─── Helper: Get or Generate Unique 6-Digit User Account Code ─────────────────
@@ -454,9 +432,22 @@ function formatDate(isoStr) {
   }
 }
 
+const ALLOWED_ORIGINS = new Set([
+  'https://mws.wallpaperdomain.xyz',
+  'https://mws.wallpaperdomain.com',
+  'https://netfilm.world',
+  'http://localhost:3000',
+  'http://localhost:8081',
+  'http://localhost:19006',
+]);
+
 // ─── Main Handler ─────────────────────────────────────────────────────────────
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  const origin = req.headers?.origin;
+  if (origin && ALLOWED_ORIGINS.has(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  }
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 

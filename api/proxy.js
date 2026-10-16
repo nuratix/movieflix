@@ -133,6 +133,7 @@ export default async function handler(req, res) {
 
 const ALLOWED_ORIGINS = new Set([
   'https://mws.wallpaperdomain.xyz',
+  'https://mws.wallpaperdomain.com',
   'https://netfilm.world',
   'http://localhost:3000',
   'http://localhost:8081',
@@ -140,10 +141,10 @@ const ALLOWED_ORIGINS = new Set([
 ]);
 
 function getCorsOrigin(origin) {
-  if (origin) {
+  if (origin && ALLOWED_ORIGINS.has(origin)) {
     return origin;
   }
-  return '*';
+  return 'https://mws.wallpaperdomain.xyz';
 }
 
 export function extractTargetUrl(reqUrl) {

@@ -72,23 +72,6 @@ async function authenticateUser(req, body = {}, query = {}) {
       attributes: res.UserAttributes,
     };
   } catch (err) {
-    // Also support decoding payload if token is valid Cognito ID token
-    try {
-      const parts = token.split('.');
-      if (parts.length === 3) {
-        const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));
-        if (payload && payload.exp && payload.exp * 1000 > Date.now()) {
-          const email = (payload.email || payload['cognito:username'] || payload.sub || '').toLowerCase();
-          if (email) {
-            return {
-              userId: email,
-              username: payload['cognito:username'] || email,
-              email: email,
-            };
-          }
-        }
-      }
-    } catch (_) {}
     return null;
   }
 }
@@ -117,9 +100,8 @@ function removeMemoryLike(shotId, id) {
 // ─── CORS Configuration ──────────────────────────────────────────────────────
 const ALLOWED_ORIGINS = new Set([
   'https://mws.wallpaperdomain.xyz',
+  'https://mws.wallpaperdomain.com',
   'https://netfilm.world',
-  'https://mws.wallpaperdomain.xyz',
-  'http://mws.wallpaperdomain.xyz',
   'http://localhost:8081',
   'http://localhost:3000',
   'http://localhost:19006',
@@ -127,11 +109,9 @@ const ALLOWED_ORIGINS = new Set([
 
 function setCorsHeaders(req, res) {
   const origin = req.headers?.origin;
-  if (origin && (ALLOWED_ORIGINS.has(origin) || origin.includes('wallpaperdomain.xyz'))) {
+  if (origin && ALLOWED_ORIGINS.has(origin)) {
     res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Access-Control-Allow-Credentials', 'true');
-  } else {
-    res.setHeader('Access-Control-Allow-Origin', '*');
   }
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
   res.setHeader(

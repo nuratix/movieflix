@@ -4,10 +4,22 @@
 // - DONATE: when "true", signals that server is crashed and requests donations
 // If neither is true or env is unset, returns regular operational status.
 
+const ALLOWED_ORIGINS = new Set([
+  'https://mws.wallpaperdomain.xyz',
+  'https://mws.wallpaperdomain.com',
+  'https://netfilm.world',
+  'http://localhost:3000',
+  'http://localhost:8081',
+  'http://localhost:19006',
+]);
+
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  const origin = req.headers?.origin;
+  if (origin && ALLOWED_ORIGINS.has(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  }
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', '*');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
 
   if (req.method === 'OPTIONS') {
