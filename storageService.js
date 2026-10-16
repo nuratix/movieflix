@@ -25,11 +25,66 @@ function getApiBase() {
   return (process.env.EXPO_PUBLIC_API_BASE || 'https://mws.wallpaperdomain.xyz').trim().replace(/\/+$/, '');
 }
 
-async function getAuthToken() {
+/**
+ * Securely store authentication session (access & refresh tokens)
+ * Uses Expo SecureStore (Android Keystore / iOS Keychain) on mobile devices.
+ * Falls back to AsyncStorage on web.
+ */
+export async function saveAuthSession(sessionData) {
+  if (!sessionData) return;
+  const jsonStr = typeof sessionData === 'string' ? sessionData : JSON.stringify(sessionData);
+  if (Platform.OS !== 'web') {
+    try {
+      await SecureStore.setItemAsync(KEYS.SESSION, jsonStr, {
+        keychainAccessible: SecureStore.WHEN_UNLOCKED,
+      });
+      // Purge tokens from unencrypted AsyncStorage
+      await AsyncStorage.removeItem(KEYS.SESSION).catch(() => {});
+      return;
+    } catch (e) {
+      console.warn('[SecureStore] Failed to write secure session:', e);
+    }
+  }
+  await AsyncStorage.setItem(KEYS.SESSION, jsonStr);
+}
+
+export async function getAuthSession() {
+  if (Platform.OS !== 'web') {
+    try {
+      const raw = await SecureStore.getItemAsync(KEYS.SESSION);
+      if (raw) {
+        return JSON.parse(raw);
+      }
+    } catch (e) {
+      console.warn('[SecureStore] Failed to read secure session:', e);
+    }
+  }
+  // Migration fallback: check legacy AsyncStorage
   try {
     const raw = await AsyncStorage.getItem(KEYS.SESSION);
-    if (!raw) return null;
-    const session = JSON.parse(raw);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Platform.OS !== 'web' && parsed) {
+        await saveAuthSession(parsed);
+      }
+      return parsed;
+    }
+  } catch (_) {}
+  return null;
+}
+
+export async function clearAuthSession() {
+  if (Platform.OS !== 'web') {
+    try {
+      await SecureStore.deleteItemAsync(KEYS.SESSION);
+    } catch (_) {}
+  }
+  await AsyncStorage.removeItem(KEYS.SESSION).catch(() => {});
+}
+
+async function getAuthToken() {
+  try {
+    const session = await getAuthSession();
     return session?.accessToken || null;
   } catch (_) {
     return null;

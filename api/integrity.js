@@ -185,7 +185,7 @@ export default async function handler(req, res) {
       return res.status(500).json({
         success: false,
         error: 'SERVER_INTEGRITY_CHECK_ERROR',
-        message: err.message,
+        message: 'Server integrity check failed. Please try again.',
       });
     }
   }

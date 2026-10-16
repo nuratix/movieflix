@@ -54,6 +54,18 @@ const ddbDoc = DynamoDBDocumentClient.from(rawDdbClient);
 const SUBSCRIPTIONS_TABLE = process.env.DYNAMODB_SUBSCRIPTIONS_TABLE || 'movieflix_subscriptions';
 const ORDERS_TABLE = process.env.DYNAMODB_ORDERS_TABLE || 'movieflix_orders';
 
+// ─── Webhook Security Secret Helper ──────────────────────────────────────────
+function getTelegramWebhookSecret() {
+  if (process.env.TELEGRAM_WEBHOOK_SECRET) {
+    return process.env.TELEGRAM_WEBHOOK_SECRET.trim();
+  }
+  const token = (process.env.TELEGRAM_BOT_TOKEN || TELEGRAM_BOT_TOKEN || '').trim();
+  if (token) {
+    return crypto.createHmac('sha256', token).update('movieflix_telegram_webhook_secret_v1').digest('hex');
+  }
+  return null;
+}
+
 // ─── Telegram Stars Pricing Plans ────────────────────────────────────────────
 export const SUBSCRIPTION_PLANS = {
   '1_month': {
@@ -527,14 +539,17 @@ export default async function handler(req, res) {
   // ─────────────────────────────────────────────────────────────────────────
   if (action === 'set_webhook') {
     const webhookUrl = `${effectiveApiBase}/api/telegram`;
+    const secretToken = getTelegramWebhookSecret();
     const tgRes = await callTelegram('setWebhook', {
       url: webhookUrl,
       drop_pending_updates: false,
       allowed_updates: ['message', 'callback_query', 'pre_checkout_query'],
+      ...(secretToken ? { secret_token: secretToken } : {}),
     });
     return res.status(200).json({
       success: tgRes.ok,
       webhookUrl,
+      secretConfigured: Boolean(secretToken),
       telegramResponse: tgRes,
     });
   }
@@ -560,11 +575,69 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: true });
   }
 
+  // Verify Telegram Webhook Secret Token Header to prevent webhook forgery
+  const expectedSecret = getTelegramWebhookSecret();
+  if (expectedSecret) {
+    const receivedSecret = (req.headers?.['x-telegram-bot-api-secret-token'] || '').trim();
+    if (
+      !receivedSecret ||
+      receivedSecret.length !== expectedSecret.length ||
+      !crypto.timingSafeEqual(Buffer.from(receivedSecret), Buffer.from(expectedSecret))
+    ) {
+      console.warn('[Telegram Webhook] Unauthorized request rejected: invalid or missing secret token header.');
+      return res.status(401).json({ error: 'Unauthorized: invalid webhook secret' });
+    }
+  }
+
   try {
     // ─── A. Pre-Checkout Query (User pressed Pay in Telegram Stars sheet) ───
     if (update.pre_checkout_query) {
       const q = update.pre_checkout_query;
-      // Telegram requires answering within 10 seconds with ok: true
+      const orderId = String(q.invoice_payload || '').trim();
+
+      // 1. Currency MUST be Telegram Stars ('XTR')
+      if (q.currency !== 'XTR') {
+        await callTelegram('answerPreCheckoutQuery', {
+          pre_checkout_query_id: q.id,
+          ok: false,
+          error_message: 'Invalid currency. Movieflix only accepts Telegram Stars (XTR).',
+        });
+        return res.status(200).json({ ok: true });
+      }
+
+      // 2. Order MUST exist in DynamoDB and be in 'pending_payment' status
+      let order = null;
+      if (orderId) {
+        try {
+          const ordRes = await ddbDoc.send(
+            new GetCommand({
+              TableName: ORDERS_TABLE,
+              Key: { orderId },
+            })
+          );
+          order = ordRes?.Item;
+        } catch (_) {}
+      }
+
+      if (!order || order.status !== 'pending_payment') {
+        await callTelegram('answerPreCheckoutQuery', {
+          pre_checkout_query_id: q.id,
+          ok: false,
+          error_message: 'Order expired or not found. Please choose a plan again.',
+        });
+        return res.status(200).json({ ok: true });
+      }
+
+      // 3. Amount MUST strictly match order stars
+      if (Number(q.total_amount) !== Number(order.stars)) {
+        await callTelegram('answerPreCheckoutQuery', {
+          pre_checkout_query_id: q.id,
+          ok: false,
+          error_message: 'Payment amount mismatch. Please retry.',
+        });
+        return res.status(200).json({ ok: true });
+      }
+
       await callTelegram('answerPreCheckoutQuery', {
         pre_checkout_query_id: q.id,
         ok: true,
@@ -576,53 +649,81 @@ export default async function handler(req, res) {
     if (update.message?.successful_payment) {
       const msg = update.message;
       const sp = msg.successful_payment;
-      const chatId = msg.chat.id;
+      const chatId = msg.chat?.id;
 
-      const rawPayload = String(sp.invoice_payload || '').trim();
-      let payloadData = {};
+      // 1. Currency MUST be Telegram Stars ('XTR')
+      if (sp.currency !== 'XTR') {
+        console.error('[Telegram Payment] Rejected: invalid currency', sp.currency);
+        return res.status(400).json({ error: 'Invalid currency. Only XTR is accepted.' });
+      }
+
+      // 2. Order ID must be present in invoice_payload
+      const orderId = String(sp.invoice_payload || '').trim();
+      if (!orderId) {
+        console.error('[Telegram Payment] Rejected: missing invoice_payload/orderId');
+        return res.status(400).json({ error: 'Missing orderId' });
+      }
+
+      // 3. Telegram Payment Charge ID must be present
+      const chargeId = String(sp.telegram_payment_charge_id || '').trim();
+      if (!chargeId) {
+        console.error('[Telegram Payment] Rejected: missing telegram_payment_charge_id');
+        return res.status(400).json({ error: 'Missing payment charge ID' });
+      }
+
+      // 4. Retrieve matching pending order from DynamoDB
+      let order = null;
       try {
-        payloadData = JSON.parse(rawPayload);
-      } catch (_) {
-        payloadData = { raw: rawPayload };
+        const ordRes = await ddbDoc.send(
+          new GetCommand({
+            TableName: ORDERS_TABLE,
+            Key: { orderId },
+          })
+        );
+        order = ordRes?.Item;
+      } catch (err) {
+        console.error('[Telegram Payment] Order fetch error:', err.message);
+        return res.status(500).json({ error: 'Database order lookup error' });
       }
 
-      let orderId = payloadData.orderId || payloadData.o || rawPayload || `mf_ord_tg_${Date.now()}`;
-      let planKey = payloadData.planId || payloadData.p || '1_month';
-      let userCode = payloadData.code || payloadData.c;
-
-      // Also parse format: mf_{code}_{planKey}_{timestamp}
-      if (!userCode && rawPayload.startsWith('mf_')) {
-        const parts = rawPayload.split('_');
-        if (parts.length >= 4) {
-          userCode = parts[1];
-          planKey = `${parts[2]}_${parts[3]}`;
-        }
+      if (!order) {
+        console.error('[Telegram Payment] Rejected: order not found in database', orderId);
+        return res.status(404).json({ error: 'Order not found' });
       }
 
-      // Check DynamoDB for pending order if needed
-      if (orderId) {
-        try {
-          const ordRes = await ddbDoc.send(
-            new GetCommand({
-              TableName: ORDERS_TABLE,
-              Key: { orderId },
-            })
-          );
-          if (ordRes?.Item) {
-            if (!userCode && ordRes.Item.code) userCode = ordRes.Item.code;
-            if (ordRes.Item.plan) planKey = ordRes.Item.plan;
-          }
-        } catch (_) {}
+      // 5. Prevent Replay Attacks: Check if order was already finished
+      if (order.status === 'finished') {
+        console.warn('[Telegram Payment] Order already completed (replay ignored)', orderId);
+        return res.status(200).json({ ok: true, message: 'Order already processed' });
+      }
+      if (order.status !== 'pending_payment') {
+        console.error('[Telegram Payment] Rejected: unexpected order status', order.status);
+        return res.status(400).json({ error: 'Invalid order state' });
       }
 
-      const plan = SUBSCRIPTION_PLANS[planKey] || SUBSCRIPTION_PLANS['1_month'];
-
-      let user = null;
-      if (userCode) {
-        user = await getUserByCode(userCode);
+      // 6. Validate Stars amount matches expected order stars
+      const paidStars = Number(sp.total_amount);
+      const expectedStars = Number(order.stars);
+      if (paidStars !== expectedStars) {
+        console.error('[Telegram Payment] Rejected: amount mismatch', { paidStars, expectedStars });
+        return res.status(400).json({ error: 'Payment amount mismatch' });
       }
-      const targetUserId = (user?.userId || payloadData.userId || payloadData.email || (userCode ? `code_${userCode}` : 'telegram_user')).toLowerCase().trim();
-      const targetEmail = (user?.userEmail || payloadData.email || (userCode ? `Guest (${userCode})` : targetUserId)).toLowerCase().trim();
+
+      // 7. Validate plan exists
+      const plan = SUBSCRIPTION_PLANS[order.plan];
+      if (!plan) {
+        console.error('[Telegram Payment] Rejected: invalid plan on order', order.plan);
+        return res.status(400).json({ error: 'Invalid plan' });
+      }
+
+      const targetUserId = String(order.userId || '').toLowerCase().trim();
+      const targetEmail = String(order.userEmail || order.userId || 'Guest').toLowerCase().trim();
+      const userCode = order.code || '';
+
+      if (!targetUserId) {
+        console.error('[Telegram Payment] Rejected: missing valid userId on order');
+        return res.status(400).json({ error: 'Missing userId on order' });
+      }
 
       const now = Date.now();
 
@@ -644,7 +745,7 @@ export default async function handler(req, res) {
       const expiresAtTimestamp = startTime + plan.durationMs;
       const expiresAt = new Date(expiresAtTimestamp).toISOString();
 
-      // 1. Activate Subscription in DynamoDB
+      // 8. Activate Subscription in DynamoDB
       const subItem = {
         userId: targetUserId,
         userEmail: targetEmail,
@@ -652,10 +753,10 @@ export default async function handler(req, res) {
         plan: plan.id,
         planName: plan.name,
         amount: plan.price,
-        stars: sp.total_amount,
+        stars: paidStars,
         currency: 'XTR',
         paymentMethod: 'telegram_stars',
-        telegramPaymentChargeId: sp.telegram_payment_charge_id,
+        telegramPaymentChargeId: chargeId,
         providerPaymentChargeId: sp.provider_payment_charge_id || '',
         orderId,
         startsAt: new Date(now).toISOString(),
@@ -686,33 +787,33 @@ export default async function handler(req, res) {
         } catch (_) {}
       }
 
-      // 2. Record Order in DynamoDB
+      // 9. Update Order in DynamoDB to 'finished'
       await ddbDoc.send(
         new PutCommand({
           TableName: ORDERS_TABLE,
           Item: {
+            ...order,
             orderId,
             userId: targetUserId,
             userEmail: targetEmail,
             plan: plan.id,
             planName: plan.name,
             amount: plan.price,
-            stars: sp.total_amount,
+            stars: paidStars,
             currency: 'XTR',
             paymentMethod: 'telegram_stars',
-            telegramPaymentChargeId: sp.telegram_payment_charge_id,
+            telegramPaymentChargeId: chargeId,
             status: 'finished',
-            createdAt: new Date(now).toISOString(),
             updatedAt: new Date(now).toISOString(),
           },
         })
       );
 
-      // 3. Send Telegram Celebration & Confirmation Message (Using Safe HTML)
+      // 10. Send Telegram Celebration & Confirmation Message
       const successHtml =
         `🎉 <b>Payment Successful!</b>\n\n` +
         `Your <b>Movieflix Pro</b> subscription is now <b>ACTIVE</b>!\n\n` +
-        `⭐ <b>Plan:</b> ${plan.name} (${sp.total_amount} Stars)\n` +
+        `⭐ <b>Plan:</b> ${plan.name} (${paidStars} Stars)\n` +
         `📧 <b>Account:</b> <code>${targetEmail}</code>\n` +
         `📅 <b>Valid Until:</b> ${formatDate(expiresAt)}\n\n` +
         `🍿 <b>Pro Benefits Unlocked:</b>\n` +

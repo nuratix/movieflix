@@ -510,8 +510,7 @@ export default async function handler(req, res) {
           if (!npRes || !npRes.ok) {
             console.error('[NOWPayments Invoice Error]', lastErrStatus, lastErrText);
             return res.status(502).json({
-              error: 'Failed to create payment invoice with NOWPayments.',
-              detail: lastErrText,
+              error: 'Failed to create payment invoice with payment gateway. Please try again later.',
             });
           }
 
@@ -521,8 +520,7 @@ export default async function handler(req, res) {
         } catch (npFetchErr) {
           console.error('[NOWPayments Network Error]', npFetchErr);
           return res.status(502).json({
-            error: 'Could not connect to NOWPayments gateway.',
-            message: npFetchErr.message,
+            error: 'Could not connect to payment gateway. Please try again later.',
           });
         }
       } else {
@@ -916,7 +914,6 @@ export default async function handler(req, res) {
     // Default 404
     return res.status(404).json({ error: 'Subscription endpoint not found.' });
   } catch (err) {
-    console.error('[Subscription API Error]', err);
-    return res.status(500).json({ error: 'Internal subscription error', message: err.message });
+    return res.status(500).json({ error: 'Internal subscription error. Please try again later.' });
   }
 }

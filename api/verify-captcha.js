@@ -159,24 +159,11 @@ export default async function handler(req, res) {
     }
 
     const errorCodes = data['error-codes'] || [];
-    // If domain mismatch occurred on preview/staging domains or duplicate token submitted
-    if (errorCodes.includes('hostname-mismatch') || errorCodes.includes('timeout-or-duplicate')) {
-      console.warn('[Captcha API] Permitting session despite code:', errorCodes);
-      const session = signCaptchaSession(clientIp, 7);
-      return res.status(200).json({
-        success: true,
-        verified: true,
-        warning: 'Domain mismatch tolerated for preview/custom domains',
-        session: session.token,
-        expiresAt: session.expiresAt,
-      });
-    }
+    console.warn('[Captcha API] reCAPTCHA verification failed with codes:', errorCodes);
 
     return res.status(403).json({
       success: false,
-      error: 'reCAPTCHA verification failed. Please try again.',
-      errorCodes: data['error-codes'] || [],
-      score: data.score,
+      error: 'reCAPTCHA verification failed. Please complete the captcha again.',
     });
   } catch (err) {
     console.error('[Captcha API] Verification error:', err.message);

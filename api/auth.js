@@ -485,9 +485,9 @@ export default async function handler(req, res) {
           return res.status(409).json({ error: 'This email is already registered. Please sign in.' });
         }
         if (err.name === 'InvalidPasswordException') {
-          return res.status(400).json({ error: err.message || 'Password does not meet requirements.' });
+          return res.status(400).json({ error: 'Password does not meet security requirements. Must be at least 8 characters with numbers and symbols.' });
         }
-        return res.status(500).json({ error: err.message || 'Registration failed. Please try again.' });
+        return res.status(500).json({ error: 'Registration failed. Please try again later.' });
       }
     }
 
@@ -533,7 +533,7 @@ export default async function handler(req, res) {
         if (err.name === 'UserNotConfirmedException') {
           return res.status(403).json({ error: 'Account not confirmed. Please check your email.' });
         }
-        return res.status(500).json({ error: err.message || 'Login failed. Please try again.' });
+        return res.status(500).json({ error: 'Login failed. Please check your credentials and try again.' });
       }
     }
 

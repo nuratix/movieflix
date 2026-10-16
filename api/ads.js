@@ -87,14 +87,13 @@ export default async function handler(req, res) {
       if (remoteRes.status === 404) {
         return res.status(200).json({ status: 'empty', message: 'No active ads currently available.' });
       }
-      const errText = await remoteRes.text().catch(() => '');
-      return res.status(remoteRes.status).json({ error: 'Failed to fetch ad from upstream', detail: errText });
+      return res.status(remoteRes.status || 502).json({ error: 'Failed to fetch ad from upstream server.' });
     }
 
     const data = await remoteRes.json();
     return res.status(200).json(data);
   } catch (err) {
     console.error('[Movieflix Ads Proxy Error]', err);
-    return res.status(500).json({ error: 'Internal Ads Proxy Error', message: err.message });
+    return res.status(500).json({ error: 'Internal Ads Proxy Error' });
   }
 }

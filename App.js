@@ -45,6 +45,9 @@ import {
 } from './notificationService';
 import {
   initSecureStorage,
+  saveAuthSession,
+  getAuthSession,
+  clearAuthSession,
   getWatchHistory,
   saveWatchProgress,
   removeWatchHistory,
@@ -1403,11 +1406,10 @@ function ReelApp() {
         }
       }
 
-      // 2. Load saved session with unbreakable persistence
+      // 2. Load saved session with unbreakable persistence (using SecureStore on mobile)
       try {
-        const saved = await AsyncStorage.getItem('@mf_session');
-        if (saved) {
-          const parsed = JSON.parse(saved);
+        const parsed = await getAuthSession();
+        if (parsed) {
           const storedUser = parsed?.user;
           const storedAccessToken = parsed?.accessToken;
           const storedRefreshToken = parsed?.refreshToken;
@@ -1436,11 +1438,11 @@ function ReelApp() {
                 setAuthAccessToken(refreshed.access_token);
                 setAuthRefreshToken(activeRefresh);
                 _authToken = refreshed.access_token;
-                await AsyncStorage.setItem('@mf_session', JSON.stringify({
+                await saveAuthSession({
                   user: activeUser,
                   accessToken: refreshed.access_token,
                   refreshToken: activeRefresh,
-                }));
+                });
               }
             } catch (refErr) {
               console.log('[Auth] Session background refresh note:', refErr?.message);
@@ -1465,11 +1467,11 @@ function ReelApp() {
           setAuthAccessToken(refreshed.access_token);
           setAuthRefreshToken(activeRefresh);
           _authToken = refreshed.access_token;
-          await AsyncStorage.setItem('@mf_session', JSON.stringify({
+          await saveAuthSession({
             user: activeUser,
             accessToken: refreshed.access_token,
             refreshToken: activeRefresh,
-          }));
+          });
         }
       } catch (_) {}
     }, 50 * 60 * 1000);
@@ -1677,11 +1679,11 @@ function ReelApp() {
       setAuthRefreshToken(data.refresh_token);
       _authToken = data.access_token;
       setSplashFinished(true);
-      await AsyncStorage.setItem('@mf_session', JSON.stringify({
+      await saveAuthSession({
         user: data.user,
         accessToken: data.access_token,
         refreshToken: data.refresh_token,
-      }));
+      });
       setIsAuthPageOpen(false);
       setAuthEmail('');
       setAuthPassword('');
@@ -1746,7 +1748,7 @@ function ReelApp() {
     setAuthAccessToken(null);
     setAuthRefreshToken(null);
     _authToken = null;
-    await AsyncStorage.removeItem('@mf_session');
+    await clearAuthSession();
 
     // NOTE: Keep listed items and watch history intact locally so items are never removed on logout!
     try {
@@ -2641,22 +2643,19 @@ function ReelApp() {
     if (!rawMovie) return;
     const movie = normalizeMovie(rawMovie);
 
-    // Session check: ensure authUserRef is hydrated if stored in AsyncStorage
+    // Session check: ensure authUserRef is hydrated from secure session
     if (!authUserRef.current) {
       try {
-        const savedSess = await AsyncStorage.getItem('@mf_session');
-        if (savedSess) {
-          const parsed = JSON.parse(savedSess);
-          if (parsed?.user) {
-            setAuthUser(parsed.user);
-            authUserRef.current = parsed.user;
-            if (parsed.accessToken) {
-              setAuthAccessToken(parsed.accessToken);
-              _authToken = parsed.accessToken;
-            }
-            if (parsed.refreshToken) {
-              setAuthRefreshToken(parsed.refreshToken);
-            }
+        const parsed = await getAuthSession();
+        if (parsed?.user) {
+          setAuthUser(parsed.user);
+          authUserRef.current = parsed.user;
+          if (parsed.accessToken) {
+            setAuthAccessToken(parsed.accessToken);
+            _authToken = parsed.accessToken;
+          }
+          if (parsed.refreshToken) {
+            setAuthRefreshToken(parsed.refreshToken);
           }
         }
       } catch (_) {}

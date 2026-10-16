@@ -243,7 +243,8 @@ async function handleEdge(req) {
       headers: responseHeaders,
     });
   } catch (err) {
-    return new Response(`Streaming proxy error: ${err.message}`, {
+    console.error('[Streaming Proxy Edge Error]', err?.message);
+    return new Response('Streaming proxy error: upstream media unavailable', {
       status: 502,
       headers: { 'Access-Control-Allow-Origin': corsOrigin },
     });
@@ -320,9 +321,10 @@ async function handleNode(req, res) {
       res.end();
     }
   } catch (err) {
+    console.error('[Streaming Proxy Node Error]', err?.message);
     if (!res.headersSent) {
       res.statusCode = 502;
     }
-    res.end(`Streaming proxy error: ${err.message}`);
+    res.end('Streaming proxy error: upstream media unavailable');
   }
 }

@@ -41,7 +41,28 @@ function isNewerVersion(remoteVer, currentVer = TARGET_VERSION) {
   return false;
 }
 
-function checkDownloadRateLimit(key) {
+const memoryRateLimits = new Map();
+
+function checkDownloadRateLimit(key, maxAttempts = 30, windowMs = 60000) {
+  const now = Date.now();
+  const record = memoryRateLimits.get(key);
+
+  if (!record || record.resetTime <= now) {
+    memoryRateLimits.set(key, { count: 1, resetTime: now + windowMs });
+    if (memoryRateLimits.size > 2000) {
+      for (const [k, v] of memoryRateLimits.entries()) {
+        if (v.resetTime <= now) {
+          memoryRateLimits.delete(k);
+        }
+      }
+    }
+    return true;
+  }
+
+  record.count += 1;
+  if (record.count > maxAttempts) {
+    return false;
+  }
   return true;
 }
 
@@ -85,10 +106,10 @@ function getDb() {
 async function ensureTables(sql) {}
 
 
-async function checkDurableRateLimit(sql, key, maxAttempts, windowMs) {
+async function checkDurableRateLimit(sql, key, maxAttempts = 30, windowMs = 60000) {
   const now = Date.now();
   if (!sql) {
-    return checkDownloadRateLimit(key);
+    return checkDownloadRateLimit(key, maxAttempts, windowMs);
   }
   try {
     const rows = await sql`
@@ -111,7 +132,7 @@ async function checkDurableRateLimit(sql, key, maxAttempts, windowMs) {
     }
     return true;
   } catch (err) {
-    return checkDownloadRateLimit(key);
+    return checkDownloadRateLimit(key, maxAttempts, windowMs);
   }
 }
 
