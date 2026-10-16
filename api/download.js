@@ -45,8 +45,35 @@ function checkDownloadRateLimit(key) {
   return true;
 }
 
+// Runtime cryptographically secure secret generated at server boot to eliminate static fallbacks
+const RUNTIME_SERVER_SECRET = crypto.randomBytes(32).toString('hex');
+
 function getJwtSecret() {
-  return process.env.JWT_SECRET || 'movieflix-jwt-secret-2026';
+  const envSecret = (process.env.JWT_SECRET || '').trim();
+  if (envSecret) {
+    return envSecret;
+  }
+  return RUNTIME_SERVER_SECRET;
+}
+
+function generateServerJwt(clientIp = '127.0.0.1', extra = {}) {
+  const secret = getJwtSecret();
+  const header = { alg: 'HS256', typ: 'JWT' };
+  const payload = {
+    sub: 'movieflix_download',
+    jti: crypto.randomBytes(16).toString('hex'), // Unique random nonce per token
+    ip: clientIp,
+    iat: Math.floor(Date.now() / 1000),
+    exp: Math.floor(Date.now() / 1000) + 86400, // Valid 24 hours
+    ...extra,
+  };
+  const encodedHeader = Buffer.from(JSON.stringify(header)).toString('base64url');
+  const encodedPayload = Buffer.from(JSON.stringify(payload)).toString('base64url');
+  const signature = crypto
+    .createHmac('sha256', secret)
+    .update(`${encodedHeader}.${encodedPayload}`)
+    .digest('base64url');
+  return `${encodedHeader}.${encodedPayload}.${signature}`;
 }
 
 let totalDownloadsCount = 3850;
@@ -90,19 +117,21 @@ async function checkDurableRateLimit(sql, key, maxAttempts, windowMs) {
 
 // ─── JWT Authentication Verification ─────────────────────────────────────────
 function verifyJwt(token) {
-  if (!token) return null;
+  if (!token || typeof token !== 'string') return null;
   const cleaned = token.replace(/^Bearer\s+/i, '').trim();
   const parts = cleaned.split('.');
   if (parts.length !== 3) return null;
 
   const [encodedHeader, encodedPayload, signature] = parts;
-  let secret;
-  try {
-    secret = getJwtSecret();
-  } catch (_) {
-    return null;
-  }
-  const expectedSignature = crypto
+  const secret = getJwtSecret();
+  if (!secret) return null;
+
+  const expectedSigUrl = crypto
+    .createHmac('sha256', secret)
+    .update(`${encodedHeader}.${encodedPayload}`)
+    .digest('base64url');
+
+  const expectedSigStandard = crypto
     .createHmac('sha256', secret)
     .update(`${encodedHeader}.${encodedPayload}`)
     .digest('base64')
@@ -110,12 +139,26 @@ function verifyJwt(token) {
     .replace(/\+/g, '-')
     .replace(/\//g, '_');
 
-  if (signature !== expectedSignature) return null;
+  let isMatch = false;
+  if (signature.length === expectedSigUrl.length) {
+    try {
+      if (crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSigUrl))) {
+        isMatch = true;
+      }
+    } catch (_) {}
+  }
+  if (!isMatch && signature.length === expectedSigStandard.length) {
+    try {
+      if (crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSigStandard))) {
+        isMatch = true;
+      }
+    } catch (_) {}
+  }
+
+  if (!isMatch) return null;
 
   try {
-    let base64 = encodedPayload.replace(/-/g, '+').replace(/_/g, '/');
-    while (base64.length % 4) base64 += '=';
-    const payload = JSON.parse(Buffer.from(base64, 'base64').toString('utf8'));
+    const payload = JSON.parse(Buffer.from(encodedPayload, 'base64url').toString('utf8'));
     if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) {
       return null; // Expired token
     }
@@ -216,6 +259,9 @@ export default async function handler(req, res) {
       }
     } catch (_) {}
 
+    const clientIp = getClientIp(req);
+    const serverJwt = generateServerJwt(clientIp);
+
     return res.status(200).json({
       success: true,
       version: releaseVersion,
@@ -226,7 +272,38 @@ export default async function handler(req, res) {
       sizeFormatted: sizeBytes ? (sizeBytes / (1024 * 1024)).toFixed(1) + ' MB' : '110.5 MB',
       realDownloads,
       publishedAt,
+      token: serverJwt,
+      jwt: serverJwt,
       downloadUrl: '/api/download',
+    });
+  }
+
+  // 2. TOKEN ISSUANCE & VERIFICATION ENDPOINTS: /api/download?action=token / validate
+  if (req.method === 'GET' && (req.query?.action === 'token' || req.query?.action === 'jwt' || req.query?.get_token === 'true')) {
+    const clientIp = getClientIp(req);
+    const serverJwt = generateServerJwt(clientIp);
+    return res.status(200).json({
+      success: true,
+      token: serverJwt,
+      jwt: serverJwt,
+      expiresIn: 86400,
+    });
+  }
+
+  if (req.query?.action === 'verify' || req.query?.action === 'validate') {
+    const tokenToVerify = req.query?.token || req.body?.token || req.headers['authorization'] || '';
+    const userPayload = verifyJwt(tokenToVerify);
+    if (!userPayload) {
+      return res.status(401).json({
+        success: false,
+        valid: false,
+        error: 'Invalid or expired download JWT token.',
+      });
+    }
+    return res.status(200).json({
+      success: true,
+      valid: true,
+      payload: userPayload,
     });
   }
 
