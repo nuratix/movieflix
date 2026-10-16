@@ -89,6 +89,7 @@ import AuthScreen from './AuthScreen';
 import CustomSplashScreen from './CustomSplashScreen';
 import PrivacyScreen, { PRIVACY_POLICY_URL } from './PrivacyScreen';
 import DownloadScreen from './DownloadScreen';
+import PricingScreen from './PricingScreen';
 import NotFoundScreen from './NotFoundScreen';
 import NowPaymentsButton from './components/NowPaymentsButton';
 import MaintenanceScreen from './components/MaintenanceScreen';
@@ -3379,6 +3380,7 @@ function ReelApp() {
   const [splashFinished, setSplashFinished] = useState(false);
   const [isPrivacyPageOpen, setIsPrivacyPageOpen] = useState(false);
   const [isDownloadPageOpen, setIsDownloadPageOpen] = useState(false);
+  const [isPricingPageOpen, setIsPricingPageOpen] = useState(false);
   const [is404PageOpen, setIs404PageOpen] = useState(false);
   const [notFoundPath, setNotFoundPath] = useState('');
   const [showWebInstallBanner, setShowWebInstallBanner] = useState(true);
@@ -3542,6 +3544,8 @@ function ReelApp() {
     setAuthError('');
     if (returnTo) {
       authRedirectPathRef.current = returnTo;
+    } else if (isPricingPageOpen) {
+      authRedirectPathRef.current = '/pricing';
     } else if (isDownloadPageOpen) {
       authRedirectPathRef.current = '/download';
     } else if (isPrivacyPageOpen) {
@@ -3554,6 +3558,7 @@ function ReelApp() {
     if (isPlayerOpen) setIsPlayerOpen(false);
     if (isDownloadPageOpen) setIsDownloadPageOpen(false);
     if (isPrivacyPageOpen) setIsPrivacyPageOpen(false);
+    if (isPricingPageOpen) setIsPricingPageOpen(false);
     if (is404PageOpen) setIs404PageOpen(false);
 
     setIsAuthPageOpen(true);
@@ -3567,7 +3572,12 @@ function ReelApp() {
     const returnPath = authRedirectPathRef.current;
     authRedirectPathRef.current = null;
 
-    if (returnPath === '/download') {
+    if (returnPath === '/pricing') {
+      setIsPricingPageOpen(true);
+      if (Platform.OS === 'web') {
+        navigateWeb('/pricing', true);
+      }
+    } else if (returnPath === '/download') {
       setIsDownloadPageOpen(true);
       if (Platform.OS === 'web') {
         navigateWeb('/download', true);
@@ -3622,11 +3632,32 @@ function ReelApp() {
     }
   };
 
+  const handleOpenPricing = () => {
+    if (detailMovie) setDetailMovie(null);
+    if (isPlayerOpen) setIsPlayerOpen(false);
+    if (isDownloadPageOpen) setIsDownloadPageOpen(false);
+    if (isPrivacyPageOpen) setIsPrivacyPageOpen(false);
+    if (is404PageOpen) setIs404PageOpen(false);
+    if (isAuthPageOpen) setIsAuthPageOpen(false);
+    setIsPricingPageOpen(true);
+    if (Platform.OS === 'web') {
+      navigateWeb('/pricing', false);
+    }
+  };
+
+  const closePricingPage = () => {
+    setIsPricingPageOpen(false);
+    if (Platform.OS === 'web') {
+      navigateWeb('/', true);
+    }
+  };
+
   const handleOpenNotFound = (badPath = '') => {
     if (detailMovie) setDetailMovie(null);
     if (isPlayerOpen) setIsPlayerOpen(false);
     if (isDownloadPageOpen) setIsDownloadPageOpen(false);
     if (isPrivacyPageOpen) setIsPrivacyPageOpen(false);
+    if (isPricingPageOpen) setIsPricingPageOpen(false);
     if (isAuthPageOpen) setIsAuthPageOpen(false);
     setNotFoundPath(badPath);
     setIs404PageOpen(true);
@@ -4642,6 +4673,14 @@ function ReelApp() {
     }
   };
 
+  // Helper: Detect 1080p, 1440p, 4K & higher resolutions that require Movieflix Pro
+  const isPremiumResolution = (resStr = '') => {
+    const lower = String(resStr || '').toLowerCase();
+    if (lower.includes('4k') || lower.includes('2160') || lower.includes('1440') || lower.includes('1080')) return true;
+    const num = parseInt(lower.replace(/[^0-9]/g, ''), 10);
+    return !isNaN(num) && num > 720;
+  };
+
   // Launch Player with automatic resilient stream recovery, resume support, and offline local file support
   const launchPlayer = async (
     rawMovie,
@@ -4788,10 +4827,22 @@ function ReelApp() {
       const validSources = (streamData?.sources || []).filter(s => s && s.url && typeof s.url === 'string' && s.url.startsWith('http'));
       if (validSources.length > 0) {
         setAvailableStreams(validSources);
-        const preferred = validSources.find(s => s.resolution === '720p') ||
-                          validSources.find(s => s.resolution === '1080p') ||
-                          validSources.find(s => s.resolution === '480p') ||
-                          validSources[0];
+        const isUserPro = Boolean(isPremium);
+        let preferred = null;
+        if (isUserPro) {
+          // Pro user: highest quality available (4K / 1080p)
+          preferred = validSources.find(s => s.resolution === '4k' || s.resolution === '2160p') ||
+                            validSources.find(s => s.resolution === '1080p') ||
+                            validSources.find(s => s.resolution === '720p') ||
+                            validSources[0];
+        } else {
+          // Basic user: capped to 720p maximum
+          preferred = validSources.find(s => s.resolution === '720p') ||
+                            validSources.find(s => s.resolution === '480p') ||
+                            validSources.find(s => s.resolution === '360p') ||
+                            validSources.find(s => !isPremiumResolution(s.resolution)) ||
+                            validSources[0];
+        }
         setActiveStreamUrl(preferred.url);
         setActiveResolution(preferred.resolution);
         setLoadingStream(false);
@@ -5175,6 +5226,13 @@ function ReelApp() {
         'https://mws.wallpaperdomain.xyz/assets/og-banner.png',
         typeof window !== 'undefined' ? window.location.href : 'https://mws.wallpaperdomain.xyz/404'
       );
+    } else if (isPricingPageOpen) {
+      updateWebMetaTags(
+        'MovieFlix Pro - Stream in 4K Ultra HD & 100% Ad-Free',
+        'Upgrade to MovieFlix Pro. Stream all movies and series in 4K/1080p Ultra HD, zero ads in player and shorts, and access all premium episodes from $1 USD.',
+        'https://mws.wallpaperdomain.xyz/assets/og-banner.png',
+        'https://mws.wallpaperdomain.xyz/pricing'
+      );
     } else if (isDownloadPageOpen) {
       updateWebMetaTags(
         'Download MovieFlix APK v1.1.8 (Official) - Free Android Movies & TV App',
@@ -5210,7 +5268,7 @@ function ReelApp() {
         'https://mws.wallpaperdomain.xyz/'
       );
     }
-  }, [isDownloadPageOpen, isPrivacyPageOpen, is404PageOpen, mainTab, detailMovie]);
+  }, [isDownloadPageOpen, isPricingPageOpen, isPrivacyPageOpen, is404PageOpen, mainTab, detailMovie]);
 
   // 2. Handle Web Browser Back / Forward History (popstate)
   useEffect(() => {
@@ -5304,10 +5362,23 @@ function ReelApp() {
         setIsPrivacyPageOpen(false);
       }
 
+      // Route: /pricing
+      if (pathname.startsWith('/pricing')) {
+        setIsAuthPageOpen(false);
+        setIsPrivacyPageOpen(false);
+        setIsDownloadPageOpen(false);
+        setIs404PageOpen(false);
+        setIsPricingPageOpen(true);
+        return;
+      } else {
+        setIsPricingPageOpen(false);
+      }
+
       // Route: /download
       if (pathname.startsWith('/download')) {
         setIsAuthPageOpen(false);
         setIsPrivacyPageOpen(false);
+        setIsPricingPageOpen(false);
         setIs404PageOpen(false);
         setIsDownloadPageOpen(true);
         return;
@@ -5524,9 +5595,17 @@ function ReelApp() {
         setIsPrivacyPageOpen(true);
         return;
       }
+      if (pathname.startsWith('/pricing')) {
+        setIsDownloadPageOpen(false);
+        setIsPrivacyPageOpen(false);
+        setIsAuthPageOpen(false);
+        setIsPricingPageOpen(true);
+        return;
+      }
       if (pathname.startsWith('/download')) {
         setIsAuthPageOpen(false);
         setIsPrivacyPageOpen(false);
+        setIsPricingPageOpen(false);
         setIsDownloadPageOpen(true);
         return;
       }
@@ -5990,6 +6069,24 @@ function ReelApp() {
     );
   }
 
+  // ─── /pricing PAGE VIEW (DIRECT ROUTE ON WEB & IN-APP) ─────────────────────
+  if (isPricingPageOpen) {
+    return (
+      <PricingScreen
+        onClose={closePricingPage}
+        authUser={authUser}
+        authAccessToken={authAccessToken}
+        subscriptionStatus={subscriptionStatus}
+        onSubscriptionUpdated={(newStatus) => {
+          setSubscriptionStatus(newStatus);
+          setIsPremium(Boolean(newStatus?.is_premium));
+          showToast('🎉 Movieflix Pro Activated! Enjoy 4K Ad-Free Streaming!');
+        }}
+        onOpenAuth={(mode) => openAuthPage(mode || 'login', '/pricing')}
+      />
+    );
+  }
+
   // ─── /privacy PAGE VIEW (DIRECT ROUTE ON WEB) ─────────────────────────────
   if (isPrivacyPageOpen) {
     return (
@@ -6098,19 +6195,8 @@ function ReelApp() {
               )}
             </View>
 
-            {/* Header Right Actions: VIP Subscription & Explore Categories Navigation */}
+            {/* Header Right Actions: Explore Categories Navigation */}
             <View style={styles.headerRightActions}>
-              <TouchableOpacity
-                style={[styles.headerVipBtn, isPremium && styles.headerVipBtnActive]}
-                onPress={() => setIsSubscriptionModalOpen(true)}
-                activeOpacity={0.8}
-              >
-                <Feather name="award" size={14} color={isPremium ? '#10b981' : '#fbbf24'} />
-                <Text style={[styles.headerVipBtnText, isPremium && styles.headerVipBtnTextActive]}>
-                  {isPremium ? `${subscriptionStatus?.days_left || ''}d VIP` : 'VIP'}
-                </Text>
-              </TouchableOpacity>
-
               <TouchableOpacity
                 style={styles.headerCategoriesBtn}
                 onPress={() => setIsCategoryModalOpen(true)}
@@ -6293,43 +6379,43 @@ function ReelApp() {
                   </TouchableOpacity>
                 </View>
 
-                {/* VIP Ad-Free Subscription Banner */}
+                {/* Movieflix Pro Subscription Banner (Red Theme) */}
                 <TouchableOpacity
                   style={styles.meSubscriptionBanner}
-                  onPress={() => setIsSubscriptionModalOpen(true)}
+                  onPress={handleOpenPricing}
                   activeOpacity={0.85}
                 >
                   <View style={styles.meSubscriptionLeft}>
                     <View style={styles.meSubscriptionIconBox}>
-                      <Feather name="award" size={22} color={isPremium ? '#10b981' : '#fbbf24'} />
+                      <MaterialIcons name="workspace-premium" size={24} color={isPremium ? '#10b981' : '#e50914'} />
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.meSubscriptionTitle}>
-                        {isPremium ? 'VIP Ad-Free Active' : 'Upgrade to VIP (Ad-Free)'}
+                        {isPremium ? 'Movieflix Pro Active' : 'Upgrade to Movieflix Pro'}
                       </Text>
                       <Text style={styles.meSubscriptionSubtitle} numberOfLines={1}>
                         {isPremium
                           ? `Expires: ${formatExpirationDate(subscriptionStatus?.expires_at)} (${subscriptionStatus?.days_left || 0}d left)`
-                          : 'Zero Ads · 4K Ultra HD · Fast Streaming from $1'}
+                          : '4K Ultra HD · Zero Ads · All Episodes from $1'}
                       </Text>
                     </View>
                   </View>
                   <View style={[styles.meSubscriptionBadge, isPremium && styles.meSubscriptionBadgeActive]}>
-                    <Text style={styles.meSubscriptionBadgeText}>{isPremium ? 'ACTIVE' : 'FROM $1'}</Text>
+                    <Text style={styles.meSubscriptionBadgeText}>{isPremium ? 'ACTIVE' : 'UPGRADE'}</Text>
                   </View>
                 </TouchableOpacity>
 
                 {/* Quick Utility Links: Privacy Policy & Web Download APK */}
                 <View style={styles.meMinimalLinksContainer}>
-                  {/* VIP Plan Management Link */}
+                  {/* Movieflix Pro Management Link */}
                   <TouchableOpacity
                     style={styles.meMinimalLinkRow}
-                    onPress={() => setIsSubscriptionModalOpen(true)}
+                    onPress={handleOpenPricing}
                     activeOpacity={0.7}
                   >
                     <View style={styles.meMinimalLinkLeft}>
-                      <Feather name="shield" size={16} color={isPremium ? '#10b981' : '#fbbf24'} style={{ marginRight: 10 }} />
-                      <Text style={styles.meMinimalLinkText}>Subscription & VIP Status</Text>
+                      <MaterialIcons name="workspace-premium" size={18} color={isPremium ? '#10b981' : '#e50914'} style={{ marginRight: 10 }} />
+                      <Text style={styles.meMinimalLinkText}>Movieflix Pro & Membership</Text>
                     </View>
                     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                       {isPremium && (
@@ -8086,7 +8172,10 @@ function ReelApp() {
               onProgressUpdate={handlePlayerProgressUpdate}
               onClose={closePlayer}
               isPremium={isPremium}
-              onGoAdFree={() => setIsSubscriptionModalOpen(true)}
+              onGoAdFree={() => {
+                closePlayer();
+                handleOpenPricing();
+              }}
             />
           ) : (
             <View style={styles.playerLoadingCentered}>
@@ -10403,19 +10492,49 @@ function ReelCustomPlayer({
             {availableStreams && availableStreams.length > 0 ? (
               availableStreams.map((s, idx) => {
                 const isSelected = s.resolution === activeResolution;
+                const isProQuality = isPremiumResolution(s.resolution);
+                const isLocked = isProQuality && !isPremium;
+
                 return (
                   <TouchableOpacity
                     key={`res-${s.resolution || idx}`}
-                    style={[styles.modalOptionItem, isSelected && styles.modalOptionItemActive]}
+                    style={[
+                      styles.modalOptionItem,
+                      isSelected && styles.modalOptionItemActive,
+                      isLocked && styles.modalOptionItemLocked,
+                    ]}
                     onPress={() => {
+                      if (isLocked) {
+                        setIsQualityModalOpen(false);
+                        if (onGoAdFree) {
+                          onGoAdFree();
+                        }
+                        return;
+                      }
                       onSwitchQuality(s);
                       setIsQualityModalOpen(false);
                     }}
+                    activeOpacity={0.75}
                   >
-                    <Text style={[styles.modalOptionText, isSelected && styles.modalOptionTextActive]}>
-                      {s.resolution ? s.resolution.toUpperCase() : 'Stream Quality'}
-                    </Text>
-                    {isSelected && <Feather name="check" size={16} color="#e50914" />}
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <Text style={[styles.modalOptionText, isSelected && styles.modalOptionTextActive]}>
+                        {s.resolution ? s.resolution.toUpperCase() : 'Stream Quality'}
+                      </Text>
+                      {isProQuality && (
+                        <View style={styles.proQualityBadge}>
+                          <Text style={styles.proQualityBadgeText}>PRO</Text>
+                        </View>
+                      )}
+                    </View>
+
+                    {isLocked ? (
+                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <Feather name="lock" size={13} color="#e50914" style={{ marginRight: 4 }} />
+                        <Text style={{ color: '#e50914', fontSize: 11, fontWeight: '800' }}>Pro</Text>
+                      </View>
+                    ) : isSelected ? (
+                      <Feather name="check" size={16} color="#e50914" />
+                    ) : null}
                   </TouchableOpacity>
                 );
               })
@@ -10799,31 +10918,6 @@ const styles = StyleSheet.create({
   headerRightActions: {
     flexDirection: 'row',
     alignItems: 'center',
-  },
-  headerVipBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 10,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(251, 191, 36, 0.12)',
-    borderWidth: 1,
-    borderColor: 'rgba(251, 191, 36, 0.35)',
-    marginRight: 8,
-  },
-  headerVipBtnActive: {
-    backgroundColor: 'rgba(16, 185, 129, 0.16)',
-    borderColor: 'rgba(16, 185, 129, 0.45)',
-  },
-  headerVipBtnText: {
-    color: '#fbbf24',
-    fontSize: 12,
-    fontWeight: '800',
-    letterSpacing: 0.5,
-    marginLeft: 5,
-  },
-  headerVipBtnTextActive: {
-    color: '#10b981',
   },
   headerIconBtn: {
     width: 34,
@@ -12756,9 +12850,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     width: '100%',
-    backgroundColor: 'rgba(245, 158, 11, 0.08)',
+    backgroundColor: 'rgba(229, 9, 20, 0.08)',
     borderWidth: 1,
-    borderColor: 'rgba(245, 158, 11, 0.28)',
+    borderColor: 'rgba(229, 9, 20, 0.3)',
     borderRadius: 18,
     paddingVertical: 14,
     paddingHorizontal: 16,
@@ -12774,7 +12868,7 @@ const styles = StyleSheet.create({
     width: 42,
     height: 42,
     borderRadius: 21,
-    backgroundColor: 'rgba(245, 158, 11, 0.16)',
+    backgroundColor: 'rgba(229, 9, 20, 0.16)',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
@@ -12786,13 +12880,13 @@ const styles = StyleSheet.create({
     letterSpacing: -0.2,
   },
   meSubscriptionSubtitle: {
-    color: '#fbbf24',
+    color: '#e50914',
     fontSize: 12,
     fontWeight: '500',
     marginTop: 2,
   },
   meSubscriptionBadge: {
-    backgroundColor: '#f59e0b',
+    backgroundColor: '#e50914',
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 12,
@@ -12801,10 +12895,26 @@ const styles = StyleSheet.create({
     backgroundColor: '#10b981',
   },
   meSubscriptionBadgeText: {
-    color: '#000000',
+    color: '#FFFFFF',
     fontSize: 11,
     fontWeight: '900',
     letterSpacing: 0.5,
+  },
+  proQualityBadge: {
+    backgroundColor: '#e50914',
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
+    borderRadius: 5,
+    marginLeft: 8,
+  },
+  proQualityBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+  },
+  modalOptionItemLocked: {
+    opacity: 0.8,
   },
   meMinimalLinksContainer: {
     width: '100%',

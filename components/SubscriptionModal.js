@@ -63,8 +63,8 @@ export default function SubscriptionModal({
       price: '$3',
       unit: '/ 90 days',
       badge: 'Most Popular',
-      badgeBg: 'linear-gradient(135deg, #f59e0b, #d97706)',
-      desc: '90 days ad-free uninterrupted VIP access.',
+      badgeBg: 'linear-gradient(135deg, #e50914, #b91c1c)',
+      desc: '90 days ad-free uninterrupted PRO access.',
       highlight: true,
     },
     {
@@ -153,11 +153,11 @@ export default function SubscriptionModal({
             </TouchableOpacity>
 
             <View style={styles.crownWrap}>
-              <MaterialCommunityIcons name="crown" size={32} color="#f59e0b" />
+              <MaterialCommunityIcons name="crown" size={32} color="#e50914" />
             </View>
 
             <Text style={styles.title}>
-              {isPremium ? 'Extend Ad-Free VIP' : 'Upgrade to Ad-Free VIP'}
+              {isPremium ? 'Extend Ad-Free PRO' : 'Upgrade to Ad-Free PRO'}
             </Text>
             <Text style={styles.subtitle}>
               Enjoy movies, series & shorts with zero ads and instant playback.
@@ -181,7 +181,7 @@ export default function SubscriptionModal({
                 <Text style={styles.featureText}>No pre-roll, mid-roll, or player ads</Text>
               </View>
               <View style={styles.featureItem}>
-                <Feather name="zap" size={15} color="#f59e0b" style={styles.featureIcon} />
+                <Feather name="zap" size={15} color="#e50914" style={styles.featureIcon} />
                 <Text style={styles.featureText}>Zero shorts feed ads & instant playback</Text>
               </View>
               <View style={styles.featureItem}>
@@ -207,7 +207,7 @@ export default function SubscriptionModal({
               <View style={styles.successBox}>
                 <Feather name="check-circle" size={24} color="#10b981" />
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.successTitle}>VIP Activated Successfully!</Text>
+                  <Text style={styles.successTitle}>PRO Activated Successfully!</Text>
                   <Text style={styles.successDesc}>
                     Your ad-free status is now active until {formatExpirationDate(successInfo.expiresAt)}.
                   </Text>
@@ -249,7 +249,7 @@ export default function SubscriptionModal({
                         style={[
                           styles.badge,
                           p.id === '3_months'
-                            ? { backgroundColor: '#d97706' }
+                            ? { backgroundColor: '#b91c1c' }
                             : p.id === '6_months'
                             ? { backgroundColor: '#059669' }
                             : { backgroundColor: '#374151' },
@@ -276,7 +276,7 @@ export default function SubscriptionModal({
             {pendingOrder && (
               <View style={styles.pendingBox}>
                 <View style={styles.pendingHeader}>
-                  <Feather name="clock" size={16} color="#f59e0b" />
+                  <Feather name="clock" size={16} color="#e50914" />
                   <Text style={styles.pendingTitle}>Invoice Generated: {pendingOrder.orderId}</Text>
                 </View>
                 <Text style={styles.pendingNotice}>
@@ -337,7 +337,7 @@ export default function SubscriptionModal({
                   <>
                     <MaterialCommunityIcons name="lightning-bolt" size={18} color="#000" />
                     <Text style={styles.actionBtnText}>
-                      {isPremium ? 'Extend Ad-Free VIP' : 'Continue to Crypto Payment'}
+                      {isPremium ? 'Extend Ad-Free PRO' : 'Continue to Crypto Payment'}
                     </Text>
                   </>
                 )}
@@ -485,12 +485,12 @@ const styles = StyleSheet.create({
     padding: 14,
   },
   planCardSelected: {
-    borderColor: '#f59e0b',
+    borderColor: '#e50914',
     backgroundColor: 'rgba(245, 158, 11, 0.06)',
   },
   planCardHighlight: {
     borderLeftWidth: 4,
-    borderLeftColor: '#f59e0b',
+    borderLeftColor: '#e50914',
   },
   planHeader: {
     flexDirection: 'row',
@@ -505,7 +505,7 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   planNameSelected: {
-    color: '#fbbf24',
+    color: '#e50914',
   },
   planDesc: {
     color: '#a8a29e',
@@ -556,13 +556,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   radioCircleSelected: {
-    borderColor: '#f59e0b',
+    borderColor: '#e50914',
   },
   radioDot: {
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: '#f59e0b',
+    backgroundColor: '#e50914',
   },
   errorBox: {
     flexDirection: 'row',
@@ -617,7 +617,7 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   pendingTitle: {
-    color: '#fbbf24',
+    color: '#e50914',
     fontSize: 12,
     fontWeight: '700',
   },
@@ -632,7 +632,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: '#fbbf24',
+    backgroundColor: '#e50914',
     borderRadius: 10,
     paddingVertical: 10,
     paddingHorizontal: 14,
@@ -669,10 +669,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: '#f59e0b',
+    backgroundColor: '#e50914',
     borderRadius: 12,
     paddingVertical: 13,
-    shadowColor: '#f59e0b',
+    shadowColor: '#e50914',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.35,
     shadowRadius: 10,

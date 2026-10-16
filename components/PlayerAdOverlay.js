@@ -242,7 +242,7 @@ export default function PlayerAdOverlay({
               onPress={onGoAdFree}
               activeOpacity={0.8}
             >
-              <MaterialIcons name="workspace-premium" size={14} color="#fbbf24" style={{ marginRight: 4 }} />
+              <MaterialIcons name="workspace-premium" size={14} color="#e50914" style={{ marginRight: 4 }} />
               <Text style={styles.goAdFreeText}>Go Ad-Free ($1)</Text>
             </TouchableOpacity>
           )}
@@ -361,12 +361,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: 20,
-    backgroundColor: 'rgba(245, 158, 11, 0.2)',
+    backgroundColor: 'rgba(229, 9, 20, 0.2)',
     borderWidth: 1,
-    borderColor: 'rgba(245, 158, 11, 0.5)',
+    borderColor: 'rgba(229, 9, 20, 0.55)',
   },
   goAdFreeText: {
-    color: '#fbbf24',
+    color: '#e50914',
     fontSize: 11,
     fontWeight: '800',
     letterSpacing: 0.3,
