@@ -46,7 +46,7 @@ export default function PlayerAdOverlay({
   const [videoLoaded, setVideoLoaded] = useState(false);
   const [videoError, setVideoError] = useState(false);
   const [isMuted, setIsMuted] = useState(Platform.OS === 'web');
-  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const fadeAnim = useRef(new Animated.Value(1)).current;
   const webVideoRef = useRef(null);
 
   const toggleMute = (e) => {
@@ -62,15 +62,6 @@ export default function PlayerAdOverlay({
       } catch (_) {}
     }
   };
-
-  // Fade in animation on mount
-  useEffect(() => {
-    Animated.timing(fadeAnim, {
-      toValue: 1,
-      duration: 250,
-      useNativeDriver: true,
-    }).start();
-  }, [fadeAnim]);
 
   // Countdown timer for Skip button
   useEffect(() => {
@@ -98,6 +89,7 @@ export default function PlayerAdOverlay({
     try {
       p.loop = false; // Never replay when video ends
       p.muted = isMuted;
+      p.timeUpdateEventInterval = 0.1; // Must enable interval or timeUpdate never fires
       p.play();
     } catch (_) {}
   });
@@ -115,8 +107,19 @@ export default function PlayerAdOverlay({
     if (!nativePlayer || Platform.OS === 'web') return;
 
     try {
+      nativePlayer.timeUpdateEventInterval = 0.1;
       nativePlayer.play();
     } catch (_) {}
+
+    // Polling interval to catch ready/playing state quickly
+    const pollInterval = setInterval(() => {
+      try {
+        if (nativePlayer.playing || nativePlayer.currentTime > 0 || nativePlayer.status === 'readyToPlay') {
+          setVideoLoaded(true);
+          clearInterval(pollInterval);
+        }
+      } catch (_) {}
+    }, 200);
 
     const statusSub = nativePlayer.addListener('statusChange', (payload) => {
       const status = payload?.status || payload;
@@ -138,7 +141,7 @@ export default function PlayerAdOverlay({
 
     const timeSub = nativePlayer.addListener('timeUpdate', (payload) => {
       const currentTime = typeof payload === 'number' ? payload : (payload?.currentTime || 0);
-      if (currentTime > 0.05) {
+      if (currentTime > 0.01) {
         setVideoLoaded(true);
       }
     });
@@ -148,18 +151,18 @@ export default function PlayerAdOverlay({
       try { nativePlayer.pause(); } catch (_) {}
     });
 
-    // Safety fallback: If player doesn't report within 2.5 seconds, check status
+    // Safety fallback: If player doesn't start within 3.5s, keep crisp poster displayed
     const timer = setTimeout(() => {
+      clearInterval(pollInterval);
       try {
-        if (nativePlayer.status === 'readyToPlay' || nativePlayer.playing) {
-          setVideoLoaded(true);
-        } else if (nativePlayer.status === 'error') {
+        if (!nativePlayer.playing && nativePlayer.currentTime <= 0 && nativePlayer.status !== 'readyToPlay') {
           setVideoError(true);
         }
       } catch (_) {}
-    }, 2500);
+    }, 3500);
 
     return () => {
+      clearInterval(pollInterval);
       clearTimeout(timer);
       try { statusSub?.remove?.(); } catch (_) {}
       try { playSub?.remove?.(); } catch (_) {}
@@ -219,14 +222,18 @@ export default function PlayerAdOverlay({
               source={{ uri: ad.poster_url }}
               style={StyleSheet.absoluteFill}
               contentFit="cover"
-              transition={200}
+              cachePolicy="memory-disk"
+              transition={150}
             />
           ) : (
-            <View style={[StyleSheet.absoluteFill, { backgroundColor: '#111111' }]} />
+            <View style={[StyleSheet.absoluteFill, styles.fallbackAdCard]}>
+              <MaterialIcons name="campaign" size={60} color="#e50914" />
+              <Text style={styles.fallbackAdTitle}>{ad.name || 'Sponsored Promotion'}</Text>
+            </View>
           )}
 
-          {/* 2. Video Layer (renders over poster seamlessly once ready, falls back to poster on error) */}
-          {Boolean(isVideo && ad?.video_url && !videoError) && (
+          {/* 2. Video Layer: ONLY MOUNTED WHEN videoLoaded IS TRUE & using surfaceType="textureView" */}
+          {Boolean(isVideo && ad?.video_url && videoLoaded && !videoError) && (
             Platform.OS === 'web' ? (
               <video
                 ref={webVideoRef}
@@ -255,11 +262,10 @@ export default function PlayerAdOverlay({
               <VideoView
                 style={[
                   StyleSheet.absoluteFill,
-                  {
-                    opacity: isVideoEnded ? 0.35 : (videoLoaded ? 1 : 0),
-                  },
+                  isVideoEnded && { opacity: 0.35 },
                 ]}
                 player={nativePlayer}
+                surfaceType="textureView"
                 nativeControls={false}
                 contentFit="cover"
               />
@@ -604,5 +610,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
     zIndex: 15,
+  },
+  fallbackAdCard: {
+    backgroundColor: '#141414',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  fallbackAdTitle: {
+    color: '#FFFFFF',
+    fontSize: 22,
+    fontWeight: '800',
+    marginTop: 16,
+    textAlign: 'center',
   },
 });
