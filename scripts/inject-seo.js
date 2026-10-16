@@ -3,7 +3,6 @@
 // high-volume keywords, and Schema.org JSON-LD graphs for every individual route:
 // - / (Home)
 // - /download (and /apk)
-// - /shorts
 // - /privacy
 // - /terms
 // - /dmca
@@ -479,47 +478,6 @@ const PAGES = {
               "@type": "HowToStep",
               "name": "Install and Stream",
               "text": "Open the downloaded APK, tap Install, and launch MovieFlix to stream unlimited movies and series."
-            }
-          ]
-        }
-      ]
-    }
-  },
-
-  shorts: {
-    outPath: path.join(distDir, 'shorts', 'index.html'),
-    title: 'MovieFlix Shorts - Endless 9:16 Vertical Short Dramas & Viral Reels',
-    description: 'Watch trending vertical 9:16 short dramas, viral mini-episodes, romance reels, and thrilling cliffhangers on MovieFlix Shorts. Instant playback with zero buffering.',
-    canonical: `${BASE_URL}/shorts`,
-    ogType: 'video.other',
-    keywords: 'movieflix shorts, vertical short drama, short dramas online, dramabox series, reelshort free, short drama reels, viral shorts, 9:16 video player, watch shorts online, free mini series',
-    schema: {
-      "@context": "https://schema.org",
-      "@graph": [
-        {
-          "@type": "CollectionPage",
-          "@id": `${BASE_URL}/shorts#collection`,
-          "url": `${BASE_URL}/shorts`,
-          "name": "MovieFlix Shorts & Mini Dramas",
-          "description": "Curated collection of trending vertical short dramas, viral reels, and mini episodes.",
-          "isPartOf": {
-            "@type": "WebSite",
-            "name": "MovieFlix",
-            "url": `${BASE_URL}/`
-          }
-        },
-        {
-          "@type": "ItemList",
-          "@id": `${BASE_URL}/shorts#feed`,
-          "name": "Trending Short Dramas Feed",
-          "itemListElement": [
-            {
-              "@type": "VideoObject",
-              "position": 1,
-              "name": "I'm pregnant, it's not yours",
-              "description": "A high-stakes vertical drama episode full of family secrets and unexpected revelations.",
-              "thumbnailUrl": `${BASE_URL}/assets/og-banner.png`,
-              "uploadDate": "2026-10-01T00:00:00Z"
             }
           ]
         }

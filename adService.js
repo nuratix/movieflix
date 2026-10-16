@@ -99,39 +99,6 @@ export async function fetchRandomAd(options = {}) {
 }
 
 /**
- * Fetch active vertical 9:16 ads for Movieflix Shorts feed
- */
-export async function fetchShortsAds() {
-  try {
-    const useProxy = Platform.OS === 'web' || !DIRECT_ADS_API;
-    const cacheBuster = `_t=${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-    const url = useProxy
-      ? `${API_BASE}/api/ads?action=list&aspect_ratio=9:16&placement=shorts&${cacheBuster}`
-      : `${DIRECT_ADS_API}/api/v1/ads?aspect_ratio=9:16&placement=shorts&${cacheBuster}`;
-
-    const headers = { Accept: 'application/json' };
-    if (!useProxy && DIRECT_ADS_KEY) {
-      headers['X-Ad-Secret-Key'] = DIRECT_ADS_KEY;
-    }
-
-    const res = await fetch(url, { method: 'GET', headers, cache: 'no-store' });
-    if (!res.ok) return [];
-    const data = await res.json();
-    const ads = Array.isArray(data.ads) ? data.ads.slice() : [];
-    // Shuffle ads so order is randomized
-    for (let i = ads.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      const temp = ads[i];
-      ads[i] = ads[j];
-      ads[j] = temp;
-    }
-    return ads;
-  } catch {
-    return [];
-  }
-}
-
-/**
  * Record an impression when an ad is presented in the player
  */
 export async function recordImpression(ad) {

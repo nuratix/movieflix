@@ -99,10 +99,6 @@
       "destination": "/apk/index.html"
     },
     {
-      "source": "/shorts",
-      "destination": "/shorts/index.html"
-    },
-    {
       "source": "/privacy",
       "destination": "/privacy/index.html"
     },

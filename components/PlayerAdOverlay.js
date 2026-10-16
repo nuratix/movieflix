@@ -41,8 +41,18 @@ export default function PlayerAdOverlay({
     Number(ad?.skip_seconds) || initialSkipSeconds
   );
   const [isVideoEnded, setIsVideoEnded] = useState(false);
+  const [isMuted, setIsMuted] = useState(Platform.OS === 'web');
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const webVideoRef = useRef(null);
+
+  const toggleMute = (e) => {
+    e?.stopPropagation?.();
+    const next = !isMuted;
+    setIsMuted(next);
+    if (webVideoRef.current) {
+      webVideoRef.current.muted = next;
+    }
+  };
 
   // Fade in animation on mount
   useEffect(() => {
@@ -146,6 +156,7 @@ export default function PlayerAdOverlay({
                 src={ad.video_url}
                 poster={ad.poster_url || ''}
                 autoPlay
+                muted={isMuted}
                 playsInline
                 controls={false}
                 style={{
@@ -233,6 +244,16 @@ export default function PlayerAdOverlay({
               {isVideo ? 'SPONSORED VIDEO' : 'SPONSORED'}
             </Text>
           </View>
+          {Boolean(isVideo) && (
+            <TouchableOpacity
+              style={styles.soundBtn}
+              onPress={toggleMute}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              activeOpacity={0.7}
+            >
+              <Feather name={isMuted ? 'volume-x' : 'volume-2'} size={15} color="#FFFFFF" />
+            </TouchableOpacity>
+          )}
         </View>
 
         <View style={styles.topBarRightGroup}>
@@ -331,6 +352,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  soundBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 8,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.2)',
   },

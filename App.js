@@ -83,7 +83,6 @@ import {
 import { LOCAL_POSTERS } from './assets/posters';
 import { getImdbData } from './imdbService';
 import { getContentBasedRecommendations, getPersonalizedRecommendations } from './recommendationService';
-import { rankShotsFeed, buildUserInterestVector } from './shotsAlgorithmService';
 import WelcomeScreen from './WelcomeScreen';
 import AuthScreen from './AuthScreen';
 import CustomSplashScreen from './CustomSplashScreen';
@@ -96,7 +95,7 @@ import MaintenanceScreen from './components/MaintenanceScreen';
 import ServerCrashDonateScreen from './components/ServerCrashDonateScreen';
 import { checkSystemStatusAsync } from './statusService';
 import PlayerAdOverlay from './components/PlayerAdOverlay';
-import { fetchRandomAd, fetchShortsAds, recordImpression, recordClick } from './adService';
+import { fetchRandomAd, recordImpression, recordClick } from './adService';
 import SubscriptionModal from './components/SubscriptionModal';
 import { fetchSubscriptionStatus, formatExpirationDate } from './subscriptionService';
 import * as SplashScreen from 'expo-splash-screen';
@@ -112,6 +111,44 @@ export const isPremiumResolution = (resStr = '') => {
   if (lower.includes('4k') || lower.includes('2160') || lower.includes('1440') || lower.includes('1080')) return true;
   const num = parseInt(lower.replace(/[^0-9]/g, ''), 10);
   return !isNaN(num) && num > 720;
+};
+
+// ─── Default Stream Resolution Selector ──────────────────────────────────────
+// Non-pro users default to 720p (or 480p/360p if 720p is absent) — NEVER 1080p/4K
+export const selectDefaultStream = (validSources = [], isUserPro = false) => {
+  if (!validSources || validSources.length === 0) return null;
+
+  if (!isUserPro) {
+    // 1. Try to find 720p
+    const res720 = validSources.find(s => /720/i.test(String(s.resolution || '')));
+    if (res720) return res720;
+
+    // 2. Try to find 480p
+    const res480 = validSources.find(s => /480/i.test(String(s.resolution || '')));
+    if (res480) return res480;
+
+    // 3. Try to find 360p
+    const res360 = validSources.find(s => /360/i.test(String(s.resolution || '')));
+    if (res360) return res360;
+
+    // 4. Any non-premium source
+    const nonPro = validSources.find(s => !isPremiumResolution(s.resolution));
+    if (nonPro) return nonPro;
+
+    return validSources[0];
+  }
+
+  // Pro users: prefer 1080p, then 4K, then 720p
+  const res1080 = validSources.find(s => /1080/i.test(String(s.resolution || '')));
+  if (res1080) return res1080;
+
+  const res4k = validSources.find(s => /2160|4k/i.test(String(s.resolution || '')));
+  if (res4k) return res4k;
+
+  const res720 = validSources.find(s => /720/i.test(String(s.resolution || '')));
+  if (res720) return res720;
+
+  return validSources[0];
 };
 
 // ─── Apple-Grade Haptics Feedback Helper ─────────────────────────────────────
@@ -1122,2122 +1159,9 @@ function HomeSkeletonLoader() {
   );
 }
 
-// ─── INSTAGRAM-STYLE 9:16 SHOTS FEED & VIDEO PLAYER ─────────────────────────
-const INITIAL_SHOTS = [
-  {
-    id: "shot-4183823238805478232-init",
-    subject_id: "4183823238805478232",
-    title: "Matchbox the Movie",
-    name: "Matchbox the Movie",
-    slug: "matchbox-the-movie-S5hfykcX3Z4",
-    poster_url: "https://pbcdnw.aoneroom.com/image/2026/10/10/486b8e41bf36e0c35a2ec0b4de21aa06.jpg",
-    rating: "5.8",
-    author: "@Movieflix",
-    isMovie: true,
-    isSeries: false,
-    badge: "Movie",
-    total_episodes: 0,
-    se: 0,
-    ep: 0,
-    likes: 0,
-    shares: 0,
-  },
-  {
-    id: "shot-8697152315721245208-init",
-    subject_id: "8697152315721245208",
-    title: "Avatar: Seven Havens",
-    name: "Avatar: Seven Havens",
-    slug: "avatar-seven-havens-6RjmSI53tma",
-    poster_url: "https://pbcdnw.aoneroom.com/image/2026/09/24/3ff183eb269dc4526205208417134b4a.jpg",
-    rating: "6.6",
-    author: "@Netflix",
-    isMovie: false,
-    isSeries: true,
-    badge: "Series",
-    total_episodes: 10,
-    se: 1,
-    ep: 1,
-    likes: 0,
-    shares: 0,
-  },
-  {
-    id: "shot-545117293769020152-init",
-    subject_id: "545117293769020152",
-    title: "I'm pregnant, it's not yours",
-    name: "I'm pregnant, it's not yours",
-    slug: "im-pregnant-its-not-yours-iLdEdERDgE",
-    poster_url: "https://pbcdnw.aoneroom.com/image/2026/08/19/c0a1ea39fb7a40fd3d0ec44fa6684a39.jpg",
-    rating: "7.9",
-    author: "@DramaBox",
-    isMovie: false,
-    isSeries: true,
-    badge: "Short",
-    total_episodes: 37,
-    se: 1,
-    ep: 1,
-    likes: 0,
-    shares: 0,
-  },
-  {
-    id: "shot-8026099856525641752-init",
-    subject_id: "8026099856525641752",
-    title: "Ice Cream Man",
-    name: "Ice Cream Man",
-    slug: "ice-cream-man-werpFRACTy9",
-    poster_url: "https://pbcdnw.aoneroom.com/image/2026/08/04/de3f5362aee4f59e3d760c6283c35a6c.jpg",
-    rating: "6.5",
-    author: "@CinemaMax",
-    isMovie: true,
-    isSeries: false,
-    badge: "Movie",
-    total_episodes: 0,
-    se: 0,
-    ep: 0,
-    likes: 0,
-    shares: 0,
-  },
-  {
-    id: "shot-5139196938264400928-init",
-    subject_id: "5139196938264400928",
-    title: "The Boys",
-    name: "The Boys",
-    slug: "the-boys-c8bx84KzD76",
-    poster_url: "https://pbcdnw.aoneroom.com/image/2026/09/15/455328c7f4249ad60b5e585049de8019.jpg",
-    rating: "8.5",
-    author: "@AmazonPrime",
-    isMovie: false,
-    isSeries: true,
-    badge: "Series",
-    total_episodes: 8,
-    se: 1,
-    ep: 1,
-    likes: 0,
-    shares: 0,
-  },
-  {
-    id: "shot-8514694265598101032-init",
-    subject_id: "8514694265598101032",
-    title: "Beneath Her Gown: The Master's Claimed Wolf Pet",
-    name: "Beneath Her Gown: The Master's Claimed Wolf Pet",
-    slug: "beneath-her-gown-the-masters-claimed-wolf-pet-k8xuNqboZ8a",
-    poster_url: "https://pbcdnw.aoneroom.com/image/2026/08/11/50e2c2fc118aaacb56bf6e892743d5ff.jpg",
-    rating: "7.2",
-    author: "@NetShort",
-    isMovie: false,
-    isSeries: true,
-    badge: "Short",
-    total_episodes: 28,
-    se: 1,
-    ep: 1,
-    likes: 0,
-    shares: 0,
-  },
-  {
-    id: "shot-5295229396255755840-init",
-    subject_id: "5295229396255755840",
-    title: "Lita",
-    name: "Lita",
-    slug: "lita-4UlZmZOcaj6",
-    poster_url: "https://pbcdnw.aoneroom.com/image/2025/11/03/3ee77ff1b25fd77f85403b3cd535741f.jpg",
-    rating: "7.4",
-    author: "@WarnerBros",
-    isMovie: true,
-    isSeries: false,
-    badge: "Movie",
-    total_episodes: 0,
-    se: 0,
-    ep: 0,
-    likes: 0,
-    shares: 0,
-  },
-  {
-    id: "shot-149973373144159000-init",
-    subject_id: "149973373144159000",
-    title: "Snowfall",
-    name: "Snowfall",
-    slug: "snowfall-6JvIRkxS4b",
-    poster_url: "https://pbcdnw.aoneroom.com/image/2026/01/27/bd0959b7ce517e11ee5a4294e987317c.jpg",
-    rating: "8.5",
-    author: "@HBO",
-    isMovie: false,
-    isSeries: true,
-    badge: "Series",
-    total_episodes: 10,
-    se: 1,
-    ep: 1,
-    likes: 0,
-    shares: 0,
-  },
-  {
-    id: "shot-8656852975811445184-init",
-    subject_id: "8656852975811445184",
-    title: "The Hidden Dragon Rider Returns for Justice",
-    name: "The Hidden Dragon Rider Returns for Justice",
-    slug: "the-hidden-dragon-rider-returns-for-justice-KTqXdfFtuja",
-    poster_url: "https://pbcdnw.aoneroom.com/image/2026/08/24/4be78c41bd06008edc758fed54b88750.jpg",
-    rating: "7.9",
-    author: "@ShortMax",
-    isMovie: false,
-    isSeries: true,
-    badge: "Short",
-    total_episodes: 30,
-    se: 1,
-    ep: 1,
-    likes: 0,
-    shares: 0,
-  },
-  {
-    id: "shot-3272392338131385552-init",
-    subject_id: "3272392338131385552",
-    title: "MY 30TH WEDDING",
-    name: "MY 30TH WEDDING",
-    slug: "my-30th-wedding-6x5L5dGAJT3",
-    poster_url: "https://pbcdnw.aoneroom.com/image/2026/10/01/4d04cebd1d30043dd31a26817dba4776.jpg",
-    rating: "7.0",
-    author: "@Universal",
-    isMovie: true,
-    isSeries: false,
-    badge: "Movie",
-    total_episodes: 0,
-    se: 0,
-    ep: 0,
-    likes: 0,
-    shares: 0,
-  }
-];
-
-function formatShotCount(num) {
-  if (!num) return '0';
-  if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
-  if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
-  return String(num);
-}
-
-function buildPureHtmlShotsPage({ initialShots, initialAds, apiBase, isMuted, targetShortId, authToken }) {
-  const safeShotsJson = JSON.stringify(initialShots || []);
-  const safeInitialAdsJson = JSON.stringify(initialAds || []);
-  const safeTargetId = JSON.stringify(targetShortId || '');
-  const safeApiBase = JSON.stringify(apiBase || '');
-  const safeAuthToken = JSON.stringify(authToken || '');
-  const safeIsMuted = isMuted ? 'true' : 'false';
-
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>Movieflix Shorts</title>
-  <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-      -webkit-tap-highlight-color: transparent;
-      -webkit-touch-callout: none;
-      user-select: none;
-      -webkit-user-select: none;
-    }
-    html, body {
-      width: 100%;
-      height: 100%;
-      background: #000000;
-      overflow: hidden;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      color: #ffffff;
-    }
-    .feed-container {
-      width: 100%;
-      height: 100%;
-      overflow-y: scroll;
-      scroll-snap-type: y mandatory;
-      -webkit-overflow-scrolling: touch;
-      scrollbar-width: none;
-    }
-    .feed-container::-webkit-scrollbar {
-      display: none;
-    }
-    .slide {
-      width: 100%;
-      height: 100%;
-      scroll-snap-align: start;
-      scroll-snap-stop: always;
-      position: relative;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: #000000;
-      overflow: hidden;
-    }
-    .ambient-backdrop {
-      position: absolute;
-      top: -10%;
-      left: -10%;
-      width: 120%;
-      height: 120%;
-      object-fit: cover;
-      filter: blur(40px) brightness(0.25);
-      z-index: 1;
-      pointer-events: none;
-    }
-    .stage {
-      position: relative;
-      width: 100%;
-      max-width: 520px;
-      height: 100%;
-      background: #050505;
-      z-index: 2;
-      overflow: hidden;
-    }
-    video.player {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      object-fit: contain;
-      background: #000000;
-      display: block;
-      z-index: 2;
-    }
-    .poster-img {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      object-fit: contain;
-      background: #000000;
-      z-index: 3;
-      transition: opacity 0.25s ease;
-    }
-    .poster-img.hidden {
-      opacity: 0;
-      pointer-events: none;
-    }
-    .gradient-overlay {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: linear-gradient(
-        to bottom,
-        rgba(0, 0, 0, 0.45) 0%,
-        transparent 18%,
-        transparent 62%,
-        rgba(0, 0, 0, 0.35) 75%,
-        rgba(0, 0, 0, 0.88) 100%
-      );
-      z-index: 4;
-      pointer-events: none;
-    }
-    .top-header {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      height: 60px;
-      padding: env(safe-area-inset-top, 14px) 16px 0 16px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      z-index: 100;
-      pointer-events: none;
-    }
-    .top-header * {
-      pointer-events: auto;
-    }
-    .header-btn {
-      width: 40px;
-      height: 40px;
-      border-radius: 20px;
-      background: rgba(0, 0, 0, 0.45);
-      backdrop-filter: blur(12px);
-      border: 1px solid rgba(255, 255, 255, 0.12);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      color: #ffffff;
-      transition: transform 0.15s ease, background 0.2s ease;
-    }
-    .header-btn:active {
-      transform: scale(0.92);
-      background: rgba(0, 0, 0, 0.65);
-    }
-    .header-logo-wrap {
-      display: flex;
-      align-items: center;
-      height: 28px;
-    }
-    .header-logo-wrap svg {
-      height: 24px;
-      width: auto;
-      max-width: 130px;
-      display: block;
-    }
-    .right-actions {
-      position: absolute;
-      right: 14px;
-      bottom: calc(env(safe-area-inset-bottom, 16px) + 78px);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 18px;
-      z-index: 20;
-    }
-    .action-btn {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      background: none;
-      border: none;
-      color: #ffffff;
-      cursor: pointer;
-      gap: 5px;
-    }
-    .action-btn:active {
-      transform: scale(0.9);
-    }
-    .action-icon-circle {
-      width: 46px;
-      height: 46px;
-      border-radius: 23px;
-      background: rgba(0, 0, 0, 0.45);
-      backdrop-filter: blur(12px);
-      border: 1px solid rgba(255, 255, 255, 0.12);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transition: all 0.2s ease;
-    }
-    .action-btn.liked .action-icon-circle {
-      background: rgba(229, 9, 20, 0.25);
-      border-color: rgba(229, 9, 20, 0.45);
-    }
-    .action-btn.liked svg {
-      fill: #e50914;
-      stroke: #e50914;
-    }
-    .action-label {
-      font-size: 11px;
-      font-weight: 700;
-      color: #e5e5e5;
-      text-shadow: 0 1px 3px rgba(0,0,0,0.9);
-    }
-    .bottom-info {
-      position: absolute;
-      left: 16px;
-      right: 80px;
-      bottom: calc(env(safe-area-inset-bottom, 16px) + 20px);
-      z-index: 20;
-      display: flex;
-      flex-direction: column;
-      gap: 7px;
-    }
-    .creator-row {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .creator-avatar {
-      width: 28px;
-      height: 28px;
-      border-radius: 14px;
-      object-fit: cover;
-      border: 1.5px solid rgba(255, 255, 255, 0.9);
-    }
-    .creator-name {
-      font-size: 13px;
-      font-weight: 700;
-      color: #ffffff;
-      text-shadow: 0 1px 3px rgba(0,0,0,0.9);
-    }
-    .shot-title {
-      font-size: 15px;
-      font-weight: 700;
-      line-height: 1.35;
-      color: #ffffff;
-      text-shadow: 0 1px 4px rgba(0,0,0,0.95);
-      display: -webkit-box;
-      -webkit-line-clamp: 2;
-      -webkit-box-orient: vertical;
-      overflow: hidden;
-    }
-    .ep-pill {
-      display: inline-flex;
-      align-items: center;
-      align-self: flex-start;
-      gap: 6px;
-      background: rgba(255, 255, 255, 0.12);
-      backdrop-filter: blur(12px);
-      border: 1px solid rgba(255, 255, 255, 0.18);
-      border-radius: 14px;
-      padding: 4px 10px;
-      font-size: 11px;
-      font-weight: 700;
-      color: #ffffff;
-    }
-    .ep-btn {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 2px 4px;
-      cursor: pointer;
-      opacity: 0.8;
-      border: none;
-      background: none;
-      color: #fff;
-      font-size: 9px;
-    }
-    .ep-btn:active {
-      opacity: 1;
-      transform: scale(1.2);
-    }
-    .type-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      background: rgba(0, 0, 0, 0.6);
-      backdrop-filter: blur(8px);
-      border: 1px solid rgba(255, 255, 255, 0.22);
-      border-radius: 10px;
-      padding: 2px 7px;
-      font-size: 10px;
-      font-weight: 800;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      color: #e50914;
-    }
-    .watch-this-btn {
-      display: inline-flex;
-      align-items: center;
-      align-self: flex-start;
-      gap: 7px;
-      background: linear-gradient(135deg, #e50914 0%, #b20710 100%);
-      color: #ffffff;
-      border: 1px solid rgba(255, 255, 255, 0.25);
-      border-radius: 20px;
-      padding: 7px 16px;
-      font-size: 13px;
-      font-weight: 800;
-      letter-spacing: 0.3px;
-      cursor: pointer;
-      box-shadow: 0 4px 14px rgba(229, 9, 20, 0.45);
-      transition: transform 0.15s ease, box-shadow 0.15s ease;
-      margin-top: 4px;
-      pointer-events: auto;
-    }
-    .watch-this-btn:active {
-      transform: scale(0.93);
-      box-shadow: 0 2px 8px rgba(229, 9, 20, 0.3);
-    }
-    .progress-bar-track {
-      position: absolute;
-      bottom: 0;
-      left: 0;
-      right: 0;
-      height: 2.5px;
-      background: rgba(255, 255, 255, 0.18);
-      z-index: 50;
-    }
-    .progress-bar-fill {
-      height: 100%;
-      width: 0%;
-      background: #e50914;
-      transition: width 0.15s linear;
-    }
-    .heart-burst {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%) scale(0) rotate(-15deg);
-      pointer-events: none;
-      z-index: 60;
-      opacity: 0;
-      filter: drop-shadow(0 0 24px rgba(229, 9, 20, 0.95));
-      transition: transform 0.42s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.32s ease;
-    }
-    .heart-burst.pop {
-      transform: translate(-50%, -50%) scale(1.4) rotate(0deg);
-      opacity: 1;
-    }
-    .hud-2x {
-      position: absolute;
-      top: 72px;
-      left: 50%;
-      transform: translateX(-50%) translateY(-8px) scale(0.92);
-      background: rgba(0, 0, 0, 0.78);
-      backdrop-filter: blur(14px);
-      -webkit-backdrop-filter: blur(14px);
-      border: 1px solid rgba(255, 255, 255, 0.22);
-      border-radius: 20px;
-      padding: 6px 16px;
-      display: flex;
-      align-items: center;
-      gap: 7px;
-      font-size: 13px;
-      font-weight: 800;
-      color: #ffffff;
-      letter-spacing: 0.4px;
-      opacity: 0;
-      pointer-events: none;
-      z-index: 80;
-      transition: opacity 0.2s ease, transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.7);
-    }
-    .hud-2x.active {
-      opacity: 1;
-      transform: translateX(-50%) translateY(0) scale(1);
-    }
-    .hud-2x svg {
-      color: #e50914;
-      fill: #e50914;
-    }
-    .play-pause-hud {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      width: 68px;
-      height: 68px;
-      border-radius: 34px;
-      background: rgba(0, 0, 0, 0.6);
-      backdrop-filter: blur(10px);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      pointer-events: none;
-      z-index: 25;
-      opacity: 0;
-      transition: opacity 0.25s ease, transform 0.25s ease;
-      color: #ffffff;
-    }
-    .play-pause-hud.show {
-      opacity: 1;
-      transform: translate(-50%, -50%) scale(1.1);
-    }
-    .buffer-spinner {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      width: 44px;
-      height: 44px;
-      border: 3px solid rgba(255, 255, 255, 0.2);
-      border-top-color: #e50914;
-      border-radius: 50%;
-      animation: spin 0.8s linear infinite;
-      z-index: 22;
-      display: none;
-    }
-    .buffer-spinner.active {
-      display: block;
-    }
-    @keyframes spin {
-      to { transform: translate(-50%, -50%) rotate(360deg); }
-    }
-    /* ─── MovieAds Shorts Ad Slide Styles ─── */
-    .slide.ad-slide {
-      background: #000000;
-    }
-    .slide.ad-slide video.player {
-      object-fit: cover;
-      transition: filter 0.45s ease, transform 0.45s ease;
-    }
-    .slide.ad-slide video.player.video-blurred {
-      filter: blur(20px) brightness(0.5);
-      transform: scale(1.06);
-      pointer-events: none;
-    }
-    .ad-poster-img {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      z-index: 2;
-      background: #000000;
-    }
-    .ad-top-bar {
-      position: absolute;
-      top: env(safe-area-inset-top, 14px);
-      left: 14px;
-      right: 14px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      z-index: 45;
-      pointer-events: none;
-    }
-    .ad-top-bar * {
-      pointer-events: auto;
-    }
-    .ad-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 5px;
-      background: rgba(0, 0, 0, 0.72);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
-      border: 1px solid rgba(255, 255, 255, 0.2);
-      border-radius: 14px;
-      padding: 4px 11px;
-      font-size: 11px;
-      font-weight: 800;
-      letter-spacing: 0.5px;
-      color: #e50914;
-    }
-    .ad-skip-btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 6px 14px;
-      border-radius: 20px;
-      font-size: 12px;
-      font-weight: 700;
-      border: 1px solid rgba(255, 255, 255, 0.18);
-      background: rgba(0, 0, 0, 0.65);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
-      color: #a3a3a3;
-      cursor: not-allowed;
-      transition: all 0.2s ease;
-    }
-    .ad-skip-btn.active {
-      background: #e50914;
-      border-color: #ff3b30;
-      color: #ffffff;
-      cursor: pointer;
-      box-shadow: 0 4px 16px rgba(229, 9, 20, 0.5);
-    }
-    .ad-skip-btn.active:hover, .ad-skip-btn.active:active {
-      transform: scale(1.05);
-      background: #f40612;
-    }
-    .ad-ended-center-box {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 12px;
-      z-index: 40;
-      text-align: center;
-      width: 86%;
-      max-width: 320px;
-      animation: adFadeInScale 0.35s ease forwards;
-    }
-    @keyframes adFadeInScale {
-      from { opacity: 0; transform: translate(-50%, -46%) scale(0.92); }
-      to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
-    }
-    .ad-center-try-now-btn {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      background: linear-gradient(135deg, #e50914 0%, #b20710 100%);
-      color: #ffffff;
-      border: 1.5px solid rgba(255, 255, 255, 0.35);
-      padding: 14px 34px;
-      border-radius: 32px;
-      font-size: 16px;
-      font-weight: 800;
-      letter-spacing: 0.5px;
-      cursor: pointer;
-      box-shadow: 0 8px 30px rgba(229, 9, 20, 0.65);
-      transition: transform 0.15s ease, box-shadow 0.15s ease;
-    }
-    .ad-center-try-now-btn:active {
-      transform: scale(0.94);
-      box-shadow: 0 4px 14px rgba(229, 9, 20, 0.4);
-    }
-    .ad-center-title {
-      font-size: 17px;
-      font-weight: 700;
-      color: #ffffff;
-      text-shadow: 0 2px 10px rgba(0, 0, 0, 0.95);
-      max-width: 100%;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-    .ad-center-domain {
-      display: inline-flex;
-      align-items: center;
-      gap: 5px;
-      background: rgba(0, 0, 0, 0.65);
-      backdrop-filter: blur(10px);
-      border: 1px solid rgba(255, 255, 255, 0.2);
-      border-radius: 12px;
-      padding: 3px 10px;
-      font-size: 12px;
-      color: #9ca3af;
-    }
-    .ad-bottom-info {
-      position: absolute;
-      left: 16px;
-      right: 16px;
-      bottom: calc(env(safe-area-inset-bottom, 16px) + 26px);
-      z-index: 25;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-    }
-    .ad-domain-pill {
-      display: inline-flex;
-      align-items: center;
-      align-self: flex-start;
-      gap: 5px;
-      background: rgba(0, 0, 0, 0.65);
-      backdrop-filter: blur(10px);
-      -webkit-backdrop-filter: blur(10px);
-      border: 1px solid rgba(255, 255, 255, 0.2);
-      border-radius: 12px;
-      padding: 3px 10px;
-      font-size: 11px;
-      color: #9ca3af;
-      cursor: pointer;
-    }
-    .ad-cta-btn {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      align-self: flex-start;
-      gap: 6px;
-      background: #e50914;
-      color: #ffffff;
-      border: none;
-      border-radius: 20px;
-      padding: 9px 22px;
-      font-size: 13px;
-      font-weight: 800;
-      letter-spacing: 0.3px;
-      cursor: pointer;
-      box-shadow: 0 4px 14px rgba(229, 9, 20, 0.5);
-      transition: transform 0.15s ease;
-    }
-    .ad-cta-btn:active {
-      transform: scale(0.95);
-    }
-  </style>
-</head>
-<body>
-  <div class="top-header">
-    <div style="display: flex; align-items: center; gap: 12px;">
-      <button class="header-btn" id="backBtn" aria-label="Back">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
-      </button>
-      <div class="header-logo-wrap">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="72 -26 2048 472" width="1024" height="236" role="img" aria-label="MovieFlix" xmlns:c2pa="http://c2pa.org/manifest"><metadata><c2pa:manifest>AAAWgmp1bWIAAAAeanVtZGMycGEAEQAQgAAAqgA4m3EDYzJwYQAAABZcanVtYgAAAEdqdW1kYzJtYQARABCAAACqADibcQN1cm46YzJwYTozOTI4NTdiYy0zN2Q2LTQ4Y2UtYWQzMy01Njc3NGVlZDVkYTUAAAADl2p1bWIAAAApanVtZGMyYXMAEQAQgAAAqgA4m3EDYzJwYS5hc3NlcnRpb25zAAAAALxqdW1iAAAARGp1bWRjYm9yABEAEIAAAKoAOJtxE2MycGEuaW5ncmVkaWVudC52MwAAAAAYYzJzaM/EOGXP2/2qbhl2EQMgprMAAABwY2JvcqNpZGM6Zm9ybWF0bWltYWdlL3N2Zyt4bWxqaW5zdGFuY2VJRHgseG1wOmlpZDo1MWJiNmM2MC1hMTlkLTRiNWItYTRjOC0yZDczYmI1M2Y1Y2RscmVsYXRpb25zaGlwaHBhcmVudE9mAAAB4mp1bWIAAABBanVtZGNib3IAEQAQgAAAqgA4m3ETYzJwYS5hY3Rpb25zLnYyAAAAABhjMnNogEoyPLuY/5P/icumHErlYQAAAZljYm9yomdhY3Rpb25zgqJmYWN0aW9ua2MycGEub3BlbmVkanBhcmFtZXRlcnOha2luZ3JlZGllbnRzgaJjdXJseC1zZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmluZ3JlZGllbnQudjNkaGFzaFggn110B4O8KHTJP/qNrr87sksc7B5eiqmQHpsvIbOHvOykZmFjdGlvbngdY29tLmFudGhyb3BpYy5jbGF1ZGUucHJvdmlkZWRqcGFyYW1ldGVyc6F4H2NvbS5hbnRocm9waWMub3JpZ2luLWNvbmZpZGVuY2VndW5rbm93bmtkZXNjcmlwdGlvbnhmQ2xhdWRlIHByb3ZpZGVkIHRoaXMgZmlsZSBhdCB0aGUgcmVxdWVzdCBvZiBhIHVzZXIgYW5kIG1heSBoYXZlIGNyZWF0ZWQgb3IgbW9kaWZpZWQgdGhlIGZpbGUgY29udGVudHMubXNvZnR3YXJlQWdlbnShZG5hbWVmQ2xhdWRlcmFsbEFjdGlvbnNJbmNsdWRlZPUAAADIanVtYgAAAEBqdW1kY2JvcgARABCAAACqADibcRNjMnBhLmhhc2guZGF0YQAAAAAYYzJzaMe1b8HPDv7vDWWj55MNpU4AAACAY2JvcqVjYWxnZnNoYTI1NmNwYWRNAAAAAAAAAAAAAAAAAGRoYXNoWCAEfsVCZqxvTPWIJfRYLXhCqWzp15CGEmE2IaexNPKyNmRuYW1lbmp1bWJmIG1hbmlmZXN0amV4Y2x1c2lvbnOBomVzdGFydBi9Zmxlbmd0aBkeBAAAAj5qdW1iAAAAJ2p1bWRjMmNsABEAEIAAAKoAOJtxA2MycGEuY2xhaW0udjIAAAACD2Nib3KlY2FsZ2ZzaGEyNTZpc2lnbmF0dXJleE1zZWxmI2p1bWJmPS9jMnBhL3VybjpjMnBhOjM5Mjg1N2JjLTM3ZDYtNDhjZS1hZDMzLTU2Nzc0ZWVkNWRhNS9jMnBhLnNpZ25hdHVyZWppbnN0YW5jZUlEeCx4bXA6aWlkOmY3OTkzZDExLTcwYWItNDJjNi1hZjU5LTliOGVjYmEzYzRiNnJjcmVhdGVkX2Fzc2VydGlvbnODomN1cmx4LXNlbGYjanVtYmY9YzJwYS5hc3NlcnRpb25zL2MycGEuaW5ncmVkaWVudC52M2RoYXNoWCCfXXQHg7wodMk/+o2uvzuySxzsHl6KqZAemy8hs4e87KJjdXJseCpzZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmFjdGlvbnMudjJkaGFzaFggHJ8pKA5tDYfvg+uAunh6JmtxKRu6s+YlfLB3e748EdqiY3VybHgpc2VsZiNqdW1iZj1jMnBhLmFzc2VydGlvbnMvYzJwYS5oYXNoLmRhdGFkaGFzaFgg0ORc840IT346tRPJH3gJYtShCiE38jlmB4TsEpf30ht0Y2xhaW1fZ2VuZXJhdG9yX2luZm+jZG5hbWVvQW50aHJvcGljIEZpbGVzZ3ZlcnNpb25lMS4wLjBrc3BlY1ZlcnNpb25lMi40LjAAABA4anVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABAIY2JvctKEWQISogEmGCFZAgowggIGMIIBjaADAgECAhRA5aAK7sI50L64g/oGQgU9Z1UTADAKBggqhkjOPQQDAzBJMRcwFQYDVQQKEw5BbnRocm9waWMsIFBCQzEuMCwGA1UEAxMlQW50aHJvcGljIENvbnRlbnQgQ3JlZGVudGlhbHMgUm9vdCBDQTAeFw0yNjA4MDcxODQzNTZaFw0yODA4MDYxOTQzNTZaMEQxFzAVBgNVBAoTDkFudGhyb3BpYywgUEJDMSkwJwYDVQQDEyBBbnRocm9waWMgQ2xhdWRlIENvbnRlbnQgU2lnbmluZzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJh6CmvLUBgFFNU0vUKlOVtE6djd17L5SuwX0LemFisBM3dkd/3cyjxFA3Qo5S46fX0/ihY0VZ7mfb9KF703t5OjWDBWMA4GA1UdDwEB/wQEAwIHgDAVBgNVHSUEDjAMBgorBgEEAYPoXgIBMAwGA1UdEwEB/wQCMAAwHwYDVR0jBBgwFoAUzlHiBIFOZFsj+OPEz5o+nMHXXMIwCgYIKoZIzj0EAwMDZwAwZAIwMXMdFJ4BetLLVY7ORuE9noqbbAZOZn/aArXyTwFAZfKrPzxF2vPoJNf1+UCdg1XGAjBwX1zd9WGqYkqmL5SFqw1QySjr1zJfpJM9+1rdDwSPLMOPOjKuiXjoU/pUUeG9RwmhY3BhZFkNngAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPZYQO7DryQpQ3ntirWb9q/1POhVajOsDbytPotjBi/ZwmlB/45NOMkfyxDejaRQvLgQxoeea++sQGtTSm1If6fEcwA=</c2pa:manifest></metadata><title>MovieFlix</title><defs>
-<clipPath id="mClip"><path d="M131.0 14.0L228.9 14.0Q234.0 14.0 236.6 18.4L309.2 141.3Q312.0 146.0 314.5 141.1L375.5 19.0Q378.0 14.0 383.6 14.0L481.0 14.0Q490.0 14.0 490.0 23.0L490.0 397.0Q490.0 406.0 481.0 406.0L387.0 406.0Q378.0 406.0 378.0 397.0L378.0 271.0Q378.0 258.0 372.3 269.7L314.2 389.1Q306.0 406.0 298.0 389.0L239.7 265.1Q234.0 253.0 234.0 266.4L234.0 397.0Q234.0 406.0 225.0 406.0L131.0 406.0Q122.0 406.0 122.0 397.0L122.0 23.0Q122.0 14.0 131.0 14.0Z"/></clipPath>
-<clipPath id="xClip"><path d="M1839.2 38.0L1903.8 38.0Q1909.0 38.0 1911.1 42.8L1945.3 120.9Q1948.0 127.2 1950.7 120.9L1984.9 42.8Q1987.0 38.0 1992.2 38.0L2056.8 38.0Q2069.0 38.0 2064.1 49.2L1989.5 219.8Q1989.0 221.0 1989.5 222.2L2064.1 392.8Q2069.0 404.0 2056.8 404.0L1992.2 404.0Q1987.0 404.0 1984.9 399.2L1950.7 321.1Q1948.0 314.8 1945.3 321.1L1911.1 399.2Q1909.0 404.0 1903.8 404.0L1839.2 404.0Q1827.0 404.0 1831.9 392.8L1906.5 222.2Q1907.0 221.0 1906.5 219.8L1831.9 49.2Q1827.0 38.0 1839.2 38.0Z"/></clipPath>
-<clipPath id="logoClip"><path d="M131.0 14.0L228.9 14.0Q234.0 14.0 236.6 18.4L309.2 141.3Q312.0 146.0 314.5 141.1L375.5 19.0Q378.0 14.0 383.6 14.0L481.0 14.0Q490.0 14.0 490.0 23.0L490.0 397.0Q490.0 406.0 481.0 406.0L387.0 406.0Q378.0 406.0 378.0 397.0L378.0 271.0Q378.0 258.0 372.3 269.7L314.2 389.1Q306.0 406.0 298.0 389.0L239.7 265.1Q234.0 253.0 234.0 266.4L234.0 397.0Q234.0 406.0 225.0 406.0L131.0 406.0Q122.0 406.0 122.0 397.0L122.0 23.0Q122.0 14.0 131.0 14.0Z"/><path fill-rule="evenodd" d="M584 34H692A66 66 0 0 1 758 100V322A66 66 0 0 1 692 388H584A66 66 0 0 1 518 322V100A66 66 0 0 1 584 34ZM626 102H650A20 20 0 0 1 670 122V298A20 20 0 0 1 650 318H626A20 20 0 0 1 606 298V122A20 20 0 0 1 626 102Z"/><path d="M769.9 38.0L835.5 38.0Q842.0 38.0 843.3 44.4L875.1 197.8Q878.0 212.0 880.9 197.8L912.7 44.4Q914.0 38.0 920.5 38.0L986.0 38.0Q996.0 38.0 993.8 47.8L923.4 360.8Q922.0 367.0 915.6 367.0L838.4 367.0Q832.0 367.0 830.6 360.7L762.1 47.7Q760.0 38.0 769.9 38.0Z"/><path d="M1020.0 38.0L1092.0 38.0Q1099.0 38.0 1099.0 45.0L1099.0 348.0Q1099.0 355.0 1092.0 355.0L1020.0 355.0Q1013.0 355.0 1013.0 348.0L1013.0 45.0Q1013.0 38.0 1020.0 38.0Z"/><path d="M1130.0 38.0L1302.0 38.0Q1309.0 38.0 1309.0 45.0L1309.0 92.0Q1309.0 99.0 1302.0 99.0L1212.0 99.0Q1209.0 99.0 1209.0 102.0L1209.0 154.0Q1209.0 157.0 1212.0 157.0L1278.0 157.0Q1285.0 157.0 1285.0 164.0L1285.0 212.0Q1285.0 219.0 1278.0 219.0L1212.0 219.0Q1209.0 219.0 1209.0 222.0L1209.0 291.0Q1209.0 294.0 1212.0 294.0L1305.0 294.0Q1312.0 294.0 1312.0 301.0L1312.0 348.0Q1312.0 355.0 1305.0 355.0L1130.0 355.0Q1123.0 355.0 1123.0 348.0L1123.0 45.0Q1123.0 38.0 1130.0 38.0Z"/><path d="M1341.0 38.0L1509.0 38.0Q1516.0 38.0 1516.0 45.0L1516.0 92.0Q1516.0 99.0 1509.0 99.0L1423.0 99.0Q1420.0 99.0 1420.0 102.0L1420.0 154.0Q1420.0 157.0 1423.0 157.0L1486.0 157.0Q1493.0 157.0 1493.0 164.0L1493.0 212.0Q1493.0 219.0 1486.0 219.0L1423.0 219.0Q1420.0 219.0 1420.0 222.0L1420.0 348.0Q1420.0 355.0 1413.0 355.0L1341.0 355.0Q1334.0 355.0 1334.0 348.0L1334.0 45.0Q1334.0 38.0 1341.0 38.0Z"/><path d="M1541.0 38.0L1613.0 38.0Q1620.0 38.0 1620.0 45.0L1620.0 300.0Q1620.0 303.0 1623.0 303.0L1691.0 303.0Q1698.0 303.0 1698.0 310.0L1698.0 359.0Q1698.0 366.0 1691.0 366.0L1541.0 366.0Q1534.0 366.0 1534.0 359.0L1534.0 45.0Q1534.0 38.0 1541.0 38.0Z"/><path d="M1731.0 38.0L1803.0 38.0Q1810.0 38.0 1810.0 45.0L1810.0 374.0Q1810.0 381.0 1803.0 381.0L1731.0 381.0Q1724.0 381.0 1724.0 374.0L1724.0 45.0Q1724.0 38.0 1731.0 38.0Z"/><path d="M1839.2 38.0L1903.8 38.0Q1909.0 38.0 1911.1 42.8L1945.3 120.9Q1948.0 127.2 1950.7 120.9L1984.9 42.8Q1987.0 38.0 1992.2 38.0L2056.8 38.0Q2069.0 38.0 2064.1 49.2L1989.5 219.8Q1989.0 221.0 1989.5 222.2L2064.1 392.8Q2069.0 404.0 2056.8 404.0L1992.2 404.0Q1987.0 404.0 1984.9 399.2L1950.7 321.1Q1948.0 314.8 1945.3 321.1L1911.1 399.2Q1909.0 404.0 1903.8 404.0L1839.2 404.0Q1827.0 404.0 1831.9 392.8L1906.5 222.2Q1907.0 221.0 1906.5 219.8L1831.9 49.2Q1827.0 38.0 1839.2 38.0Z"/></clipPath>
-<linearGradient id="shine" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".5" stop-color="#fff" stop-opacity=".38"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
-</defs><g>
-<g clip-path="url(#mClip)">
-<path fill="#B20000" d="M122 14L234 14L234 406L122 406Z"/>
-<path fill="#B20000" d="M378 14L490 14L490 406L378 406Z"/>
-<path fill="#CA0000" d="M378 14L490 14L378 258L300 258L300 158L312 146Z"/>
-<path fill="#F10405" d="M122 14L234 14L378 258L306 406Z"/>
-</g>
-<path fill="#D40000" fill-rule="evenodd" d="M584 34H692A66 66 0 0 1 758 100V322A66 66 0 0 1 692 388H584A66 66 0 0 1 518 322V100A66 66 0 0 1 584 34ZM626 102H650A20 20 0 0 1 670 122V298A20 20 0 0 1 650 318H626A20 20 0 0 1 606 298V122A20 20 0 0 1 626 102Z"/>
-<path fill="#D40000" d="M769.9 38.0L835.5 38.0Q842.0 38.0 843.3 44.4L875.1 197.8Q878.0 212.0 880.9 197.8L912.7 44.4Q914.0 38.0 920.5 38.0L986.0 38.0Q996.0 38.0 993.8 47.8L923.4 360.8Q922.0 367.0 915.6 367.0L838.4 367.0Q832.0 367.0 830.6 360.7L762.1 47.7Q760.0 38.0 769.9 38.0Z"/>
-<path fill="#D40000" d="M1020.0 38.0L1092.0 38.0Q1099.0 38.0 1099.0 45.0L1099.0 348.0Q1099.0 355.0 1092.0 355.0L1020.0 355.0Q1013.0 355.0 1013.0 348.0L1013.0 45.0Q1013.0 38.0 1020.0 38.0Z"/>
-<path fill="#D40000" d="M1130.0 38.0L1302.0 38.0Q1309.0 38.0 1309.0 45.0L1309.0 92.0Q1309.0 99.0 1302.0 99.0L1212.0 99.0Q1209.0 99.0 1209.0 102.0L1209.0 154.0Q1209.0 157.0 1212.0 157.0L1278.0 157.0Q1285.0 157.0 1285.0 164.0L1285.0 212.0Q1285.0 219.0 1278.0 219.0L1212.0 219.0Q1209.0 219.0 1209.0 222.0L1209.0 291.0Q1209.0 294.0 1212.0 294.0L1305.0 294.0Q1312.0 294.0 1312.0 301.0L1312.0 348.0Q1312.0 355.0 1305.0 355.0L1130.0 355.0Q1123.0 355.0 1123.0 348.0L1123.0 45.0Q1123.0 38.0 1130.0 38.0Z"/>
-<path fill="#D40000" d="M1341.0 38.0L1509.0 38.0Q1516.0 38.0 1516.0 45.0L1516.0 92.0Q1516.0 99.0 1509.0 99.0L1423.0 99.0Q1420.0 99.0 1420.0 102.0L1420.0 154.0Q1420.0 157.0 1423.0 157.0L1486.0 157.0Q1493.0 157.0 1493.0 164.0L1493.0 212.0Q1493.0 219.0 1486.0 219.0L1423.0 219.0Q1420.0 219.0 1420.0 222.0L1420.0 348.0Q1420.0 355.0 1413.0 355.0L1341.0 355.0Q1334.0 355.0 1334.0 348.0L1334.0 45.0Q1334.0 38.0 1341.0 38.0Z"/>
-<path fill="#D40000" d="M1541.0 38.0L1613.0 38.0Q1620.0 38.0 1620.0 45.0L1620.0 300.0Q1620.0 303.0 1623.0 303.0L1691.0 303.0Q1698.0 303.0 1698.0 310.0L1698.0 359.0Q1698.0 366.0 1691.0 366.0L1541.0 366.0Q1534.0 366.0 1534.0 359.0L1534.0 45.0Q1534.0 38.0 1541.0 38.0Z"/>
-<path fill="#D40000" d="M1731.0 38.0L1803.0 38.0Q1810.0 38.0 1810.0 45.0L1810.0 374.0Q1810.0 381.0 1803.0 381.0L1731.0 381.0Q1724.0 381.0 1724.0 374.0L1724.0 45.0Q1724.0 38.0 1731.0 38.0Z"/>
-<g>
-<path fill="#DC0000" d="M1839.2 38.0L1903.8 38.0Q1909.0 38.0 1911.1 42.8L1945.3 120.9Q1948.0 127.2 1950.7 120.9L1984.9 42.8Q1987.0 38.0 1992.2 38.0L2056.8 38.0Q2069.0 38.0 2064.1 49.2L1989.5 219.8Q1989.0 221.0 1989.5 222.2L2064.1 392.8Q2069.0 404.0 2056.8 404.0L1992.2 404.0Q1987.0 404.0 1984.9 399.2L1950.7 321.1Q1948.0 314.8 1945.3 321.1L1911.1 399.2Q1909.0 404.0 1903.8 404.0L1839.2 404.0Q1827.0 404.0 1831.9 392.8L1906.5 222.2Q1907.0 221.0 1906.5 219.8L1831.9 49.2Q1827.0 38.0 1839.2 38.0Z"/>
-<g clip-path="url(#xClip)"><path fill="#B30000" d="M1989 221L2069 404L1987 404L1948 314.788Z"/></g>
-</g>
-</g></svg>
-      </div>
-    </div>
-    <button class="header-btn" id="muteBtn" aria-label="Mute">
-      <svg id="muteIcon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></svg>
-    </button>
-  </div>
-
-  <div class="feed-container" id="feed"></div>
-
-  <script>
-    (function() {
-      var API_BASE = ${safeApiBase};
-      var initialShots = ${safeShotsJson};
-      var initialAds = ${safeInitialAdsJson};
-      var targetShortId = ${safeTargetId};
-      var isMuted = ${safeIsMuted};
-      var authToken = ${safeAuthToken};
-      var currentActiveIdx = -1;
-      var streamCache = {};
-
-      // ─── MovieAds 9:16 Feed Management & Interleaving ───
-      var adsPool = Array.isArray(initialAds) ? initialAds.slice() : [];
-      for (var p = adsPool.length - 1; p > 0; p--) {
-        var r = Math.floor(Math.random() * (p + 1));
-        var tmp = adsPool[p];
-        adsPool[p] = adsPool[r];
-        adsPool[r] = tmp;
-      }
-      var adCursor = 0;
-      var AD_INTERVAL = 6; // Spacing: Ads appear during scrolling but NOT again and again (every 6th item)
-
-      function getDomain(url) {
-        try {
-          var raw = String(url || '').trim();
-          if (!raw) return '';
-          var full = (raw.indexOf('http://') === 0 || raw.indexOf('https://') === 0) ? raw : ('https://' + raw);
-          var u = new URL(full);
-          return u.hostname.replace(/^www\./i, '');
-        } catch (_) {
-          return (url || '').replace(/^https?:\/\//i, '').replace(/^www\./i, '').split('/')[0];
-        }
-      }
-
-      function injectAdsIntoList(itemList, startOrganicOffset) {
-        if (!adsPool.length) return itemList;
-        var result = [];
-        var organicCount = startOrganicOffset || 0;
-        for (var i = 0; i < itemList.length; i++) {
-          var itm = itemList[i];
-          result.push(itm);
-          if (!itm.isAd) {
-            organicCount++;
-            if (organicCount % AD_INTERVAL === 0) {
-              var rawAd = adsPool[adCursor % adsPool.length];
-              adCursor++;
-              var adItem = Object.assign({}, rawAd, {
-                isAd: true,
-                subject_id: 'ad_' + (rawAd.id || ('sh_' + organicCount)),
-                id: rawAd.id || ('ad_' + organicCount)
-              });
-              result.push(adItem);
-            }
-          }
-        }
-        return result;
-      }
-
-      var shots = injectAdsIntoList(initialShots.slice(), 0);
-
-      async function refreshAdsPool() {
-        try {
-          var res = await fetch(API_BASE + '/api/ads?action=list&aspect_ratio=9:16&placement=shorts&_t=' + Date.now(), { cache: 'no-store' });
-          var data = await res.json();
-          if (data && Array.isArray(data.ads) && data.ads.length > 0) {
-            adsPool = data.ads.slice();
-            for (var p = adsPool.length - 1; p > 0; p--) {
-              var r = Math.floor(Math.random() * (p + 1));
-              var tmp = adsPool[p];
-              adsPool[p] = adsPool[r];
-              adsPool[r] = tmp;
-            }
-            var hasAnyAd = shots.some(function(s) { return s.isAd; });
-            if (!hasAnyAd && shots.length >= AD_INTERVAL) {
-              shots = injectAdsIntoList(shots, 0);
-              renderFeed();
-            }
-          }
-        } catch (_) {}
-      }
-      refreshAdsPool();
-
-      var feed = document.getElementById('feed');
-      var muteBtn = document.getElementById('muteBtn');
-      var muteIcon = document.getElementById('muteIcon');
-      var backBtn = document.getElementById('backBtn');
-
-      var volOnSvg = '<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>';
-      var volOffSvg = '<polygon points="11 5 6 9 2 9 2 15 6 15 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line>';
-      var playSvg = '<svg width="34" height="34" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>';
-      var pauseSvg = '<svg width="34" height="34" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>';
-
-      function updateMuteIcon() {
-        muteIcon.innerHTML = isMuted ? volOffSvg : volOnSvg;
-      }
-      updateMuteIcon();
-
-      function postToNative(payload) {
-        if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
-          window.ReactNativeWebView.postMessage(JSON.stringify(payload));
-        } else if (window.parent && window.parent !== window) {
-          window.parent.postMessage(JSON.stringify(payload), '*');
-        }
-      }
-
-      backBtn.addEventListener('click', function(e) {
-        e.stopPropagation();
-        postToNative({ type: 'back' });
-      });
-
-      muteBtn.addEventListener('click', function(e) {
-        e.stopPropagation();
-        isMuted = !isMuted;
-        updateMuteIcon();
-        var allVideos = document.querySelectorAll('video.player');
-        for (var i = 0; i < allVideos.length; i++) {
-          allVideos[i].muted = isMuted;
-        }
-        postToNative({ type: 'toast', message: isMuted ? 'Muted 🔇' : 'Sound unmuted 🔊' });
-      });
-
-      function formatCount(num) {
-        if (!num) return '0';
-        if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
-        if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
-        return String(num);
-      }
-
-      var localLikedIds = {};
-      try {
-        localLikedIds = JSON.parse(localStorage.getItem('mf_liked_shots') || '{}');
-      } catch (_) {}
-
-      function getDeviceId() {
-        var dId = null;
-        try { dId = localStorage.getItem('mf_device_id'); } catch (_) {}
-        if (!dId) {
-          dId = 'dev_' + Math.random().toString(36).substring(2, 10) + Date.now().toString(36);
-          try { localStorage.setItem('mf_device_id', dId); } catch (_) {}
-        }
-        return dId;
-      }
-
-      var deviceId = getDeviceId();
-
-      async function fetchLikesForShots(shotList) {
-        if (!shotList || shotList.length === 0) return;
-        var ids = shotList.filter(function(s) { return !s.isAd; }).map(function(s) { return String(s.subject_id || s.id); });
-        if (ids.length === 0) return;
-        try {
-          var headers = {};
-          if (authToken) {
-            headers['Authorization'] = 'Bearer ' + authToken;
-          }
-          var res = await fetch(API_BASE + '/api/auth?action=batch-shot-likes&device_id=' + encodeURIComponent(deviceId) + '&shot_ids=' + encodeURIComponent(ids.join(',')), {
-            headers: headers
-          });
-          var data = await res.json();
-          if (data && data.status === 'success') {
-            var counts = data.counts || {};
-            var userLiked = new Set(data.user_liked_ids || []);
-
-            for (var i = 0; i < shots.length; i++) {
-              var s = shots[i];
-              var sId = String(s.subject_id || s.id);
-              if (counts[sId] !== undefined) {
-                s.likesCount = Number(counts[sId]);
-              } else if (ids.indexOf(sId) !== -1) {
-                s.likesCount = Number(s.likes || 0);
-              }
-              if (userLiked.has(sId) || Boolean(localLikedIds[sId])) {
-                s.liked = true;
-                localLikedIds[sId] = true;
-              }
-              var slideEl = feed.children[i];
-              if (slideEl) {
-                var cEl = slideEl.querySelector('.like-count');
-                if (cEl) cEl.textContent = formatCount(s.likesCount);
-                var lBtn = slideEl.querySelector('.like-btn');
-                if (lBtn) {
-                  if (s.liked) lBtn.classList.add('liked');
-                  else lBtn.classList.remove('liked');
-                }
-              }
-            }
-            try { localStorage.setItem('mf_liked_shots', JSON.stringify(localLikedIds)); } catch (_) {}
-          }
-        } catch (e) {
-          console.warn('Batch likes fetch error:', e);
-        }
-      function createAdSlideElement(item, idx) {
-        var isVid = item.media_type === 'video' || Boolean(item.video_url);
-        var domain = getDomain(item.target_url);
-        var skipSec = Number(item.skip_seconds) || 5;
-
-        var slide = document.createElement('div');
-        slide.className = 'slide ad-slide';
-        slide.dataset.index = idx;
-        slide.dataset.id = item.id;
-        slide.dataset.isAd = 'true';
-
-        var mediaHtml = isVid
-          ? '<video class="player" playsinline webkit-playsinline preload="auto" src="' + (item.video_url || '') + '" poster="' + (item.poster_url || '') + '"></video>'
-          : '<img class="ad-poster-img" src="' + (item.poster_url || '') + '" alt="' + (item.name || '') + '" />';
-
-        slide.innerHTML =
-          '<img class="ambient-backdrop" src="' + (item.poster_url || '') + '" alt="" />' +
-          '<div class="stage">' +
-            mediaHtml +
-            '<div class="gradient-overlay"></div>' +
-            '<div class="buffer-spinner"></div>' +
-            '<div class="ad-top-bar">' +
-              '<div class="ad-badge">' +
-                '<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M18 11V9l-4-4H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2l4 4V7l-4 4z"/></svg>' +
-                '<span>SPONSORED ' + (isVid ? 'VIDEO' : 'AD') + '</span>' +
-              '</div>' +
-              '<button class="ad-skip-btn disabled" aria-label="Skip">' +
-                '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>' +
-                '<span class="skip-btn-text">Ad · Skip in ' + skipSec + 's</span>' +
-              '</button>' +
-            '</div>' +
-            '<div class="ad-ended-center-box" style="display: none;">' +
-              '<button class="ad-center-try-now-btn">' +
-                '<span>Get Started</span>' +
-                '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="7" y1="17" x2="17" y2="7"></line><polyline points="7 7 17 7 17 17"></polyline></svg>' +
-              '</button>' +
-              '<div class="ad-center-title">' + (item.name || 'Sponsored Promotion') + '</div>' +
-            '</div>' +
-            '<div class="ad-bottom-info">' +
-              '<div class="shot-title">' + (item.name || '') + '</div>' +
-              '<button class="ad-cta-btn">' +
-                '<span>Get Started</span>' +
-                '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>' +
-              '</button>' +
-            '</div>' +
-            (isVid ? '<div class="progress-bar-track"><div class="progress-bar-fill"></div></div>' : '') +
-          '</div>';
-
-        setupAdSlideEvents(slide, item, idx);
-        return slide;
-      }
-
-      function setupAdSlideEvents(slide, item, idx) {
-        var video = slide.querySelector('video.player');
-        var poster = slide.querySelector('.ad-poster-img');
-        var spinner = slide.querySelector('.buffer-spinner');
-        var endedBox = slide.querySelector('.ad-ended-center-box');
-        var skipBtn = slide.querySelector('.ad-skip-btn');
-        var skipText = slide.querySelector('.skip-btn-text');
-        var ctaBtn = slide.querySelector('.ad-cta-btn');
-        var centerBtn = slide.querySelector('.ad-center-try-now-btn');
-        var progressFill = slide.querySelector('.progress-bar-fill');
-
-        var initialSec = Number(item.skip_seconds) || 5;
-        var remaining = initialSec;
-        var canSkip = false;
-        var skipTimer = null;
-
-        function openAd() {
-          if (item.id) {
-            try {
-              fetch(API_BASE + '/api/ads/click/' + encodeURIComponent(item.id)).catch(function() {});
-            } catch (_) {}
-          }
-          postToNative({ type: 'open-ad', ad: item });
-          var target = item.target_url || '';
-          if (target) {
-            var fullUrl = (target.indexOf('http://') === 0 || target.indexOf('https://') === 0) ? target : ('https://' + target);
-            try { window.open(fullUrl, '_blank'); } catch (_) {}
-          }
-        }
-
-        if (ctaBtn) {
-          ctaBtn.addEventListener('click', function(e) {
-            e.stopPropagation();
-            openAd();
-          });
-        }
-        if (centerBtn) {
-          centerBtn.addEventListener('click', function(e) {
-            e.stopPropagation();
-            openAd();
-          });
-        }
-        if (poster) {
-          poster.addEventListener('click', function(e) {
-            e.stopPropagation();
-            openAd();
-          });
-        }
-
-        function unlockSkip() {
-          canSkip = true;
-          if (skipBtn) {
-            skipBtn.classList.remove('disabled');
-            skipBtn.classList.add('active');
-            skipBtn.innerHTML = '<span>Skip Ad</span><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>';
-          }
-        }
-
-        function startSkipCountdown() {
-          if (canSkip) return;
-          if (remaining <= 0) {
-            unlockSkip();
-            return;
-          }
-          if (skipTimer) clearInterval(skipTimer);
-          skipTimer = setInterval(function() {
-            remaining--;
-            if (remaining <= 0) {
-              clearInterval(skipTimer);
-              unlockSkip();
-            } else if (skipText) {
-              skipText.textContent = 'Ad · Skip in ' + remaining + 's';
-            }
-          }, 1000);
-        }
-
-        function stopSkipCountdown() {
-          if (skipTimer) {
-            clearInterval(skipTimer);
-            skipTimer = null;
-          }
-        }
-
-        slide._startSkipCountdown = startSkipCountdown;
-        slide._stopSkipCountdown = stopSkipCountdown;
-
-        if (skipBtn) {
-          skipBtn.addEventListener('click', function(e) {
-            e.stopPropagation();
-            if (!canSkip) return;
-            if (video) {
-              video.pause();
-            }
-            var nextSlide = feed.children[idx + 1];
-            if (nextSlide) {
-              nextSlide.scrollIntoView({ behavior: 'smooth' });
-            }
-          });
-        }
-
-        if (video) {
-          video.loop = false; // Never replay automatically
-
-          video.addEventListener('playing', function() {
-            if (spinner) spinner.classList.remove('active');
-          });
-
-          video.addEventListener('timeupdate', function() {
-            if (spinner && video.currentTime > 0) spinner.classList.remove('active');
-            if (progressFill && video.duration > 0) {
-              var pct = (video.currentTime / video.duration) * 100;
-              progressFill.style.width = pct + '%';
-            }
-          });
-
-          // Video completion: blur video, show Try Now button in center, DONT play again
-          video.addEventListener('ended', function() {
-            item._ended = true;
-            video.pause();
-            video.classList.add('video-blurred');
-            if (endedBox) endedBox.style.display = 'flex';
-            unlockSkip();
-          });
-
-          video.addEventListener('click', function(e) {
-            e.stopPropagation();
-            if (item._ended) {
-              // Video has completed: do not restart, open ad instead!
-              openAd();
-              return;
-            }
-            if (video.paused) {
-              video.play().catch(function() {});
-            } else {
-              video.pause();
-            }
-          });
-        }
-      }
-
-      function createSlideElement(item, idx) {
-        if (item.isAd) {
-          return createAdSlideElement(item, idx);
-        }
-        var isSeries = Boolean(item.isSeries);
-        var supportsEpisodes = isSeries && (item.total_episodes > 1 || item.episodes_count > 1);
-        item.currentEp = supportsEpisodes ? (item.ep || 1) : 0;
-        item.total_episodes = supportsEpisodes ? (item.total_episodes || 1) : 0;
-        item.likesCount = Number(item.likes || 0);
-        item.liked = Boolean(localLikedIds[String(item.subject_id || item.id)]);
-
-        var badgeLabel = item.badge || (item.isMovie ? 'Movie' : (item.isSeries ? 'Series' : ''));
-        var badgeHtml = badgeLabel ? ('<span class="type-badge">' + badgeLabel + '</span>') : '';
-
-        var epPillHtml = supportsEpisodes ? (
-          '<div class="ep-pill">' +
-            '<button class="ep-btn ep-prev-btn" aria-label="Previous episode">&#9664;</button>' +
-            '<span class="ep-text">Ep ' + item.currentEp + ' / ' + item.total_episodes + '</span>' +
-            '<button class="ep-btn ep-next-btn" aria-label="Next episode">&#9654;</button>' +
-          '</div>'
-        ) : '';
-
-        var watchLabel = item.isMovie ? 'Watch Full Movie' : (item.isSeries ? 'Watch Full Series' : 'Watch This');
-        var watchBtnHtml =
-          '<button class="watch-this-btn" aria-label="Watch">' +
-            '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>' +
-            '<span>' + watchLabel + '</span>' +
-          '</button>';
-
-        var slide = document.createElement('div');
-        slide.className = 'slide';
-        slide.dataset.index = idx;
-        slide.dataset.id = item.subject_id || item.id;
-
-        slide.innerHTML =
-          '<img class="ambient-backdrop" src="' + (item.poster_url || '') + '" alt="" />' +
-          '<div class="stage">' +
-            '<video class="player" playsinline webkit-playsinline loop preload="metadata"></video>' +
-            '<img class="poster-img" src="' + (item.poster_url || '') + '" alt="" />' +
-            '<div class="gradient-overlay"></div>' +
-            '<div class="buffer-spinner"></div>' +
-            '<div class="play-pause-hud"></div>' +
-            '<div class="hud-2x">' +
-              '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">' +
-                '<polygon points="13 19 22 12 13 5 13 19"></polygon>' +
-                '<polygon points="2 19 11 12 2 5 2 19"></polygon>' +
-              '</svg>' +
-              '<span>2X Speed</span>' +
-            '</div>' +
-            '<div class="heart-burst">' +
-              '<svg width="104" height="104" viewBox="0 0 24 24" fill="#e50914" stroke="#ffffff" stroke-width="1.5">' +
-                '<path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>' +
-              '</svg>' +
-            '</div>' +
-            '<div class="right-actions">' +
-              '<button class="action-btn like-btn' + (item.liked ? ' liked' : '') + '" aria-label="Like">' +
-                '<div class="action-icon-circle">' +
-                  '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>' +
-                '</div>' +
-                '<span class="action-label like-count">' + formatCount(item.likesCount) + '</span>' +
-              '</button>' +
-              '<button class="action-btn share-btn" aria-label="Share">' +
-                '<div class="action-icon-circle">' +
-                  '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>' +
-                '</div>' +
-              '</button>' +
-            '</div>' +
-            '<div class="bottom-info">' +
-              '<div class="creator-row">' +
-                '<img class="creator-avatar" src="' + (item.poster_url || '') + '" alt="" />' +
-                '<span class="creator-name">' + (item.author || '@Movieflix') + '</span>' +
-                badgeHtml +
-              '</div>' +
-              '<div class="shot-title">' + (item.title || item.name || '') + '</div>' +
-              epPillHtml +
-              watchBtnHtml +
-            '</div>' +
-            '<div class="progress-bar-track">' +
-              '<div class="progress-bar-fill"></div>' +
-            '</div>' +
-          '</div>';
-
-        setupSlideEvents(slide, item, idx);
-        return slide;
-      }
-
-      function setupSlideEvents(slide, item, idx) {
-        var video = slide.querySelector('video.player');
-        var poster = slide.querySelector('.poster-img');
-        var spinner = slide.querySelector('.buffer-spinner');
-        var hud = slide.querySelector('.play-pause-hud');
-        var hud2x = slide.querySelector('.hud-2x');
-        var progressFill = slide.querySelector('.progress-bar-fill');
-        var likeBtn = slide.querySelector('.like-btn');
-        var likeCountEl = slide.querySelector('.like-count');
-        var shareBtn = slide.querySelector('.share-btn');
-        var heartBurst = slide.querySelector('.heart-burst');
-        var epText = slide.querySelector('.ep-text');
-        var prevEpBtn = slide.querySelector('.ep-prev-btn');
-        var nextEpBtn = slide.querySelector('.ep-next-btn');
-        var watchBtn = slide.querySelector('.watch-this-btn');
-
-        if (watchBtn) {
-          watchBtn.addEventListener('click', function(e) {
-            e.stopPropagation();
-            postToNative({
-              type: 'watch-movie',
-              item: item
-            });
-          });
-        }
-
-        poster.addEventListener('click', function(e) {
-          e.stopPropagation();
-          playSlide(idx);
-        });
-
-        video.addEventListener('loadedmetadata', function() {
-          var dur = video.duration;
-          // For longer titles (movies or episodes > 3 minutes):
-          // jump to middle part around 45% and play ~1 to 2 minutes (90s) clip
-          if (dur && dur > 180) {
-            var clipStart = Math.max(60, Math.floor(dur * 0.45));
-            var clipLength = 90;
-            item._clipStart = clipStart;
-            item._clipEnd = Math.min(dur - 10, clipStart + clipLength);
-            video.currentTime = clipStart;
-          } else {
-            item._clipStart = 0;
-            item._clipEnd = dur || 0;
-          }
-        });
-
-        video.addEventListener('timeupdate', function() {
-          if (video.currentTime > 0) {
-            poster.classList.add('hidden');
-            spinner.classList.remove('active');
-          }
-          if (item._clipEnd && item._clipEnd > 0 && video.duration > 180) {
-            // Loop middle 1-2 min preview clip
-            if (video.currentTime >= item._clipEnd) {
-              video.currentTime = item._clipStart || 60;
-            }
-            var clipStart = item._clipStart || 0;
-            var clipLen = Math.max(1, item._clipEnd - clipStart);
-            var relTime = Math.max(0, video.currentTime - clipStart);
-            var pct = Math.min(100, (relTime / clipLen) * 100);
-            progressFill.style.width = pct + '%';
-          } else if (video.duration > 0) {
-            var pct = (video.currentTime / video.duration) * 100;
-            progressFill.style.width = pct + '%';
-          }
-        });
-
-        video.addEventListener('playing', function() {
-          poster.classList.add('hidden');
-          spinner.classList.remove('active');
-        });
-
-        video.addEventListener('waiting', function() {
-          spinner.classList.add('active');
-        });
-
-        video.addEventListener('canplay', function() {
-          spinner.classList.remove('active');
-          if (!video.paused) {
-            poster.classList.add('hidden');
-          }
-        });
-
-        video.addEventListener('loadeddata', function() {
-          spinner.classList.remove('active');
-        });
-
-        video.addEventListener('error', function(err) {
-          console.warn('Video error on source:', video.src, err);
-          if (video.src && video.src.indexOf('/api/proxy?url=') === -1 && item._rawUrl) {
-            console.log('Falling back to proxy URL');
-            var proxied = API_BASE + '/api/proxy?url=' + encodeURIComponent(item._rawUrl);
-            video.src = proxied;
-            video.play().catch(function() {});
-            return;
-          }
-          spinner.classList.remove('active');
-          poster.classList.remove('hidden');
-        });
-
-        function toggleLike() {
-          item.liked = !item.liked;
-          item.likesCount = Math.max(0, item.likesCount + (item.liked ? 1 : -1));
-          likeCountEl.textContent = formatCount(item.likesCount);
-
-          var sId = String(item.subject_id || item.id);
-          if (item.liked) {
-            likeBtn.classList.add('liked');
-            localLikedIds[sId] = true;
-          } else {
-            likeBtn.classList.remove('liked');
-            delete localLikedIds[sId];
-          }
-          try {
-            localStorage.setItem('mf_liked_shots', JSON.stringify(localLikedIds));
-          } catch (_) {}
-
-          postToNative({
-            type: 'like',
-            shotId: sId,
-            liked: item.liked
-          });
-
-          // Sync to backend API (supports registered users & guests)
-          var postHeaders = { 'Content-Type': 'application/json' };
-          if (authToken) {
-            postHeaders['Authorization'] = 'Bearer ' + authToken;
-          }
-          fetch(API_BASE + '/api/auth', {
-            method: 'POST',
-            headers: postHeaders,
-            body: JSON.stringify({
-              action: item.liked ? 'like-shot' : 'unlike-shot',
-              shot_id: sId,
-              device_id: deviceId
-            })
-          }).then(function(r) { return r.json(); }).then(function(data) {
-            if (data && data.status === 'success' && typeof data.likes_count === 'number') {
-              item.likesCount = Number(data.likes_count);
-              likeCountEl.textContent = formatCount(item.likesCount);
-            }
-          }).catch(function(e) {
-            console.warn('Backend like sync error:', e);
-          });
-        }
-
-        likeBtn.addEventListener('click', function(e) {
-          e.stopPropagation();
-          toggleLike();
-        });
-
-        shareBtn.addEventListener('click', function(e) {
-          e.stopPropagation();
-          var activeSlug = item.slug || item.subject_id || item.id;
-          var shareUrl = 'https://mws.wallpaperdomain.xyz/short/' + encodeURIComponent(activeSlug);
-          postToNative({ type: 'share', item: item, url: shareUrl, slug: activeSlug });
-        });
-
-        function changeEp(delta) {
-          var newEp = item.currentEp + delta;
-          if (newEp >= 1 && newEp <= item.total_episodes) {
-            item.currentEp = newEp;
-            epText.textContent = 'Ep ' + newEp + ' / ' + item.total_episodes;
-            postToNative({ type: 'toast', message: 'Playing Episode ' + newEp + ' of ' + item.total_episodes });
-            playSlide(idx);
-          }
-        }
-
-        if (prevEpBtn) {
-          prevEpBtn.addEventListener('click', function(e) {
-            e.stopPropagation();
-            changeEp(-1);
-          });
-        }
-
-        if (nextEpBtn) {
-          nextEpBtn.addEventListener('click', function(e) {
-            e.stopPropagation();
-            changeEp(1);
-          });
-        }
-
-        function triggerHeartPop() {
-          heartBurst.classList.remove('pop');
-          void heartBurst.offsetWidth;
-          heartBurst.classList.add('pop');
-          setTimeout(function() {
-            heartBurst.classList.remove('pop');
-          }, 450);
-
-          if (!item.liked) {
-            toggleLike();
-          }
-          postToNative({ type: 'haptic', style: 'selection' });
-        }
-
-        function togglePlayPause() {
-          if (video.paused) {
-            video.play().then(function() {
-              poster.classList.add('hidden');
-              spinner.classList.remove('active');
-            }).catch(function() {});
-            hud.innerHTML = playSvg;
-          } else {
-            video.pause();
-            hud.innerHTML = pauseSvg;
-          }
-          hud.classList.add('show');
-          setTimeout(function() { hud.classList.remove('show'); }, 600);
-        }
-
-        var lastTapTime = 0;
-        var singleTapTimer = null;
-        var longPressTimer = null;
-        var is2xActive = false;
-        var touchStartX = 0;
-        var touchStartY = 0;
-        var touchMoved = false;
-
-        slide.addEventListener('touchstart', function(e) {
-          if (e.target.closest('button')) return;
-          touchStartX = e.touches[0].clientX;
-          touchStartY = e.touches[0].clientY;
-          touchMoved = false;
-
-          // Long press 2X speed timer (380ms)
-          longPressTimer = setTimeout(function() {
-            if (!touchMoved) {
-              is2xActive = true;
-              video.playbackRate = 2.0;
-              hud2x.classList.add('active');
-              postToNative({ type: 'haptic', style: 'selection' });
-            }
-          }, 380);
-        }, { passive: true });
-
-        slide.addEventListener('touchmove', function(e) {
-          var dx = e.touches[0].clientX - touchStartX;
-          var dy = e.touches[0].clientY - touchStartY;
-          if (Math.abs(dx) > 10 || Math.abs(dy) > 10) {
-            touchMoved = true;
-            if (longPressTimer) {
-              clearTimeout(longPressTimer);
-              longPressTimer = null;
-            }
-            if (is2xActive) {
-              is2xActive = false;
-              video.playbackRate = 1.0;
-              hud2x.classList.remove('active');
-            }
-          }
-        }, { passive: true });
-
-        slide.addEventListener('touchend', function(e) {
-          if (longPressTimer) {
-            clearTimeout(longPressTimer);
-            longPressTimer = null;
-          }
-
-          if (is2xActive) {
-            is2xActive = false;
-            video.playbackRate = 1.0;
-            hud2x.classList.remove('active');
-            return;
-          }
-
-          if (touchMoved) {
-            var dx = e.changedTouches[0].clientX - touchStartX;
-            var dy = e.changedTouches[0].clientY - touchStartY;
-            if (supportsEpisodes && Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy) * 1.5) {
-              if (dx < 0) changeEp(1);
-              else changeEp(-1);
-            }
-            return;
-          }
-
-          if (e.target.closest('button')) return;
-
-          var now = Date.now();
-          if (now - lastTapTime < 290) {
-            if (singleTapTimer) {
-              clearTimeout(singleTapTimer);
-              singleTapTimer = null;
-            }
-            lastTapTime = 0;
-            triggerHeartPop();
-          } else {
-            lastTapTime = now;
-            singleTapTimer = setTimeout(function() {
-              togglePlayPause();
-              singleTapTimer = null;
-            }, 260);
-          }
-        }, { passive: true });
-
-        slide.addEventListener('dblclick', function(e) {
-          if (e.target.closest('button')) return;
-          triggerHeartPop();
-        });
-
-        // Desktop mouse hold for 2X speed
-        var mousePressTimer = null;
-        var mouse2xActive = false;
-        slide.addEventListener('mousedown', function(e) {
-          if (e.target.closest('button')) return;
-          mouse2xActive = false;
-          mousePressTimer = setTimeout(function() {
-            mouse2xActive = true;
-            video.playbackRate = 2.0;
-            hud2x.classList.add('active');
-          }, 380);
-        });
-
-        slide.addEventListener('mouseup', function(e) {
-          if (mousePressTimer) {
-            clearTimeout(mousePressTimer);
-            mousePressTimer = null;
-          }
-          if (mouse2xActive) {
-            mouse2xActive = false;
-            video.playbackRate = 1.0;
-            hud2x.classList.remove('active');
-          }
-        });
-      }
-
-      function renderFeed() {
-        feed.innerHTML = '';
-        for (var i = 0; i < shots.length; i++) {
-          var slide = createSlideElement(shots[i], i);
-          feed.appendChild(slide);
-          observer.observe(slide);
-        }
-        fetchLikesForShots(shots);
-      }
-
-      var observer = new IntersectionObserver(function(entries) {
-        for (var i = 0; i < entries.length; i++) {
-          var entry = entries[i];
-          if (entry.isIntersecting && entry.intersectionRatio >= 0.55) {
-            var idx = parseInt(entry.target.dataset.index, 10);
-            if (idx !== currentActiveIdx) {
-              onActiveChange(idx);
-            }
-          }
-        }
-      }, { threshold: [0.55] });
-
-      function onActiveChange(idx) {
-        if (currentActiveIdx >= 0 && currentActiveIdx !== idx) {
-          var oldSlide = feed.children[currentActiveIdx];
-          if (oldSlide) {
-            var oldVid = oldSlide.querySelector('video.player');
-            if (oldVid) {
-              oldVid.pause();
-            }
-            if (typeof oldSlide._stopSkipCountdown === 'function') {
-              oldSlide._stopSkipCountdown();
-            }
-          }
-        }
-        currentActiveIdx = idx;
-        playSlide(idx);
-
-        if (idx >= shots.length - 3) {
-          loadMore();
-        }
-      }
-
-      async function fetchStreamUrl(item) {
-        var isSeries = Boolean(item.isSeries);
-        var se = isSeries ? (item.se || 1) : 0;
-        var ep = isSeries ? (item.currentEp || item.ep || 1) : 0;
-        var key = (item.subject_id || item.id) + '-s' + se + '-e' + ep;
-        if (streamCache[key]) return streamCache[key];
-
-        try {
-          var primaryUrl = API_BASE + '/api/content?endpoint=stream&id=' + encodeURIComponent(item.subject_id) + '&detail_path=' + encodeURIComponent(item.slug || '') + '&se=' + se + '&ep=' + ep;
-          var res = await fetch(primaryUrl);
-          var data = await res.json();
-          var raw = data && data.sources && data.sources[0] && data.sources[0].url;
-
-          // If series mode returned no stream, try movie mode fallback (se=0, ep=0)
-          if (!raw && (se > 0 || ep > 0)) {
-            var fbRes = await fetch(API_BASE + '/api/content?endpoint=stream&id=' + encodeURIComponent(item.subject_id) + '&detail_path=' + encodeURIComponent(item.slug || '') + '&se=0&ep=0');
-            var fbData = await fbRes.json();
-            raw = fbData && fbData.sources && fbData.sources[0] && fbData.sources[0].url;
-          }
-
-          if (raw) {
-            item._rawUrl = raw;
-            var isWebBrowser = typeof window !== 'undefined' && (!window.ReactNativeWebView);
-            var streamUrl = isWebBrowser ? (API_BASE + '/api/proxy?url=' + encodeURIComponent(raw)) : raw;
-            streamCache[key] = streamUrl;
-            return streamUrl;
-          }
-        } catch (e) {
-          console.warn('Fetch stream error:', e);
-        }
-        return null;
-      }
-
-      function playAdSlide(slide, item, idx) {
-        var video = slide.querySelector('video.player');
-        var spinner = slide.querySelector('.buffer-spinner');
-        if (spinner) spinner.classList.remove('active');
-
-        // Impression tracking (once per ad session)
-        if (!item._impressionSent && item.id) {
-          item._impressionSent = true;
-          try {
-            fetch(API_BASE + '/api/ads/impression/' + encodeURIComponent(item.id), { method: 'POST' }).catch(function() {});
-          } catch (_) {}
-          postToNative({ type: 'ad-impression', ad: item });
-        }
-
-        // Start skip countdown timer
-        if (typeof slide._startSkipCountdown === 'function') {
-          slide._startSkipCountdown();
-        }
-
-        // Play video if not ended yet
-        if (video && item.video_url && !item._ended) {
-          video.muted = isMuted;
-          video.loop = false;
-          var p = video.play();
-          if (p && typeof p.then === 'function') {
-            p.catch(function(err) {
-              console.warn('Ad autoplay failed, retrying muted:', err);
-              video.muted = true;
-              isMuted = true;
-              updateMuteIcon();
-              video.play().catch(function() {});
-            });
-          }
-        }
-      }
-
-      async function playSlide(idx) {
-        var slide = feed.children[idx];
-        if (!slide) return;
-        var item = shots[idx];
-        if (!item) return;
-
-        if (item.isAd) {
-          playAdSlide(slide, item, idx);
-          return;
-        }
-
-        var video = slide.querySelector('video.player');
-        var poster = slide.querySelector('.poster-img');
-        var spinner = slide.querySelector('.buffer-spinner');
-
-        spinner.classList.add('active');
-
-        var url = await fetchStreamUrl(item);
-
-        if (url && currentActiveIdx === idx) {
-          if (video.src !== url) {
-            video.src = url;
-          }
-          video.muted = isMuted;
-          if (item._clipStart && item._clipStart > 0) {
-            try { video.currentTime = item._clipStart; } catch (_) {}
-          } else {
-            video.currentTime = 0;
-          }
-          var p = video.play();
-          if (p && typeof p.then === 'function') {
-            p.then(function() {
-              poster.classList.add('hidden');
-              spinner.classList.remove('active');
-            }).catch(function(err) {
-              console.warn('Autoplay failed, retrying muted:', err);
-              video.muted = true;
-              isMuted = true;
-              updateMuteIcon();
-              video.play().then(function() {
-                poster.classList.add('hidden');
-                spinner.classList.remove('active');
-              }).catch(function(e2) {
-                console.warn('Playback retry failed:', e2);
-                spinner.classList.remove('active');
-              });
-            });
-          }
-        }
-
-        var activeSlug = item.slug || item.subject_id || item.id;
-        if (activeSlug && typeof window !== 'undefined' && window.history && window.history.replaceState) {
-          try {
-            window.history.replaceState(null, '', '/short/' + encodeURIComponent(activeSlug));
-          } catch (_) {}
-        }
-        postToNative({
-          type: 'active-short',
-          slug: activeSlug,
-          shotId: String(item.subject_id || item.id)
-        });
-
-        if (idx + 1 < shots.length) {
-          fetchStreamUrl(shots[idx + 1]);
-        }
-      }
-
-      var page = 1;
-      var isLoadingMore = false;
-      var hasMore = true;
-
-      async function loadMore() {
-        if (isLoadingMore || !hasMore) return;
-        isLoadingMore = true;
-        page++;
-        try {
-          var res = await fetch(API_BASE + '/api/content?endpoint=shots&page=' + page);
-          var data = await res.json();
-          if (data && Array.isArray(data.items) && data.items.length > 0) {
-            var existingIds = new Set(shots.map(function(s) { return String(s.subject_id || s.id); }));
-            var newItems = data.items.filter(function(s) { return !existingIds.has(String(s.subject_id || s.id)); });
-            var interleaved = injectAdsIntoList(newItems, shots.length);
-            for (var j = 0; j < interleaved.length; j++) {
-              var newIdx = shots.length;
-              shots.push(interleaved[j]);
-              var newSlide = createSlideElement(interleaved[j], newIdx);
-              feed.appendChild(newSlide);
-              observer.observe(newSlide);
-            }
-            fetchLikesForShots(newItems);
-          } else {
-            hasMore = false;
-          }
-        } catch (e) {
-          console.warn('Load more error:', e);
-        } finally {
-          isLoadingMore = false;
-        }
-      }
-
-      renderFeed();
-
-      var startIdx = 0;
-      if (targetShortId) {
-        var cleanTarget = String(targetShortId).trim().toLowerCase();
-        for (var t = 0; t < shots.length; t++) {
-          var currShot = shots[t];
-          var currId = String(currShot.subject_id || currShot.id || '').toLowerCase();
-          var currSlug = String(currShot.slug || '').toLowerCase();
-          if (
-            currId === cleanTarget ||
-            currSlug === cleanTarget ||
-            currId.startsWith(cleanTarget) ||
-            currSlug.startsWith(cleanTarget) ||
-            cleanTarget.startsWith(currId) ||
-            cleanTarget.startsWith(currSlug)
-          ) {
-            startIdx = t;
-            if (feed.children[t]) feed.children[t].scrollIntoView();
-            break;
-          }
-        }
-      }
-
-      // Auto start target/first slide if observer hasn't fired yet
-      setTimeout(function() {
-        if (currentActiveIdx === -1 && shots.length > 0) {
-          onActiveChange(startIdx);
-        }
-      }, 120);
-
-      window.pauseActiveVideo = function() {
-        if (currentActiveIdx >= 0 && feed.children[currentActiveIdx]) {
-          var v = feed.children[currentActiveIdx].querySelector('video.player');
-          if (v) v.pause();
-        }
-      };
-
-      window.resumeActiveVideo = function() {
-        if (currentActiveIdx >= 0 && feed.children[currentActiveIdx]) {
-          var v = feed.children[currentActiveIdx].querySelector('video.player');
-          if (v) v.play().catch(function() {});
-        }
-      };
-
-      window.addEventListener('message', function(e) {
-        try {
-          var data = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
-          if (data && data.type === 'pause') window.pauseActiveVideo();
-          if (data && data.type === 'resume') window.resumeActiveVideo();
-        } catch (_) {}
-      });
-    })();
-  </script>
-</body>
-</html>`;
-}
-
-function ShotsFeedView({
-  insets,
-  isTabActive,
-  showToast,
-  triggerHaptic,
-  onBack,
-  authUser,
-  authAccessToken,
-  openAuthModal,
-  targetShortId,
-  onWatchMovie,
-  isPremium = false,
-}) {
-  const webViewRef = useRef(null);
-  const iframeRef = useRef(null);
-  const [shotsHtml, setShotsHtml] = useState(null);
-
-  // Generate the standalone pure HTML/CSS/JS page
-  useEffect(() => {
-    let isCancelled = false;
-    async function initFeed() {
-      const apiBase = Platform.OS === 'web' ? '' : 'https://mws.wallpaperdomain.xyz';
-      const rankedShots = typeof rankShotsFeed === 'function'
-        ? rankShotsFeed(INITIAL_SHOTS, null, new Set(), Date.now() % 100000)
-        : INITIAL_SHOTS;
-
-      let shortsAds = [];
-      if (!isPremium) {
-        try {
-          shortsAds = await fetchShortsAds();
-        } catch (_) {}
-      }
-
-      if (isCancelled) return;
-
-      const html = buildPureHtmlShotsPage({
-        initialShots: rankedShots,
-        initialAds: shortsAds,
-        apiBase,
-        isMuted: Platform.OS === 'web',
-        targetShortId,
-        authToken: authAccessToken || '',
-      });
-      setShotsHtml(html);
-    }
-
-    initFeed();
-    return () => { isCancelled = true; };
-  }, [targetShortId, authAccessToken, isPremium]);
-
-  // Tab switching: pause video when moving away from Shots, resume when returning
-  useEffect(() => {
-    if (!isTabActive) {
-      if (Platform.OS === 'web') {
-        iframeRef.current?.contentWindow?.postMessage(JSON.stringify({ type: 'pause' }), '*');
-      } else {
-        webViewRef.current?.injectJavaScript(
-          'window.pauseActiveVideo && window.pauseActiveVideo(); true;'
-        );
-      }
-    } else {
-      if (Platform.OS === 'web') {
-        iframeRef.current?.contentWindow?.postMessage(JSON.stringify({ type: 'resume' }), '*');
-      } else {
-        webViewRef.current?.injectJavaScript(
-          'window.resumeActiveVideo && window.resumeActiveVideo(); true;'
-        );
-      }
-    }
-  }, [isTabActive]);
-
-  // Handle messages from the pure HTML player
-  const handleMessage = useCallback((data) => {
-    if (!data || !data.type) return;
-
-    if (data.type === 'back') {
-      triggerHaptic?.('selection');
-      onBack?.();
-    } else if (data.type === 'toast') {
-      showToast?.(data.message);
-    } else if (data.type === 'haptic') {
-      triggerHaptic?.(data.style || 'selection');
-    } else if (data.type === 'open-ad' && data.ad) {
-      triggerHaptic?.('selection');
-      recordClick(data.ad);
-      const target = data.ad.target_url || '';
-      if (target) {
-        const fullUrl = target.startsWith('http://') || target.startsWith('https://') ? target : `https://${target}`;
-        Linking.openURL(fullUrl).catch(() => {});
-      }
-    } else if (data.type === 'ad-impression' && data.ad) {
-      recordImpression(data.ad);
-    } else if (data.type === 'active-short') {
-      if (Platform.OS === 'web' && typeof window !== 'undefined' && window.history?.replaceState && data.slug) {
-        try {
-          window.history.replaceState(null, '', `/short/${encodeURIComponent(data.slug)}`);
-        } catch (_) {}
-      }
-    } else if (data.type === 'like') {
-      triggerHaptic?.('selection');
-    } else if (data.type === 'watch-movie' && data.item) {
-      triggerHaptic?.('selection');
-      const item = data.item;
-      const se = item.isSeries ? (item.se || 1) : 0;
-      const ep = item.isSeries ? (item.currentEp || item.ep || 1) : 0;
-      const isSeries = Boolean(item.isSeries);
-      const normMovie = {
-        name: item.title || item.name || 'Title',
-        title: item.title || item.name || 'Title',
-        slug: item.slug || '',
-        subject_id: item.subject_id || item.id || '',
-        poster_url: item.poster_url || '',
-        rating: item.rating || '',
-        isSeries,
-        se,
-        ep,
-      };
-      if (onWatchMovie) {
-        onWatchMovie(normMovie, se, ep, isSeries);
-      }
-    } else if (data.type === 'share' && data.item) {
-      triggerHaptic?.('selection');
-      const activeSlug = data.slug || data.item.slug || data.item.subject_id || data.item.id;
-      const shareUrl = data.url || `https://mws.wallpaperdomain.xyz/short/${encodeURIComponent(activeSlug)}`;
-      Share.share({
-        message: `Watch "${data.item.title || 'Movieflix Shorts'}" on Movieflix Shorts! 🎬🍿\n${shareUrl}`,
-        url: shareUrl,
-        title: data.item.title || 'Movieflix Shorts',
-      }).catch(() => {});
-    }
-  }, [authUser, authAccessToken, onBack, showToast, triggerHaptic, onWatchMovie]);
-
-  // Listen for Web iframe postMessage
-  useEffect(() => {
-    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
-    const onWindowMsg = (e) => {
-      try {
-        const payload = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
-        if (payload && typeof payload === 'object') {
-          handleMessage(payload);
-        }
-      } catch (_) {}
-    };
-    window.addEventListener('message', onWindowMsg);
-    return () => window.removeEventListener('message', onWindowMsg);
-  }, [handleMessage]);
-
-  const onWebViewMessage = useCallback((event) => {
-    try {
-      const payload = JSON.parse(event.nativeEvent.data);
-      if (payload && typeof payload === 'object') {
-        handleMessage(payload);
-      }
-    } catch (_) {}
-  }, [handleMessage]);
-
-  if (!shotsHtml) {
-    return (
-      <View style={[StyleSheet.absoluteFill, { backgroundColor: '#000000', alignItems: 'center', justifyContent: 'center' }]}>
-        <ActivityIndicator size="large" color="#e50914" />
-      </View>
-    );
-  }
-
-  if (Platform.OS === 'web') {
-    return (
-      <View style={[StyleSheet.absoluteFill, { backgroundColor: '#000000', zIndex: 999 }]}>
-        <iframe
-          ref={iframeRef}
-          srcDoc={shotsHtml}
-          style={{
-            width: '100%',
-            height: '100%',
-            border: 'none',
-            backgroundColor: '#000000',
-          }}
-          allow="autoplay; fullscreen; encrypted-media"
-        />
-      </View>
-    );
-  }
-
-  return (
-    <View style={[StyleSheet.absoluteFill, { backgroundColor: '#000000', zIndex: 999 }]}>
-      <WebView
-        ref={webViewRef}
-        source={{
-          html: shotsHtml,
-          baseUrl: 'https://netfilm.world',
-        }}
-        style={{ flex: 1, backgroundColor: '#000000' }}
-        containerStyle={{ backgroundColor: '#000000' }}
-        allowsInlineMediaPlayback={true}
-        mediaPlaybackRequiresUserAction={false}
-        javaScriptEnabled={true}
-        domStorageEnabled={true}
-        mixedContentMode="always"
-        androidLayerType="hardware"
-        allowsFullscreenVideo={false}
-        originWhitelist={['*']}
-        scrollEnabled={true}
-        bounces={false}
-        overScrollMode="never"
-        onMessage={onWebViewMessage}
-      />
-    </View>
-  );
+// Shots feature removed permanently
+function ShotsFeedView() {
+  return null;
 }
 
 export default function App() {
@@ -3265,9 +1189,8 @@ function ReelApp() {
   );
   const horizontalCardWidth = isDesktop ? 180 : isTablet ? 150 : 130;
 
-  // Navigation: 'Home' | 'Shots' | 'Me'
+  // Navigation: 'Home' | 'Me'
   const [mainTab, setMainTab] = useState('Home');
-  const [targetShortId, setTargetShortId] = useState(null);
   const [homeCategory, setHomeCategory] = useState('All'); // 'All' | 'Movies' | 'Series'
   const [meSubTab, setMeSubTab] = useState(null); // null (clean buttons hub) | 'History' | 'MyList' | 'Downloads'
   const [meDotDismissed, setMeDotDismissed] = useState(false);
@@ -3283,10 +1206,10 @@ function ReelApp() {
     }).start();
   }, [meSubTab]);
 
-  // Floating Apple-Style Navigation Bar Animation & Fluid Drag State (3 Tabs: Home | Shots | Me)
-  const floatingBarWidth = Math.min(windowWidth - 36, 330);
-  const floatingTabWidth = (floatingBarWidth - 8) / 3;
-  const navAnim = useRef(new Animated.Value(mainTab === 'Home' ? 0 : mainTab === 'Shots' ? 1 : 2)).current;
+  // Floating Apple-Style Navigation Bar Animation & Fluid Drag State (2 Tabs: Home | Me)
+  const floatingBarWidth = Math.min(windowWidth - 36, 240);
+  const floatingTabWidth = (floatingBarWidth - 8) / 2;
+  const navAnim = useRef(new Animated.Value(mainTab === 'Home' ? 0 : 1)).current;
   const mainTabRef = useRef(mainTab);
 
   useEffect(() => {
@@ -3294,7 +1217,7 @@ function ReelApp() {
     if (mainTab === 'Me') {
       setMeDotDismissed(true);
     }
-    const toVal = mainTab === 'Home' ? 0 : mainTab === 'Shots' ? 1 : 2;
+    const toVal = mainTab === 'Home' ? 0 : 1;
     Animated.spring(navAnim, {
       toValue: toVal,
       tension: 280,
@@ -3313,29 +1236,29 @@ function ReelApp() {
         navAnim.stopAnimation();
       },
       onPanResponderMove: (_, gestureState) => {
-        const base = mainTabRef.current === 'Home' ? 0 : mainTabRef.current === 'Shots' ? 1 : 2;
+        const base = mainTabRef.current === 'Home' ? 0 : 1;
         const progress = base + (gestureState.dx / floatingTabWidth);
         let clamped = progress;
         if (progress < 0) {
           clamped = progress * 0.2;
-        } else if (progress > 2) {
-          clamped = 2 + (progress - 2) * 0.2;
+        } else if (progress > 1) {
+          clamped = 1 + (progress - 1) * 0.2;
         }
         navAnim.setValue(clamped);
       },
       onPanResponderRelease: (_, gestureState) => {
-        const base = mainTabRef.current === 'Home' ? 0 : mainTabRef.current === 'Shots' ? 1 : 2;
+        const base = mainTabRef.current === 'Home' ? 0 : 1;
         const dx = gestureState.dx;
         const vx = gestureState.vx;
         let nextIdx = base;
 
         if (dx > floatingTabWidth * 0.35 || vx > 0.35) {
-          nextIdx = Math.min(2, base + 1);
+          nextIdx = Math.min(1, base + 1);
         } else if (dx < -floatingTabWidth * 0.35 || vx < -0.35) {
           nextIdx = Math.max(0, base - 1);
         }
 
-        const tabs = ['Home', 'Shots', 'Me'];
+        const tabs = ['Home', 'Me'];
         const nextTab = tabs[nextIdx];
 
         Animated.spring(navAnim, {
@@ -3354,7 +1277,7 @@ function ReelApp() {
         }
       },
       onPanResponderTerminate: () => {
-        const toVal = mainTabRef.current === 'Home' ? 0 : mainTabRef.current === 'Shots' ? 1 : 2;
+        const toVal = mainTabRef.current === 'Home' ? 0 : 1;
         Animated.spring(navAnim, {
           toValue: toVal,
           tension: 280,
@@ -3366,8 +1289,8 @@ function ReelApp() {
   }, [floatingTabWidth]);
 
   const indicatorTranslateX = navAnim.interpolate({
-    inputRange: [0, 1, 2],
-    outputRange: [0, floatingTabWidth, floatingTabWidth * 2],
+    inputRange: [0, 1],
+    outputRange: [0, floatingTabWidth],
   });
 
   // ─── Auth State ────────────────────────────────────────────────────────────
@@ -3951,10 +1874,6 @@ function ReelApp() {
     const onBackPress = () => {
       if (mainTab === 'Me' && meSubTab !== null) {
         setMeSubTab(null);
-        return true;
-      }
-      if (mainTab === 'Shots') {
-        setMainTab('Home');
         return true;
       }
       return false;
@@ -4872,10 +2791,7 @@ function ReelApp() {
       const validSources = (streamData?.sources || []).filter(s => s && s.url && typeof s.url === 'string' && s.url.startsWith('http'));
       if (validSources.length > 0) {
         setAvailableStreams(validSources);
-        const preferred = validSources.find(s => s.resolution === '720p') ||
-                          validSources.find(s => s.resolution === '1080p') ||
-                          validSources.find(s => s.resolution === '480p') ||
-                          validSources[0];
+        const preferred = selectDefaultStream(validSources, isPremium);
         setActiveStreamUrl(preferred.url);
         setActiveResolution(preferred.resolution || '720p');
         setLoadingStream(false);
@@ -5030,12 +2946,10 @@ function ReelApp() {
       const validSources = (data?.sources || []).filter(s => s && s.url && typeof s.url === 'string' && s.url.startsWith('http'));
       if (validSources.length > 0) {
         setAvailableStreams(validSources);
-        const preferred = validSources.find(s => s.resolution === activeResolution) ||
-                          validSources.find(s => s.resolution === '720p') ||
-                          validSources.find(s => s.resolution === '480p') ||
-                          validSources[0];
+        const preferred = selectDefaultStream(validSources, isPremium);
         setPlayerResumeTime(resumeTime);
         setActiveStreamUrl(preferred.url);
+        setActiveResolution(preferred.resolution || '720p');
         setPlayerMovie(prev => ({
           ...prev,
           subject_id: variant.subject_id,
@@ -5222,12 +3136,6 @@ function ReelApp() {
       currentUrl === '/series' ||
       currentUrl === '/tv' ||
       currentUrl === '/animation' ||
-      currentUrl === '/shorts' ||
-      currentUrl === '/shots' ||
-      currentUrl === '/reels' ||
-      currentUrl.startsWith('/shorts') ||
-      currentUrl.startsWith('/shots') ||
-      currentUrl.startsWith('/short') ||
       currentUrl.startsWith('/me');
 
     if (!isTabRoute) return;
@@ -5238,8 +3146,6 @@ function ReelApp() {
       else if (meSubTab === 'MyList') targetUrl = '/me/mylist';
       else if (meSubTab === 'Downloads') targetUrl = '/me/downloads';
       else targetUrl = '/me';
-    } else if (mainTab === 'Shots') {
-      targetUrl = currentUrl.startsWith('/shorts') ? '/shorts' : '/shots';
     } else {
       if (homeCategory === 'Movies') targetUrl = '/movies';
       else if (homeCategory === 'TV Series' || homeCategory === 'Series') targetUrl = '/series';
@@ -5266,14 +3172,14 @@ function ReelApp() {
     } else if (isPricingPageOpen) {
       updateWebMetaTags(
         'MovieFlix Pro - Stream in 4K Ultra HD & 100% Ad-Free',
-        'Upgrade to MovieFlix Pro. Stream all movies and series in 4K/1080p Ultra HD, zero ads in player and shorts, and access all premium episodes from $1 USD.',
+        'Upgrade to MovieFlix Pro. Stream all movies and series in 4K/1080p Ultra HD, zero ads in player, and access all premium episodes from $1 USD.',
         'https://mws.wallpaperdomain.xyz/assets/og-banner.png',
         'https://mws.wallpaperdomain.xyz/pricing'
       );
     } else if (isDownloadPageOpen) {
       updateWebMetaTags(
         'Download MovieFlix APK v1.1.8 (Official) - Free Android Movies & TV App',
-        'Download official MovieFlix Android APK (v1.1.8). Stream and download unlimited 4K/1080p movies, TV series, anime, and shorts with multi-audio dubs and zero ads. 100% Safe & Verified.',
+        'Download official MovieFlix Android APK (v1.1.8). Stream and download unlimited 4K/1080p movies, TV series, and anime with multi-audio dubs and zero ads. 100% Safe & Verified.',
         'https://mws.wallpaperdomain.xyz/assets/og-banner.png',
         'https://mws.wallpaperdomain.xyz/download'
       );
@@ -5283,13 +3189,6 @@ function ReelApp() {
         'Read the MovieFlix Privacy Policy. Learn about our strict zero-tracking principles, encrypted local storage, no-log guarantee, and user data protections.',
         'https://mws.wallpaperdomain.xyz/assets/og-banner.png',
         'https://mws.wallpaperdomain.xyz/privacy'
-      );
-    } else if (mainTab === 'Shots') {
-      updateWebMetaTags(
-        'MovieFlix Shorts - Endless 9:16 Vertical Short Dramas & Viral Reels',
-        'Watch trending vertical 9:16 short dramas, viral mini-episodes, romance reels, and thrilling cliffhangers on MovieFlix Shorts. Instant playback with zero buffering.',
-        'https://mws.wallpaperdomain.xyz/assets/og-banner.png',
-        'https://mws.wallpaperdomain.xyz/shorts'
       );
     } else if (detailMovie) {
       const title = `${detailMovie.name || 'Movie'} - Watch & Download Free on MovieFlix`;
@@ -5559,15 +3458,8 @@ function ReelApp() {
       ) {
         setIs404PageOpen(false);
         setNotFoundPath('');
-        const sId = pathname.startsWith('/short/')
-          ? pathname.replace('/short/', '').split('/')[0]
-          : pathname.startsWith('/shorts/')
-          ? pathname.replace('/shorts/', '').split('/')[0]
-          : pathname.startsWith('/shots/')
-          ? pathname.replace('/shots/', '').split('/')[0]
-          : '';
-        if (sId) setTargetShortId(sId);
-        setMainTab('Shots');
+        setMainTab('Home');
+        navigateWeb('/', true);
         return;
       }
 
@@ -5685,15 +3577,8 @@ function ReelApp() {
         pathname.startsWith('/shots/') ||
         pathname.startsWith('/short/')
       ) {
-        const sId = pathname.startsWith('/short/')
-          ? pathname.replace('/short/', '').split('/')[0]
-          : pathname.startsWith('/shorts/')
-          ? pathname.replace('/shorts/', '').split('/')[0]
-          : pathname.startsWith('/shots/')
-          ? pathname.replace('/shots/', '').split('/')[0]
-          : '';
-        if (sId) setTargetShortId(sId);
-        setMainTab('Shots');
+        setMainTab('Home');
+        navigateWeb('/', true);
         return;
       }
       if (
@@ -6263,27 +4148,9 @@ function ReelApp() {
         </View>
       )}
 
-      {/* ─── MAIN CONTENT: SHOTS 9:16 VERTICAL FEED OR HOME/ME SCROLLVIEW ─── */}
-      {mainTab === 'Shots' ? (
-        <ShotsFeedView
-          insets={insets}
-          isTabActive={mainTab === 'Shots'}
-          showToast={showToast}
-          triggerHaptic={triggerHaptic}
-          onBack={() => setMainTab('Home')}
-          authUser={authUser}
-          authAccessToken={authAccessToken}
-          openAuthModal={() => setIsAuthPageOpen(true)}
-          targetShortId={targetShortId}
-          isPremium={isPremium}
-          onWatchMovie={(movie, se, ep, isSeries) => {
-            setMainTab('Home');
-            launchPlayer(movie, se, ep, isSeries);
-          }}
-        />
-      ) : (
-        <ScrollView
-          ref={mainScrollRef}
+      {/* ─── MAIN CONTENT: HOME / ME SCROLLVIEW ─── */}
+      <ScrollView
+        ref={mainScrollRef}
           style={styles.mainScrollView}
         contentContainerStyle={{ paddingBottom: Math.max(insets.bottom + 96, 110) }}
         showsVerticalScrollIndicator={false}
@@ -7616,7 +5483,6 @@ function ReelApp() {
           )
         )}
       </ScrollView>
-      )}
 
       {/* DETAIL MODAL (CLEAN GLASS, REAL DATA) */}
       <Modal
@@ -8656,7 +6522,6 @@ function ReelApp() {
       {/* ==================================================== */}
       {/* FLOATING APPLE-STYLE PILL BOTTOM NAVIGATION BAR       */}
       {/* ==================================================== */}
-      {mainTab !== 'Shots' && (
         <View
           style={[
             styles.floatingNavWrapper,
@@ -8705,32 +6570,6 @@ function ReelApp() {
               </Text>
             </TouchableOpacity>
 
-            {/* Shots Tab (Center) */}
-            <TouchableOpacity
-              style={styles.floatingNavTab}
-              onPress={() => {
-                if (mainTab !== 'Shots') {
-                  triggerHaptic('selection');
-                  setMainTab('Shots');
-                }
-              }}
-              activeOpacity={0.8}
-            >
-              <Feather
-                name="film"
-                size={18}
-                color={mainTab === 'Shots' ? '#FFFFFF' : 'rgba(255, 255, 255, 0.55)'}
-              />
-              <Text
-                style={[
-                  styles.floatingNavText,
-                  mainTab === 'Shots' && styles.floatingNavTextActive,
-                ]}
-              >
-                Shots
-              </Text>
-            </TouchableOpacity>
-
             {/* Me Tab */}
             <TouchableOpacity
               style={styles.floatingNavTab}
@@ -8767,7 +6606,6 @@ function ReelApp() {
             </TouchableOpacity>
           </View>
         </View>
-      )}
 
       {/* ==================================================== */}
       {/* FLOATING TOAST NOTIFICATION                          */}
@@ -9535,7 +7373,34 @@ function ReelCustomPlayer({
     } catch (_) {}
   }, []);
 
-  // Pre-roll ad trigger removed to guarantee instant, uninterrupted movie start without blank screen
+  // 1. Pre-roll Ad Trigger: Loads sponsor ad for non-VIP users at start of movie/series
+  useEffect(() => {
+    if (isPremium || hasTriggeredPreRollRef.current) return;
+    hasTriggeredPreRollRef.current = true;
+
+    let isMounted = true;
+    const triggerPreRoll = async () => {
+      try {
+        const ad = await fetchRandomAd();
+        if (!isMounted || !ad || isPremium) return;
+        try {
+          playerRef.current?.pause();
+        } catch (_) {}
+        setActiveAd(ad);
+        setAdSkipSeconds(Number(ad.skip_seconds) || 10);
+        setIsAdShowing(true);
+        recordImpression(ad);
+      } catch (err) {
+        console.warn('[Player] Pre-roll ad note:', err?.message);
+      }
+    };
+
+    const timer = setTimeout(triggerPreRoll, 400);
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+    };
+  }, [isPremium]);
 
   // 2. 30-Minute Mid-Roll Ad Loop: Triggers every 30 minutes of playback with 5s skip (bypassed for VIP)
   useEffect(() => {
