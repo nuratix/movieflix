@@ -91,7 +91,9 @@ export default function SubscriptionModal({
     setLoading(true);
     setErrorMessage('');
     try {
-      const result = await createSubscriptionInvoice(selectedPlan, authAccessToken);
+      const result = await createSubscriptionInvoice(selectedPlan, authAccessToken, {
+        userEmail: authUser?.email,
+      });
       setPendingOrder(result);
 
       if (result.invoiceUrl) {

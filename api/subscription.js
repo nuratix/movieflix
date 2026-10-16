@@ -264,7 +264,17 @@ export default async function handler(req, res) {
     // 3. CREATE INVOICE: /api/subscription?action=create_invoice
     // ─────────────────────────────────────────────────────────────────────────
     if (action === 'create_invoice' || action === 'create-invoice' || pathname.endsWith('/create-invoice')) {
-      const user = await authenticateUser(req, body, query);
+      let user = await authenticateUser(req, body, query);
+      const isSandboxParam = req.body?.isSandbox === true || req.body?.testMode === true || IS_SANDBOX;
+      const guestEmail = (body.userEmail || body.email || query.email || query.userEmail || '').trim().toLowerCase();
+      if (!user && (isSandboxParam || guestEmail)) {
+        const fallbackEmail = guestEmail || 'sandbox_test_user@gmail.com';
+        user = {
+          userId: fallbackEmail,
+          username: fallbackEmail.split('@')[0],
+          email: fallbackEmail,
+        };
+      }
       if (!user) {
         return res.status(401).json({
           error: 'Unauthorized',

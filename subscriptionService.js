@@ -68,19 +68,30 @@ export async function fetchSubscriptionStatus(authToken = null) {
 /**
  * Create a NOWPayments invoice for a chosen plan ($1/mo, $3/3mo, $5/6mo)
  */
-export async function createSubscriptionInvoice(planKey = '1_month', authToken) {
-  if (!authToken) {
+export async function createSubscriptionInvoice(planKey = '1_month', authToken, options = {}) {
+  const isSandbox = options.isSandbox === true;
+  const userEmail = options.userEmail || '';
+
+  if (!authToken && !isSandbox) {
     throw new Error('Please sign in to your Movieflix account before subscribing.');
+  }
+
+  const headers = {
+    'Content-Type': 'application/json',
+    Accept: 'application/json',
+  };
+  if (authToken) {
+    headers['Authorization'] = `Bearer ${authToken}`;
   }
 
   const res = await fetch(`${API_BASE}/api/subscription?action=create_invoice`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-      Authorization: `Bearer ${authToken}`,
-    },
-    body: JSON.stringify({ plan: planKey }),
+    headers,
+    body: JSON.stringify({
+      plan: planKey,
+      isSandbox,
+      userEmail,
+    }),
   });
 
   const data = await res.json();

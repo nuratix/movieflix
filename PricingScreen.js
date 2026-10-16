@@ -77,7 +77,9 @@ export default function PricingScreen({
 
     setLoadingPay(true);
     try {
-      const res = await createSubscriptionInvoice(selectedPlanId, authAccessToken);
+      const res = await createSubscriptionInvoice(selectedPlanId, authAccessToken, {
+        userEmail: authUser?.email,
+      });
       if (res.invoiceUrl) {
         setSuccessMessage('Redirecting to NOWPayments hosted checkout...');
         if (isWeb && typeof window !== 'undefined') {
@@ -98,19 +100,12 @@ export default function PricingScreen({
   const handleSandboxRedirect = async () => {
     setErrorMessage('');
     setSuccessMessage('');
-
-    if (!authUser || !authAccessToken) {
-      if (onOpenAuth) {
-        onOpenAuth('login');
-      } else {
-        setErrorMessage('Please sign in or create an account to test Movieflix Pro payment.');
-      }
-      return;
-    }
-
     setSimulating(true);
     try {
-      const res = await createSubscriptionInvoice(selectedPlanId, authAccessToken);
+      const res = await createSubscriptionInvoice(selectedPlanId, authAccessToken, {
+        isSandbox: true,
+        userEmail: authUser?.email || 'sandbox_tester@movieflix.com',
+      });
       if (res.invoiceUrl) {
         setSuccessMessage('Redirecting to NOWPayments payment website...');
         if (isWeb && typeof window !== 'undefined') {
