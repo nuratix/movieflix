@@ -57,13 +57,14 @@ export default function DownloadScreen({
   const isTablet = windowWidth >= 600 && windowWidth < 900;
 
   const [releaseInfo, setReleaseInfo] = useState({
-    version: '1.1.8',
-    tag: 'v1.1.8',
-    sizeFormatted: '98 MB',
+    version: '1.1.9',
+    tag: 'v1.1.9',
+    sizeFormatted: '111.8 MB',
     developer: 'movieflix',
     ageRating: '18+',
     realDownloads: 0,
     downloadUrl: DOWNLOAD_URL,
+    token: null,
   });
 
   const [downloading, setDownloading] = useState(false);
@@ -84,11 +85,12 @@ export default function DownloadScreen({
             ...prev,
             version: data.version,
             tag: data.tag || `v${data.version}`,
-            sizeFormatted: data.sizeFormatted || '98 MB',
+            sizeFormatted: data.sizeFormatted || '111.8 MB',
             developer: data.developer || 'movieflix',
             ageRating: data.ageRating || '18+',
             realDownloads: typeof data.realDownloads === 'number' ? data.realDownloads : 0,
             downloadUrl: data.downloadUrl || DOWNLOAD_URL,
+            token: data.token || data.jwt || null,
           }));
         }
       })
@@ -106,8 +108,8 @@ export default function DownloadScreen({
     setDownloading(true);
     setDownloadSuccess(false);
 
-    // Build authenticated download link
-    const token = authAccessToken || '';
+    // Build authenticated download link with server-validated JWT
+    const token = authAccessToken || releaseInfo.token || '';
     const downloadTarget = token
       ? `${releaseInfo.downloadUrl}?token=${encodeURIComponent(token)}`
       : releaseInfo.downloadUrl;
