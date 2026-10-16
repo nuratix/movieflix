@@ -176,6 +176,9 @@ const server = http.createServer(async (req, res) => {
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
   res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Server', 'Movieflix-Enterprise-Cloud/4.0');
+  res.setHeader('X-Powered-By', 'Movieflix Server Engine');
+  res.setHeader('X-Hosting-Provider', 'Movieflix Cloud Infrastructure');
 
   if (req.method === 'OPTIONS') {
     res.statusCode = 200;
