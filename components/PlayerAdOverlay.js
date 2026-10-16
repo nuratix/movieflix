@@ -31,6 +31,7 @@ export default function PlayerAdOverlay({
   onSkip,
   onOpenAd,
   onClose,
+  onGoAdFree,
 }) {
   const insets = useSafeAreaInsets();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
@@ -234,29 +235,42 @@ export default function PlayerAdOverlay({
           </View>
         </View>
 
-        <TouchableOpacity
-          style={[
-            styles.skipButton,
-            canSkip ? styles.skipButtonActive : styles.skipButtonDisabled,
-          ]}
-          onPress={handleSkip}
-          disabled={!canSkip}
-          activeOpacity={0.8}
-        >
-          {canSkip ? (
-            <View style={styles.skipContentRow}>
-              <Text style={styles.skipTextActive}>Skip Ad</Text>
-              <Feather name="chevrons-right" size={16} color="#FFFFFF" style={{ marginLeft: 4 }} />
-            </View>
-          ) : (
-            <View style={styles.skipContentRow}>
-              <Feather name="clock" size={13} color="#A3A3A3" style={{ marginRight: 5 }} />
-              <Text style={styles.skipTextDisabled}>
-                {`Ad · Skip in ${remainingSeconds}s`}
-              </Text>
-            </View>
+        <View style={styles.topBarRightGroup}>
+          {Boolean(onGoAdFree) && (
+            <TouchableOpacity
+              style={styles.goAdFreeBtn}
+              onPress={onGoAdFree}
+              activeOpacity={0.8}
+            >
+              <MaterialIcons name="workspace-premium" size={14} color="#fbbf24" style={{ marginRight: 4 }} />
+              <Text style={styles.goAdFreeText}>Go Ad-Free ($1)</Text>
+            </TouchableOpacity>
           )}
-        </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.skipButton,
+              canSkip ? styles.skipButtonActive : styles.skipButtonDisabled,
+            ]}
+            onPress={handleSkip}
+            disabled={!canSkip}
+            activeOpacity={0.8}
+          >
+            {canSkip ? (
+              <View style={styles.skipContentRow}>
+                <Text style={styles.skipTextActive}>Skip Ad</Text>
+                <Feather name="chevrons-right" size={16} color="#FFFFFF" style={{ marginLeft: 4 }} />
+              </View>
+            ) : (
+              <View style={styles.skipContentRow}>
+                <Feather name="clock" size={13} color="#A3A3A3" style={{ marginRight: 5 }} />
+                <Text style={styles.skipTextDisabled}>
+                  {`Ad · Skip in ${remainingSeconds}s`}
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* ─── BOTTOM FLOATING BAR: ONLY GET STARTED BUTTON & TITLE (NO URL) ─── */}
@@ -335,6 +349,27 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '800',
     letterSpacing: 0.8,
+  },
+  topBarRightGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  goAdFreeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 20,
+    backgroundColor: 'rgba(245, 158, 11, 0.2)',
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.5)',
+  },
+  goAdFreeText: {
+    color: '#fbbf24',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.3,
   },
   skipButton: {
     paddingHorizontal: 16,

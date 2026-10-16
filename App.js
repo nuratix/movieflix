@@ -96,6 +96,8 @@ import ServerCrashDonateScreen from './components/ServerCrashDonateScreen';
 import { checkSystemStatusAsync } from './statusService';
 import PlayerAdOverlay from './components/PlayerAdOverlay';
 import { fetchRandomAd, fetchShortsAds, recordImpression, recordClick } from './adService';
+import SubscriptionModal from './components/SubscriptionModal';
+import { fetchSubscriptionStatus, formatExpirationDate } from './subscriptionService';
 import * as SplashScreen from 'expo-splash-screen';
 
 // Prevent native splash screen from hiding before custom splash animation mounts
@@ -3031,6 +3033,7 @@ function ShotsFeedView({
   openAuthModal,
   targetShortId,
   onWatchMovie,
+  isPremium = false,
 }) {
   const webViewRef = useRef(null);
   const iframeRef = useRef(null);
@@ -3046,9 +3049,11 @@ function ShotsFeedView({
         : INITIAL_SHOTS;
 
       let shortsAds = [];
-      try {
-        shortsAds = await fetchShortsAds();
-      } catch (_) {}
+      if (!isPremium) {
+        try {
+          shortsAds = await fetchShortsAds();
+        } catch (_) {}
+      }
 
       if (isCancelled) return;
 
@@ -3065,7 +3070,7 @@ function ShotsFeedView({
 
     initFeed();
     return () => { isCancelled = true; };
-  }, [targetShortId, authAccessToken]);
+  }, [targetShortId, authAccessToken, isPremium]);
 
   // Tab switching: pause video when moving away from Shots, resume when returning
   useEffect(() => {
@@ -3381,6 +3386,26 @@ function ReelApp() {
   const [isMaintenanceMode, setIsMaintenanceMode] = useState(false);
   const [isDonateServerDownMode, setIsDonateServerDownMode] = useState(false);
   const [isCheckingSystemStatus, setIsCheckingSystemStatus] = useState(false);
+  const [isSubscriptionModalOpen, setIsSubscriptionModalOpen] = useState(false);
+  const [subscriptionStatus, setSubscriptionStatus] = useState({ is_premium: false, days_left: 0 });
+  const isPremium = Boolean(subscriptionStatus?.is_premium);
+
+  const refreshSubscriptionStatus = async () => {
+    if (!authAccessToken) {
+      setSubscriptionStatus({ is_premium: false, days_left: 0 });
+      return;
+    }
+    try {
+      const status = await fetchSubscriptionStatus(authAccessToken);
+      setSubscriptionStatus(status || { is_premium: false, days_left: 0 });
+    } catch (_) {
+      setSubscriptionStatus({ is_premium: false, days_left: 0 });
+    }
+  };
+
+  useEffect(() => {
+    refreshSubscriptionStatus();
+  }, [authUser, authAccessToken]);
 
   const checkStatus = async () => {
     setIsCheckingSystemStatus(true);
@@ -6073,8 +6098,19 @@ function ReelApp() {
               )}
             </View>
 
-            {/* Header Right Actions: Explore Categories Navigation */}
+            {/* Header Right Actions: VIP Subscription & Explore Categories Navigation */}
             <View style={styles.headerRightActions}>
+              <TouchableOpacity
+                style={[styles.headerVipBtn, isPremium && styles.headerVipBtnActive]}
+                onPress={() => setIsSubscriptionModalOpen(true)}
+                activeOpacity={0.8}
+              >
+                <Feather name="award" size={14} color={isPremium ? '#10b981' : '#fbbf24'} />
+                <Text style={[styles.headerVipBtnText, isPremium && styles.headerVipBtnTextActive]}>
+                  {isPremium ? `${subscriptionStatus?.days_left || ''}d VIP` : 'VIP'}
+                </Text>
+              </TouchableOpacity>
+
               <TouchableOpacity
                 style={styles.headerCategoriesBtn}
                 onPress={() => setIsCategoryModalOpen(true)}
@@ -6120,6 +6156,7 @@ function ReelApp() {
           authAccessToken={authAccessToken}
           openAuthModal={() => setIsAuthPageOpen(true)}
           targetShortId={targetShortId}
+          isPremium={isPremium}
           onWatchMovie={(movie, se, ep, isSeries) => {
             setMainTab('Home');
             launchPlayer(movie, se, ep, isSeries);
@@ -6256,8 +6293,54 @@ function ReelApp() {
                   </TouchableOpacity>
                 </View>
 
+                {/* VIP Ad-Free Subscription Banner */}
+                <TouchableOpacity
+                  style={styles.meSubscriptionBanner}
+                  onPress={() => setIsSubscriptionModalOpen(true)}
+                  activeOpacity={0.85}
+                >
+                  <View style={styles.meSubscriptionLeft}>
+                    <View style={styles.meSubscriptionIconBox}>
+                      <Feather name="award" size={22} color={isPremium ? '#10b981' : '#fbbf24'} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.meSubscriptionTitle}>
+                        {isPremium ? 'VIP Ad-Free Active' : 'Upgrade to VIP (Ad-Free)'}
+                      </Text>
+                      <Text style={styles.meSubscriptionSubtitle} numberOfLines={1}>
+                        {isPremium
+                          ? `Expires: ${formatExpirationDate(subscriptionStatus?.expires_at)} (${subscriptionStatus?.days_left || 0}d left)`
+                          : 'Zero Ads · 4K Ultra HD · Fast Streaming from $1'}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={[styles.meSubscriptionBadge, isPremium && styles.meSubscriptionBadgeActive]}>
+                    <Text style={styles.meSubscriptionBadgeText}>{isPremium ? 'ACTIVE' : 'FROM $1'}</Text>
+                  </View>
+                </TouchableOpacity>
+
                 {/* Quick Utility Links: Privacy Policy & Web Download APK */}
                 <View style={styles.meMinimalLinksContainer}>
+                  {/* VIP Plan Management Link */}
+                  <TouchableOpacity
+                    style={styles.meMinimalLinkRow}
+                    onPress={() => setIsSubscriptionModalOpen(true)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.meMinimalLinkLeft}>
+                      <Feather name="shield" size={16} color={isPremium ? '#10b981' : '#fbbf24'} style={{ marginRight: 10 }} />
+                      <Text style={styles.meMinimalLinkText}>Subscription & VIP Status</Text>
+                    </View>
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      {isPremium && (
+                        <Text style={{ color: '#10b981', fontSize: 12, fontWeight: '700', marginRight: 6 }}>
+                          {subscriptionStatus?.days_left || 0}d left
+                        </Text>
+                      )}
+                      <Feather name="chevron-right" size={16} color="#525252" />
+                    </View>
+                  </TouchableOpacity>
+
                   {isWeb && (
                     <TouchableOpacity
                       style={styles.meMinimalLinkRow}
@@ -8002,6 +8085,8 @@ function ReelApp() {
               onPlayNextEpisode={playNextEpisode}
               onProgressUpdate={handlePlayerProgressUpdate}
               onClose={closePlayer}
+              isPremium={isPremium}
+              onGoAdFree={() => setIsSubscriptionModalOpen(true)}
             />
           ) : (
             <View style={styles.playerLoadingCentered}>
@@ -8609,6 +8694,20 @@ function ReelApp() {
           </View>
         </View>
       )}
+
+      {/* ─── VIP AD-FREE SUBSCRIPTION MODAL (NOWPayments Sandbox & Live) ─── */}
+      <SubscriptionModal
+        visible={isSubscriptionModalOpen}
+        onClose={() => setIsSubscriptionModalOpen(false)}
+        authUser={authUser}
+        subscriptionStatus={subscriptionStatus}
+        onSubscriptionUpdated={(newStatus) => {
+          setSubscriptionStatus(newStatus);
+          setIsPremium(Boolean(newStatus?.is_premium));
+          showToast('🎉 VIP Status Activated! Enjoy 100% Ad-Free Streaming!');
+        }}
+      />
+
     </View>
   );
 }
@@ -8815,6 +8914,8 @@ function ReelCustomPlayer({
   onSelectEpisode,
   onProgressUpdate,
   onClose,
+  isPremium = false,
+  onGoAdFree,
 }) {
   const insets = useSafeAreaInsets();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
@@ -9312,11 +9413,12 @@ function ReelCustomPlayer({
     } catch (_) {}
   }, []);
 
-  // 1. Initial Pre-Roll Ad: Appears when movie playback starts (after intro) with 10s skip
+  // 1. Initial Pre-Roll Ad: Appears when movie playback starts (after intro) with 10s skip (bypassed for VIP)
   useEffect(() => {
     let isCancelled = false;
 
     const triggerInitialAd = async () => {
+      if (isPremium) return;
       if (hasTriggeredPreRollRef.current) return;
       hasTriggeredPreRollRef.current = true;
 
@@ -9344,10 +9446,11 @@ function ReelCustomPlayer({
       isCancelled = true;
       clearTimeout(t);
     };
-  }, []);
+  }, [isPremium]);
 
-  // 2. 30-Minute Mid-Roll Ad Loop: Triggers every 30 minutes of playback with 5s skip
+  // 2. 30-Minute Mid-Roll Ad Loop: Triggers every 30 minutes of playback with 5s skip (bypassed for VIP)
   useEffect(() => {
+    if (isPremium) return;
     const MIDROLL_INTERVAL_SEC = 1800; // 30 minutes in seconds
 
     const intervalId = setInterval(async () => {
@@ -9375,7 +9478,18 @@ function ReelCustomPlayer({
     }, 1000);
 
     return () => clearInterval(intervalId);
-  }, [isPlaying, isAdShowing]);
+  }, [isPlaying, isAdShowing, isPremium]);
+
+  // Dismiss any currently showing ad immediately when user becomes VIP
+  useEffect(() => {
+    if (isPremium && isAdShowing) {
+      setIsAdShowing(false);
+      setActiveAd(null);
+      try {
+        playerRef.current?.play();
+      } catch (_) {}
+    }
+  }, [isPremium, isAdShowing]);
 
   // Keep player paused if ad is currently showing
   useEffect(() => {
@@ -10588,12 +10702,13 @@ function ReelCustomPlayer({
       </Modal>
 
       {/* ─── FULLSCREEN VIDEO PLAYER AD OVERLAY (PRE-ROLL 10s & 30-MIN LOOP 5s) ─── */}
-      {Boolean(isAdShowing && activeAd) && (
+      {Boolean(isAdShowing && activeAd && !isPremium) && (
         <PlayerAdOverlay
           ad={activeAd}
           initialSkipSeconds={adSkipSeconds}
           onSkip={handleSkipAd}
           onClose={onClose}
+          onGoAdFree={onGoAdFree}
         />
       )}
 
@@ -10684,6 +10799,31 @@ const styles = StyleSheet.create({
   headerRightActions: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  headerVipBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(251, 191, 36, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(251, 191, 36, 0.35)',
+    marginRight: 8,
+  },
+  headerVipBtnActive: {
+    backgroundColor: 'rgba(16, 185, 129, 0.16)',
+    borderColor: 'rgba(16, 185, 129, 0.45)',
+  },
+  headerVipBtnText: {
+    color: '#fbbf24',
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    marginLeft: 5,
+  },
+  headerVipBtnTextActive: {
+    color: '#10b981',
   },
   headerIconBtn: {
     width: 34,
@@ -12610,6 +12750,61 @@ const styles = StyleSheet.create({
     width: 1,
     height: 30,
     backgroundColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  meSubscriptionBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    backgroundColor: 'rgba(245, 158, 11, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.28)',
+    borderRadius: 18,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    marginBottom: 16,
+  },
+  meSubscriptionLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 10,
+  },
+  meSubscriptionIconBox: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: 'rgba(245, 158, 11, 0.16)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  meSubscriptionTitle: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '800',
+    letterSpacing: -0.2,
+  },
+  meSubscriptionSubtitle: {
+    color: '#fbbf24',
+    fontSize: 12,
+    fontWeight: '500',
+    marginTop: 2,
+  },
+  meSubscriptionBadge: {
+    backgroundColor: '#f59e0b',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+  },
+  meSubscriptionBadgeActive: {
+    backgroundColor: '#10b981',
+  },
+  meSubscriptionBadgeText: {
+    color: '#000000',
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 0.5,
   },
   meMinimalLinksContainer: {
     width: '100%',

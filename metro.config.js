@@ -86,6 +86,7 @@ config.server = {
         else if (pathname.startsWith('/api/imdb')) modulePath = './api/imdb.js';
         else if (pathname.startsWith('/api/status')) modulePath = './api/status.js';
         else if (pathname.startsWith('/api/ads')) modulePath = './api/ads.js';
+        else if (pathname.startsWith('/api/subscription') || pathname.startsWith('/api/payment')) modulePath = './api/subscription.js';
 
         if (modulePath) {
           try {
