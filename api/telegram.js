@@ -1,5 +1,6 @@
 import https from 'https';
 import dns from 'dns';
+import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
