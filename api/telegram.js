@@ -1,3 +1,4 @@
+import https from 'https';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import {
   DynamoDBDocumentClient,
@@ -12,8 +13,9 @@ import {
 
 // ─── Environment & Clients ───────────────────────────────────────────────────
 const TELEGRAM_BOT_TOKEN = (
-  process.env.TELEGRAM_BOT_TOKEN ||
-  '8999491309:AAHhg0MQZijkr7umxN-IgcXox7NOJykuxuY'
+  process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_BOT_TOKEN.trim().length > 10
+    ? process.env.TELEGRAM_BOT_TOKEN
+    : '8999491309:AAHhg0MQZijkr7umxN-IgcXox7NOJykuxuY'
 ).trim();
 
 const BOT_USERNAME = (
@@ -86,22 +88,77 @@ export const SUBSCRIPTION_PLANS = {
 
 // ─── Telegram Bot API Helper ─────────────────────────────────────────────────
 async function callTelegram(method, body = {}) {
-  const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/${method}`;
-  try {
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    const data = await res.json();
-    if (!data.ok) {
-      console.error(`[Telegram API Error on ${method}]`, data);
+  const token = (
+    process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_BOT_TOKEN.trim().length > 10
+      ? process.env.TELEGRAM_BOT_TOKEN
+      : '8999491309:AAHhg0MQZijkr7umxN-IgcXox7NOJykuxuY'
+  ).trim();
+
+  const postData = JSON.stringify(body || {});
+
+  return new Promise((resolve) => {
+    try {
+      const options = {
+        hostname: 'api.telegram.org',
+        port: 443,
+        path: `/bot${token}/${method}`,
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(postData),
+        },
+        timeout: 15000,
+      };
+
+      const req = https.request(options, (res) => {
+        let rawData = '';
+        res.on('data', (chunk) => {
+          rawData += chunk;
+        });
+        res.on('end', () => {
+          try {
+            const data = JSON.parse(rawData);
+            if (!data.ok) {
+              console.error(`[Telegram API Error on ${method}]`, data);
+            }
+            resolve(data);
+          } catch (e) {
+            console.error(`[Telegram API JSON Parse Error on ${method}]`, rawData);
+            resolve({ ok: false, error: e.message, raw: rawData });
+          }
+        });
+      });
+
+      req.on('error', async (err) => {
+        console.error(`[Telegram https Request Error: ${method}]`, err.message);
+        // Fallback to fetch if https fails
+        try {
+          if (typeof fetch === 'function') {
+            const fetchRes = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: postData,
+            });
+            const data = await fetchRes.json();
+            return resolve(data);
+          }
+        } catch (_) {}
+        resolve({ ok: false, error: err.message });
+      });
+
+      req.on('timeout', () => {
+        req.destroy();
+        console.error(`[Telegram Request Timeout: ${method}]`);
+        resolve({ ok: false, error: 'Request timeout to Telegram API' });
+      });
+
+      req.write(postData);
+      req.end();
+    } catch (topErr) {
+      console.error(`[Telegram callTelegram Exception: ${method}]`, topErr);
+      resolve({ ok: false, error: topErr.message });
     }
-    return data;
-  } catch (err) {
-    console.error(`[Telegram API Network Error: ${method}]`, err);
-    return { ok: false, error: err.message };
-  }
+  });
 }
 
 // ─── Helper: Authenticate Cognito User from Authorization Header ─────────────
@@ -293,7 +350,31 @@ export default async function handler(req, res) {
 
   const parsedUrl = new URL(req.url || '', 'http://localhost');
   const query = req.query || Object.fromEntries(parsedUrl.searchParams.entries());
-  const body = req.body || {};
+
+  let body = req.body || {};
+  if (typeof body === 'string') {
+    try { body = JSON.parse(body); } catch (_) { body = {}; }
+  } else if (Buffer.isBuffer(body)) {
+    try { body = JSON.parse(body.toString('utf8')); } catch (_) { body = {}; }
+  }
+
+  // If body is empty, read stream if unconsumed
+  if (!body || (typeof body === 'object' && Object.keys(body).length === 0)) {
+    if (typeof req.on === 'function' && !req.complete) {
+      try {
+        const raw = await new Promise((resolve) => {
+          let buf = '';
+          req.on('data', (c) => { buf += c; });
+          req.on('end', () => resolve(buf));
+          req.on('error', () => resolve(''));
+        });
+        if (raw) {
+          try { body = JSON.parse(raw); } catch (_) { body = {}; }
+        }
+      } catch (_) {}
+    }
+  }
+
   const action = String(query.action || body.action || '').trim().toLowerCase();
 
   const effectiveApiBase = (
@@ -368,7 +449,7 @@ export default async function handler(req, res) {
   // 4. TELEGRAM BOT UPDATES WEBHOOK (POST from Telegram Servers)
   // ─────────────────────────────────────────────────────────────────────────
   const update = body;
-  if (!update || typeof update !== 'object') {
+  if (!update || typeof update !== 'object' || Object.keys(update).length === 0) {
     return res.status(200).json({ ok: true });
   }
 
@@ -597,12 +678,49 @@ export default async function handler(req, res) {
         return res.status(200).json({ ok: true });
       }
 
-      // C3: User requested to enter a different account
+      // C3: View plans summary
+      if (data === 'view_plans') {
+        const plansHtml =
+          `💎 <b>Movieflix Pro Subscription Plans:</b>\n\n` +
+          `• <b>⭐ 1 Month Pro</b> — 50 Telegram Stars (~$1)\n` +
+          `• <b>🔥 3 Months Pro</b> — 150 Telegram Stars (~$3)\n` +
+          `• <b>👑 6 Months Pro</b> — 250 Telegram Stars (~$5)\n\n` +
+          `🍿 <b>Features Included:</b>\n` +
+          `• 4K Ultra HD & 1080p Streaming Quality\n` +
+          `• 100% Zero Ads in Movies & Shorts\n` +
+          `• Access to All VIP & Premium Episodes\n\n` +
+          `👉 Please reply with your <b>6-digit Movieflix Account ID</b> (e.g. <code>749215</code>) or registered <b>email</b> first so we can activate Pro on your account!`;
+
+        await callTelegram('sendMessage', {
+          chat_id: chatId,
+          text: plansHtml,
+          parse_mode: 'HTML',
+          reply_markup: {
+            inline_keyboard: [
+              [
+                {
+                  text: '🎬 Open Movieflix Website',
+                  url: effectiveApiBase,
+                },
+              ],
+              [
+                {
+                  text: '🆔 Enter Account ID / Email',
+                  callback_data: 'change_account',
+                },
+              ],
+            ],
+          },
+        });
+        return res.status(200).json({ ok: true });
+      }
+
+      // C4: User requested to enter a different account
       if (data === 'change_account') {
         await callTelegram('sendMessage', {
           chat_id: chatId,
           text:
-            `👉 Please reply with your <b>6-digit Movieflix Account ID</b> (found under Pricing on Movieflix), ` +
+            `👉 Please reply with your <b>6-digit Movieflix Account ID</b> (found under Pro / Pricing on Movieflix), ` +
             `or type your registered <b>email address</b>:`,
           parse_mode: 'HTML',
         });
@@ -614,13 +732,14 @@ export default async function handler(req, res) {
     if (update.message?.text) {
       const msg = update.message;
       const chatId = msg.chat.id;
-      const text = msg.text.trim();
+      const rawText = msg.text.trim();
+      const cleanText = rawText.replace(new RegExp(`^/start(?:@${BOT_USERNAME})?`, 'i'), '/start').trim();
 
       // Case D1: /start with or without parameter
-      if (text.startsWith('/start')) {
-        const param = text.replace('/start', '').trim();
+      if (cleanText.startsWith('/start')) {
+        const param = cleanText.replace('/start', '').trim();
 
-        // Parameter is 6 digits: /start 123456
+        // Parameter is 6 digits: /start 749215 (from website deep link)
         if (param && /^\d{6}$/.test(param)) {
           let user = await getUserByCode(param);
 
@@ -635,10 +754,10 @@ export default async function handler(req, res) {
               chat_id: chatId,
               text:
                 `👋 <b>Welcome to Movieflix Pro Bot!</b>\n\n` +
-                `We identified your Movieflix account:\n` +
-                `📧 <b>Email:</b> <code>${user.userEmail}</code>\n` +
-                `🆔 <b>Account ID:</b> <code>${user.code}</code>\n\n` +
-                `Is this your account?`,
+                `🔍 <b>Account Found:</b>\n` +
+                `🆔 <b>Account ID:</b> <code>${user.code}</code>\n` +
+                `📧 <b>Registered Email:</b> <code>${user.userEmail}</code>\n\n` +
+                `Is this your Movieflix account?`,
               parse_mode: 'HTML',
               reply_markup: {
                 inline_keyboard: [
@@ -665,35 +784,122 @@ export default async function handler(req, res) {
               text:
                 `👋 <b>Welcome to Movieflix Pro Bot!</b>\n\n` +
                 `🆔 <b>Detected Account ID:</b> <code>${param}</code>\n\n` +
-                `👉 Please reply with your <b>email address</b> to link your Movieflix account:`,
+                `👉 Please reply with your <b>email address</b> to link your Movieflix account and unlock Pro VIP:`,
               parse_mode: 'HTML',
             });
             return res.status(200).json({ ok: true });
           }
         }
 
-        // Generic /start greeting
+        // Generic /start greeting (when user opens bot and presses [ START ])
         await callTelegram('sendMessage', {
           chat_id: chatId,
           text:
             `👋 <b>Welcome to the official Movieflix Pro Bot!</b>\n\n` +
-            `Upgrade your Movieflix account to <b>Pro</b> to unlock:\n` +
+            `🍿 <b>Movieflix Pro VIP Features:</b>\n` +
             `• 🎬 Stream all titles in <b>4K Ultra HD & 1080p</b>\n` +
-            `• 🚫 <b>Zero Ads</b> in Movies, Series & Shorts\n` +
-            `• 🍿 All Premium & VIP Episodes\n\n` +
-            `👉 To link your account, reply with your <b>6-digit Movieflix Account ID</b> ` +
-            `(found under Pro/Pricing in Movieflix), or type your registered <b>email address</b>:`,
+            `• 🚫 <b>100% Zero Ads</b> in Movies, Series & Shorts\n` +
+            `• 👑 <b>All VIP Episodes</b> & high-speed streaming\n\n` +
+            `💎 <b>Telegram Stars Pricing:</b>\n` +
+            `• ⭐ 1 Month Pro — <b>50 Stars</b> ($1)\n` +
+            `• 🔥 3 Months Pro — <b>150 Stars</b> ($3)\n` +
+            `• 👑 6 Months Pro — <b>250 Stars</b> ($5)\n\n` +
+            `👉 <b>To subscribe, please reply with your 6-digit Movieflix Account ID</b> ` +
+            `(found under Pro / Pricing on Movieflix) or type your registered <b>email address</b>:`,
           parse_mode: 'HTML',
+          reply_markup: {
+            inline_keyboard: [
+              [
+                {
+                  text: '🎬 Open Movieflix Website',
+                  url: effectiveApiBase,
+                },
+              ],
+              [
+                {
+                  text: '💎 View Pricing Plans',
+                  callback_data: 'view_plans',
+                },
+                {
+                  text: '🆔 Enter Account ID',
+                  callback_data: 'change_account',
+                },
+              ],
+            ],
+          },
         });
         return res.status(200).json({ ok: true });
       }
 
-      // Case D2: User sent 6-digit numeric ID (e.g. "749215")
-      if (/^\d{6}$/.test(text)) {
-        let user = await getUserByCode(text);
+      // Case D2: /help command
+      if (rawText.startsWith('/help')) {
+        await callTelegram('sendMessage', {
+          chat_id: chatId,
+          text:
+            `🍿 <b>Movieflix Pro Help & Instructions:</b>\n\n` +
+            `1️⃣ <b>Get Account ID:</b> Open Movieflix, go to Pro / Pricing to find your 6-digit Account ID.\n` +
+            `2️⃣ <b>Link Account:</b> Send your 6-digit ID or registered email here.\n` +
+            `3️⃣ <b>Choose Plan:</b> Select 1 Month (50 Stars), 3 Months (150 Stars), or 6 Months (250 Stars).\n` +
+            `4️⃣ <b>Instant Activation:</b> Pay with Telegram Stars and your subscription is activated immediately on the website!\n\n` +
+            `🌐 <b>Website:</b> ${effectiveApiBase}`,
+          parse_mode: 'HTML',
+          reply_markup: {
+            inline_keyboard: [
+              [
+                {
+                  text: '🎬 Open Movieflix Website',
+                  url: effectiveApiBase,
+                },
+              ],
+              [
+                {
+                  text: '💎 View Plans',
+                  callback_data: 'view_plans',
+                },
+              ],
+            ],
+          },
+        });
+        return res.status(200).json({ ok: true });
+      }
+
+      // Case D3: /plans command
+      if (rawText.startsWith('/plans')) {
+        await callTelegram('sendMessage', {
+          chat_id: chatId,
+          text:
+            `💎 <b>Movieflix Pro Subscription Plans:</b>\n\n` +
+            `• <b>⭐ 1 Month Pro</b> — 50 Telegram Stars (~$1)\n` +
+            `• <b>🔥 3 Months Pro</b> — 150 Telegram Stars (~$3)\n` +
+            `• <b>👑 6 Months Pro</b> — 250 Telegram Stars (~$5)\n\n` +
+            `👉 Reply with your <b>6-digit Account ID</b> or registered <b>email</b> to subscribe!`,
+          parse_mode: 'HTML',
+          reply_markup: {
+            inline_keyboard: [
+              [
+                {
+                  text: '🎬 Open Movieflix Website',
+                  url: effectiveApiBase,
+                },
+              ],
+              [
+                {
+                  text: '🆔 Enter Account ID',
+                  callback_data: 'change_account',
+                },
+              ],
+            ],
+          },
+        });
+        return res.status(200).json({ ok: true });
+      }
+
+      // Case D4: User sent 6-digit numeric ID (e.g. "749215")
+      if (/^\d{6}$/.test(rawText)) {
+        let user = await getUserByCode(rawText);
         if (!user) {
-          await getOrGenerateUserCode(`guest_${text}`, null);
-          user = await getUserByCode(text);
+          await getOrGenerateUserCode(`guest_${rawText}`, null);
+          user = await getUserByCode(rawText);
         }
 
         if (user && user.userEmail && !user.userEmail.startsWith('guest_')) {
@@ -701,21 +907,21 @@ export default async function handler(req, res) {
             chat_id: chatId,
             text:
               `🔍 <b>Account Found!</b>\n\n` +
-              `📧 <b>Email:</b> <code>${user.userEmail}</code>\n` +
-              `🆔 <b>Account ID:</b> <code>${user.code}</code>\n\n` +
-              `Confirm to proceed with subscription:`,
+              `🆔 <b>Account ID:</b> <code>${user.code}</code>\n` +
+              `📧 <b>Registered Email:</b> <code>${user.userEmail}</code>\n\n` +
+              `Is this your Movieflix account?`,
             parse_mode: 'HTML',
             reply_markup: {
               inline_keyboard: [
                 [
                   {
-                    text: '✅ Yes, Continue',
+                    text: '✅ Yes, This is My Email',
                     callback_data: `confirm_yes:${user.code}`,
                   },
                 ],
                 [
                   {
-                    text: '🔄 Enter Different ID',
+                    text: '🔄 Different Account',
                     callback_data: 'change_account',
                   },
                 ],
@@ -726,7 +932,7 @@ export default async function handler(req, res) {
           await callTelegram('sendMessage', {
             chat_id: chatId,
             text:
-              `🔍 <b>Account ID:</b> <code>${text}</code>\n\n` +
+              `🔍 <b>Account ID:</b> <code>${rawText}</code>\n\n` +
               `👉 Please reply with your <b>email address</b> so we can link your Movieflix subscription:`,
             parse_mode: 'HTML',
           });
@@ -734,25 +940,37 @@ export default async function handler(req, res) {
         return res.status(200).json({ ok: true });
       }
 
-      // Case D3: User sent an email address (e.g. "alex@gmail.com")
-      if (text.includes('@') && text.includes('.')) {
-        const email = text.toLowerCase().trim();
+      // Case D5: User sent an email address (e.g. "user@gmail.com")
+      if (rawText.includes('@') && rawText.includes('.')) {
+        const email = rawText.toLowerCase().trim();
         const code = await getOrGenerateUserCode(email, email);
 
         await callTelegram('sendMessage', {
           chat_id: chatId,
           text:
-            `🔍 <b>Account Linked!</b>\n\n` +
+            `✅ <b>Account Verified & Linked!</b>\n\n` +
             `📧 <b>Email:</b> <code>${email}</code>\n` +
-            `🆔 <b>Assigned ID:</b> <code>${code}</code>\n\n` +
-            `Do you want to activate Movieflix Pro for this email?`,
+            `🆔 <b>Assigned Account ID:</b> <code>${code}</code>\n\n` +
+            `✨ <b>Select Your Movieflix Pro Plan:</b>`,
           parse_mode: 'HTML',
           reply_markup: {
             inline_keyboard: [
               [
                 {
-                  text: '✅ Yes, Continue',
-                  callback_data: `confirm_yes:${code}`,
+                  text: '⭐ 1 Month Pro — 50 Stars ($1)',
+                  callback_data: `plan:1_month:${code}`,
+                },
+              ],
+              [
+                {
+                  text: '🔥 3 Months Pro — 150 Stars ($3)',
+                  callback_data: `plan:3_months:${code}`,
+                },
+              ],
+              [
+                {
+                  text: '👑 6 Months Pro — 250 Stars ($5)',
+                  callback_data: `plan:6_months:${code}`,
                 },
               ],
               [
@@ -771,8 +989,18 @@ export default async function handler(req, res) {
       await callTelegram('sendMessage', {
         chat_id: chatId,
         text:
-          `👉 Please enter your <b>6-digit Movieflix Account ID</b> (from the app), or your registered <b>email address</b>:`,
+          `👉 Please enter your <b>6-digit Movieflix Account ID</b> (from the app under Pro / Pricing), or your registered <b>email address</b>:`,
         parse_mode: 'HTML',
+        reply_markup: {
+          inline_keyboard: [
+            [
+              {
+                text: '🎬 Open Movieflix Website',
+                url: effectiveApiBase,
+              },
+            ],
+          ],
+        },
       });
       return res.status(200).json({ ok: true });
     }

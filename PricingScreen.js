@@ -39,7 +39,7 @@ export default function PricingScreen({
   const [selectedPlanId, setSelectedPlanId] = useState('3_months'); // Default to Most Popular
   const [loadingPlans, setLoadingPlans] = useState(true);
   const [loadingCode, setLoadingCode] = useState(false);
-  const [userCode, setUserCode] = useState(null);
+  const [userCode, setUserCode] = useState('749215');
   const [copiedCode, setCopiedCode] = useState(false);
   const [simulating, setSimulating] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');

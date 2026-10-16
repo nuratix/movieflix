@@ -191,7 +191,14 @@ export default async function handler(req, res) {
   const parsedUrl = new URL(req.url || '', 'http://localhost');
   const pathname = parsedUrl.pathname || '';
   const query = req.query || Object.fromEntries(parsedUrl.searchParams.entries());
-  const body = req.body || {};
+
+  let body = req.body || {};
+  if (typeof body === 'string') {
+    try { body = JSON.parse(body); } catch (_) { body = {}; }
+  } else if (Buffer.isBuffer(body)) {
+    try { body = JSON.parse(body.toString('utf8')); } catch (_) { body = {}; }
+  }
+
   const action = String(query.action || body.action || '').trim().toLowerCase();
 
   const effectiveApiBase =
