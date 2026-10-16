@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,28 +7,29 @@ import {
   TouchableWithoutFeedback,
   Linking,
   Platform,
-  useWindowDimensions,
-  Animated,
-  ActivityIndicator,
 } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather, MaterialIcons } from '@expo/vector-icons';
-import { useVideoPlayer, VideoView } from 'expo-video';
 import { recordClick } from '../adService';
 
 /**
- * PlayerAdOverlay - Fullscreen Video Player Ad Interstitial
+ * PlayerAdOverlay - Fullscreen Video Player Ad Interstitial HUD
+ * Rendered directly on top of the main movie player's VideoView!
  * Features:
- * - Full landscape screen coverage (no small center box)
- * - Clean interface: NO URLs displayed anywhere
- * - Only "Get Started" call-to-action button
- * - Video completion blur state with center "Get Started" button (does not replay)
+ * - Uses the SAME native video player (no second VideoView or ExoPlayer collision)
+ * - Transparent overlay: Ad video shines through full screen seamlessly
  * - Skip timer countdown (unlocked after skip_seconds)
- * - Zero Blank Screen: Always renders poster background instantly while video buffers
+ * - Mute/Unmute sound toggle directly controlling the player
+ * - Top sponsored badge and "Go Ad-Free" CTA
+ * - Bottom glass pill with Ad Title & "Get Started" button
+ * - End overlay with center "Get Started" button when video ends
+ * - Clean full-screen fallback for static image ads
  */
 export default function PlayerAdOverlay({
   ad,
+  player,
+  isVideoEnded = false,
   initialSkipSeconds = 10,
   onSkip,
   onOpenAd,
@@ -36,29 +37,26 @@ export default function PlayerAdOverlay({
   onGoAdFree,
 }) {
   const insets = useSafeAreaInsets();
-  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
-
-  const isVideo = ad?.media_type === 'video' || Boolean(ad?.video_url);
+  const isVideo = Boolean(ad?.media_type === 'video' || ad?.video_url);
   const [remainingSeconds, setRemainingSeconds] = useState(
     Number(ad?.skip_seconds) || initialSkipSeconds
   );
-  const [isVideoEnded, setIsVideoEnded] = useState(false);
-  const [videoLoaded, setVideoLoaded] = useState(false);
-  const [videoError, setVideoError] = useState(false);
-  const [isMuted, setIsMuted] = useState(Platform.OS === 'web');
-  const fadeAnim = useRef(new Animated.Value(1)).current;
-  const webVideoRef = useRef(null);
+  const [isMuted, setIsMuted] = useState(false);
+
+  // Sync initial mute state if player exists
+  useEffect(() => {
+    if (player && typeof player.muted === 'boolean') {
+      setIsMuted(player.muted);
+    }
+  }, [player]);
 
   const toggleMute = (e) => {
     e?.stopPropagation?.();
     const next = !isMuted;
     setIsMuted(next);
-    if (webVideoRef.current) {
-      webVideoRef.current.muted = next;
-    }
-    if (nativePlayer) {
+    if (player) {
       try {
-        nativePlayer.muted = next;
+        player.muted = next;
       } catch (_) {}
     }
   };
@@ -82,95 +80,6 @@ export default function PlayerAdOverlay({
     return () => clearInterval(interval);
   }, [ad?.skip_seconds, initialSkipSeconds]);
 
-  // Native Video Player setup (for iOS / Android APK)
-  const videoSource = isVideo && ad?.video_url ? { uri: ad.video_url } : null;
-  const nativePlayer = useVideoPlayer(videoSource, (p) => {
-    if (!p) return;
-    try {
-      p.loop = false; // Never replay when video ends
-      p.muted = isMuted;
-      p.timeUpdateEventInterval = 0.1; // Must enable interval or timeUpdate never fires
-      p.play();
-    } catch (_) {}
-  });
-
-  // Sync mute state to native player
-  useEffect(() => {
-    if (!nativePlayer || Platform.OS === 'web') return;
-    try {
-      nativePlayer.muted = isMuted;
-    } catch (_) {}
-  }, [nativePlayer, isMuted]);
-
-  // Native player event listeners & playback assurance
-  useEffect(() => {
-    if (!nativePlayer || Platform.OS === 'web') return;
-
-    try {
-      nativePlayer.timeUpdateEventInterval = 0.1;
-      nativePlayer.play();
-    } catch (_) {}
-
-    // Polling interval to catch ready/playing state quickly
-    const pollInterval = setInterval(() => {
-      try {
-        if (nativePlayer.playing || nativePlayer.currentTime > 0 || nativePlayer.status === 'readyToPlay') {
-          setVideoLoaded(true);
-          clearInterval(pollInterval);
-        }
-      } catch (_) {}
-    }, 200);
-
-    const statusSub = nativePlayer.addListener('statusChange', (payload) => {
-      const status = payload?.status || payload;
-      if (status === 'readyToPlay') {
-        setVideoLoaded(true);
-        try { nativePlayer.play(); } catch (_) {}
-      } else if (status === 'error') {
-        console.warn('[AdOverlay] Native ad video playback error');
-        setVideoError(true);
-      }
-    });
-
-    const playSub = nativePlayer.addListener('playingChange', (payload) => {
-      const isPlaying = typeof payload === 'boolean' ? payload : Boolean(payload?.isPlaying);
-      if (isPlaying) {
-        setVideoLoaded(true);
-      }
-    });
-
-    const timeSub = nativePlayer.addListener('timeUpdate', (payload) => {
-      const currentTime = typeof payload === 'number' ? payload : (payload?.currentTime || 0);
-      if (currentTime > 0.01) {
-        setVideoLoaded(true);
-      }
-    });
-
-    const endSub = nativePlayer.addListener('playToEnd', () => {
-      setIsVideoEnded(true);
-      try { nativePlayer.pause(); } catch (_) {}
-    });
-
-    // Safety fallback: If player doesn't start within 3.5s, keep crisp poster displayed
-    const timer = setTimeout(() => {
-      clearInterval(pollInterval);
-      try {
-        if (!nativePlayer.playing && nativePlayer.currentTime <= 0 && nativePlayer.status !== 'readyToPlay') {
-          setVideoError(true);
-        }
-      } catch (_) {}
-    }, 3500);
-
-    return () => {
-      clearInterval(pollInterval);
-      clearTimeout(timer);
-      try { statusSub?.remove?.(); } catch (_) {}
-      try { playSub?.remove?.(); } catch (_) {}
-      try { timeSub?.remove?.(); } catch (_) {}
-      try { endSub?.remove?.(); } catch (_) {}
-    };
-  }, [nativePlayer]);
-
   const canSkip = remainingSeconds <= 0;
 
   // Handle opening destination ad URL
@@ -192,94 +101,37 @@ export default function PlayerAdOverlay({
     }
   };
 
-  const handleSkip = () => {
+  const handleSkip = (e) => {
+    e?.stopPropagation?.();
     if (!canSkip) return;
-    Animated.timing(fadeAnim, {
-      toValue: 0,
-      duration: 180,
-      useNativeDriver: true,
-    }).start(() => {
-      if (onSkip) onSkip();
-    });
+    if (onSkip) onSkip();
   };
 
   if (!ad) return null;
 
   return (
-    <Animated.View
-      style={[
-        styles.overlayContainer,
-        StyleSheet.absoluteFillObject,
-        { opacity: fadeAnim },
-      ]}
-    >
-      {/* ─── FULLSCREEN LANDSCAPE BACKGROUND MEDIA (POSTER + VIDEO OVERLAY) ─── */}
+    <View style={styles.overlayContainer} pointerEvents="box-none">
+      {/* ─── FULLSCREEN BACKGROUND MEDIA (ONLY FOR STATIC IMAGE ADS OR END STATE) ─── */}
       <TouchableWithoutFeedback onPress={handlePressAd}>
-        <View style={StyleSheet.absoluteFillObject}>
-          {/* 1. Base Layer: Poster Image (always rendered instantly so screen is NEVER blank!) */}
-          {Boolean(ad?.poster_url) ? (
-            <ExpoImage
-              source={{ uri: ad.poster_url }}
-              style={StyleSheet.absoluteFill}
-              contentFit="cover"
-              cachePolicy="memory-disk"
-              transition={150}
-            />
-          ) : (
-            <View style={[StyleSheet.absoluteFill, styles.fallbackAdCard]}>
-              <MaterialIcons name="campaign" size={60} color="#e50914" />
-              <Text style={styles.fallbackAdTitle}>{ad.name || 'Sponsored Promotion'}</Text>
-            </View>
-          )}
-
-          {/* 2. Video Layer: ONLY MOUNTED WHEN videoLoaded IS TRUE & using surfaceType="textureView" */}
-          {Boolean(isVideo && ad?.video_url && videoLoaded && !videoError) && (
-            Platform.OS === 'web' ? (
-              <video
-                ref={webVideoRef}
-                src={ad.video_url}
-                poster={ad.poster_url || ''}
-                autoPlay
-                muted={isMuted}
-                playsInline
-                controls={false}
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  width: '100%',
-                  height: '100%',
-                  objectFit: 'cover',
-                  display: 'block',
-                  filter: isVideoEnded ? 'blur(22px) brightness(0.45)' : 'none',
-                  transition: 'filter 0.45s ease',
-                }}
-                onPlay={() => setVideoLoaded(true)}
-                onEnded={() => setIsVideoEnded(true)}
-                onError={() => setVideoError(true)}
+        <View style={StyleSheet.absoluteFillObject} pointerEvents="box-none">
+          {/* Static Image Ads: Render full-screen poster image since no video is streaming */}
+          {!isVideo && (
+            Boolean(ad?.poster_url) ? (
+              <ExpoImage
+                source={{ uri: ad.poster_url }}
+                style={StyleSheet.absoluteFill}
+                contentFit="cover"
+                cachePolicy="memory-disk"
               />
             ) : (
-              <VideoView
-                style={[
-                  StyleSheet.absoluteFill,
-                  isVideoEnded && { opacity: 0.35 },
-                ]}
-                player={nativePlayer}
-                surfaceType="textureView"
-                nativeControls={false}
-                contentFit="cover"
-              />
+              <View style={[StyleSheet.absoluteFill, styles.fallbackAdCard]}>
+                <MaterialIcons name="campaign" size={60} color="#e50914" />
+                <Text style={styles.fallbackAdTitle}>{ad.name || 'Sponsored Promotion'}</Text>
+              </View>
             )
           )}
 
-          {/* Buffering Indicator: subtle spinner while video is buffering */}
-          {Boolean(isVideo && !videoLoaded && !videoError && !isVideoEnded) && (
-            <View style={styles.bufferingContainer} pointerEvents="none">
-              <ActivityIndicator size="small" color="#FFFFFF" />
-            </View>
-          )}
-
-          {/* Video Completed State: Blurred Video with Center "Get Started" Button (Does not replay) */}
+          {/* Video Completed State: Blurred Overlay with Center "Get Started" Button (Does not replay) */}
           {Boolean(isVideo && isVideoEnded) && (
             <View style={styles.videoEndedOverlay}>
               <TouchableOpacity
@@ -308,6 +160,7 @@ export default function PlayerAdOverlay({
             right: Math.max(insets.right, 20),
           },
         ]}
+        pointerEvents="box-none"
       >
         <View style={styles.topBarLeftGroup}>
           {Boolean(onClose) && (
@@ -376,17 +229,18 @@ export default function PlayerAdOverlay({
         </View>
       </View>
 
-      {/* ─── BOTTOM FLOATING BAR: ONLY GET STARTED BUTTON & TITLE (NO URL) ─── */}
+      {/* ─── BOTTOM FLOATING BAR: ONLY GET STARTED BUTTON & TITLE ─── */}
       {!isVideoEnded && (
         <View
           style={[
             styles.bottomFloatingBar,
             {
-              bottom: Math.max(insets.bottom, 22),
-              left: Math.max(insets.left, 24),
-              right: Math.max(insets.right, 24),
+              bottom: Math.max(insets.bottom, 16),
+              left: Math.max(insets.left, 20),
+              right: Math.max(insets.right, 20),
             },
           ]}
+          pointerEvents="box-none"
         >
           <View style={styles.bottomInfoLeft}>
             <Text style={styles.adTitleText} numberOfLines={1}>
@@ -404,15 +258,14 @@ export default function PlayerAdOverlay({
           </TouchableOpacity>
         </View>
       )}
-    </Animated.View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   overlayContainer: {
-    backgroundColor: '#000000',
-    justifyContent: 'center',
-    alignItems: 'center',
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'transparent',
     zIndex: 99999,
   },
   topBar: {
@@ -528,6 +381,12 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     zIndex: 25,
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
   },
   bottomInfoLeft: {
     flex: 1,
@@ -535,7 +394,7 @@ const styles = StyleSheet.create({
   },
   adTitleText: {
     color: '#FFFFFF',
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '800',
     textShadowColor: 'rgba(0, 0, 0, 0.95)',
     textShadowOffset: { width: 0, height: 2 },
@@ -545,9 +404,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#e50914',
-    paddingHorizontal: 22,
-    paddingVertical: 11,
-    borderRadius: 24,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
     shadowColor: '#e50914',
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.55,
@@ -556,13 +415,13 @@ const styles = StyleSheet.create({
   },
   getStartedText: {
     color: '#FFFFFF',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '800',
     letterSpacing: 0.4,
   },
   videoEndedOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
     alignItems: 'center',
     justifyContent: 'center',
     padding: 24,
@@ -597,19 +456,6 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 6,
     maxWidth: '85%',
-  },
-  bufferingContainer: {
-    position: 'absolute',
-    bottom: 80,
-    right: 28,
-    backgroundColor: 'rgba(0, 0, 0, 0.45)',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    zIndex: 15,
   },
   fallbackAdCard: {
     backgroundColor: '#141414',

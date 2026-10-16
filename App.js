@@ -6968,9 +6968,21 @@ function ReelCustomPlayer({
   // ─── Video Player Ads State (10s Pre-roll after intro, 5s Mid-roll every 30m) ───
   const [activeAd, setActiveAd] = useState(null);
   const [isAdShowing, setIsAdShowing] = useState(false);
+  const [isAdVideoEnded, setIsAdVideoEnded] = useState(false);
   const [adSkipSeconds, setAdSkipSeconds] = useState(10);
   const hasTriggeredPreRollRef = useRef(false);
   const accumulatedPlaybackSecRef = useRef(0);
+  const savedMoviePositionRef = useRef(0);
+  const isAdShowingRef = useRef(false);
+  const activeAdRef = useRef(null);
+
+  useEffect(() => {
+    isAdShowingRef.current = isAdShowing;
+  }, [isAdShowing]);
+
+  useEffect(() => {
+    activeAdRef.current = activeAd;
+  }, [activeAd]);
 
   // Gesture Tracking Refs
   const showControlsRef = useRef(true);
@@ -7361,6 +7373,7 @@ function ReelCustomPlayer({
   // Handle stream url changes (e.g. Next Episode, Audio Dub, or Quality switch)
   const currentStreamUrlRef = useRef(videoUrl);
   useEffect(() => {
+    if (isAdShowingRef.current) return;
     if (player && videoUrl && videoUrl !== currentStreamUrlRef.current) {
       currentStreamUrlRef.current = videoUrl;
       const doReplace = async () => {
@@ -7392,15 +7405,87 @@ function ReelCustomPlayer({
     };
   }, [player]);
 
+  // Helper to switch the primary player instance to stream the ad video seamlessly
+  const playAdOnMainPlayer = async (ad, skipSec = 10) => {
+    if (!ad) return;
+    const activePlayer = playerRef.current || player;
+
+    // 1. Save current movie position before switching to ad
+    try {
+      if (activePlayer && typeof activePlayer.currentTime === 'number') {
+        savedMoviePositionRef.current = activePlayer.currentTime;
+      } else if (currentTimeRef.current > 0) {
+        savedMoviePositionRef.current = currentTimeRef.current;
+      }
+    } catch (_) {}
+
+    isAdShowingRef.current = true;
+    activeAdRef.current = ad;
+    setActiveAd(ad);
+    setIsAdShowing(true);
+    setIsAdVideoEnded(false);
+    setAdSkipSeconds(skipSec);
+    recordImpression(ad);
+
+    // 2. If ad has a video URL, route it through the exact same player instance!
+    if (ad.video_url && activePlayer) {
+      try {
+        const adSrc = buildVideoSource(ad.video_url);
+        if (typeof activePlayer.replaceAsync === 'function') {
+          await activePlayer.replaceAsync(adSrc);
+        } else if (typeof activePlayer.replace === 'function') {
+          activePlayer.replace(adSrc);
+        }
+        activePlayer.currentTime = 0;
+        activePlayer.play();
+      } catch (e) {
+        console.warn('[Player] Ad playback stream note:', e?.message);
+      }
+    } else if (activePlayer) {
+      // Static image ad banner: pause movie playback while banner is displayed
+      try {
+        activePlayer.pause();
+      } catch (_) {}
+    }
+  };
+
   // ─── Video Player Ads Handlers & Lifecycle ───
-  const handleSkipAd = useCallback(() => {
+  const handleSkipAd = useCallback(async () => {
+    const wasAdVideo = Boolean(activeAdRef.current?.video_url);
+    const resumePos = savedMoviePositionRef.current;
+
+    isAdShowingRef.current = false;
+    activeAdRef.current = null;
     setIsAdShowing(false);
     setActiveAd(null);
+    setIsAdVideoEnded(false);
     accumulatedPlaybackSecRef.current = 0;
-    try {
-      playerRef.current?.play();
-    } catch (_) {}
-  }, []);
+
+    const activePlayer = playerRef.current || player;
+    if (!activePlayer) return;
+
+    if (wasAdVideo && videoUrl) {
+      // Seamlessly restore the main movie stream and seek back to saved playback position!
+      try {
+        const movieSrc = buildVideoSource(videoUrl);
+        if (typeof activePlayer.replaceAsync === 'function') {
+          await activePlayer.replaceAsync(movieSrc);
+        } else if (typeof activePlayer.replace === 'function') {
+          activePlayer.replace(movieSrc);
+        }
+        if (resumePos > 0) {
+          activePlayer.currentTime = resumePos;
+        }
+        activePlayer.play();
+      } catch (err) {
+        console.warn('[Player] Restore movie stream note:', err?.message);
+      }
+    } else {
+      try {
+        activePlayer.play();
+      } catch (_) {}
+    }
+  }, [player, videoUrl]);
 
   // 1. Pre-roll Ad Trigger: Loads sponsor ad for non-VIP users at start of movie/series
   useEffect(() => {
@@ -7412,13 +7497,8 @@ function ReelCustomPlayer({
       try {
         const ad = await fetchRandomAd();
         if (!isMounted || !ad || isPremium) return;
-        try {
-          playerRef.current?.pause();
-        } catch (_) {}
-        setActiveAd(ad);
-        setAdSkipSeconds(Number(ad.skip_seconds) || 10);
-        setIsAdShowing(true);
-        recordImpression(ad);
+        const skipSec = Number(ad.skip_seconds) || 10;
+        await playAdOnMainPlayer(ad, skipSec);
       } catch (err) {
         console.warn('[Player] Pre-roll ad note:', err?.message);
       }
@@ -7429,7 +7509,7 @@ function ReelCustomPlayer({
       isMounted = false;
       clearTimeout(timer);
     };
-  }, [isPremium]);
+  }, [isPremium, videoUrl]);
 
   // 2. 30-Minute Mid-Roll Ad Loop: Triggers every 30 minutes of playback with 5s skip (bypassed for VIP)
   useEffect(() => {
@@ -7445,13 +7525,7 @@ function ReelCustomPlayer({
           try {
             const ad = await fetchRandomAd();
             if (ad) {
-              try {
-                playerRef.current?.pause();
-              } catch (_) {}
-              setActiveAd(ad);
-              setAdSkipSeconds(5); // 5 sec skip for midroll ads
-              setIsAdShowing(true);
-              recordImpression(ad);
+              await playAdOnMainPlayer(ad, 5); // 5 sec skip for midroll ads
             }
           } catch (e) {
             console.warn('[Player] Mid-roll ad note:', e?.message);
@@ -7466,22 +7540,9 @@ function ReelCustomPlayer({
   // Dismiss any currently showing ad immediately when user becomes VIP
   useEffect(() => {
     if (isPremium && isAdShowing) {
-      setIsAdShowing(false);
-      setActiveAd(null);
-      try {
-        playerRef.current?.play();
-      } catch (_) {}
+      handleSkipAd();
     }
-  }, [isPremium, isAdShowing]);
-
-  // Keep player paused if ad is currently showing
-  useEffect(() => {
-    if (isAdShowing && player) {
-      try {
-        player.pause();
-      } catch (_) {}
-    }
-  }, [isAdShowing, player]);
+  }, [isPremium, isAdShowing, handleSkipAd]);
 
   // Keep ref updated
   useEffect(() => {
@@ -7497,6 +7558,10 @@ function ReelCustomPlayer({
     });
 
     const timeSub = player.addListener('timeUpdate', (e) => {
+      if (isAdShowingRef.current) {
+        // Guard: Do not overwrite movie progress or trigger subtitle cues during ad video playback
+        return;
+      }
       if (!isScrubbingRef.current) {
         setCurrentTime(e.currentTime);
       }
@@ -7557,6 +7622,14 @@ function ReelCustomPlayer({
     });
 
     const playEndSub = player.addListener?.('playToEnd', () => {
+      if (isAdShowingRef.current && activeAdRef.current?.video_url) {
+        setIsAdVideoEnded(true);
+        try {
+          player.pause();
+        } catch (_) {}
+        return;
+      }
+
       const isSeriesTitle = Boolean(isSeries || currentSeason > 0 || currentEpisode > 0 || movie?.isSeries);
       if (isSeriesTitle && onPlayNextEpisode) {
         onPlayNextEpisode();
@@ -7575,6 +7648,7 @@ function ReelCustomPlayer({
 
   // Handle source switch smoothly and seek to resume time if set
   useEffect(() => {
+    if (isAdShowingRef.current) return;
     setPlayerStatus('loading');
     const activePlayer = playerRef.current || player;
     if (videoUrl && activePlayer) {
@@ -8793,6 +8867,8 @@ function ReelCustomPlayer({
       {Boolean(isAdShowing && activeAd && !isPremium) && (
         <PlayerAdOverlay
           ad={activeAd}
+          player={player}
+          isVideoEnded={isAdVideoEnded}
           initialSkipSeconds={adSkipSeconds}
           onSkip={handleSkipAd}
           onClose={onClose}
