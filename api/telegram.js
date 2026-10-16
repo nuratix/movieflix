@@ -191,7 +191,7 @@ async function sendGuidePhoto(chatId, caption, replyMarkup = null) {
       path.resolve(process.cwd(), 'public/assets/account_id_guide.webp'),
       path.resolve(process.cwd(), 'assets/account_id_guide.webp'),
       path.resolve(process.cwd(), 'dist/assets/account_id_guide.webp'),
-      '/storage/emulated/0/Pictures/Canva/Untitled design_20261016_122522_0000.webp',
+      '/storage/emulated/0/Download/Untitled design_20261016_122522_0000.webp',
     ];
     const photoPath = candidatePaths.find((p) => {
       try { return fs.existsSync(p); } catch (_) { return false; }
