@@ -6969,7 +6969,7 @@ function ReelCustomPlayer({
   const [activeAd, setActiveAd] = useState(null);
   const [isAdShowing, setIsAdShowing] = useState(false);
   const [isAdVideoEnded, setIsAdVideoEnded] = useState(false);
-  const [adSkipSeconds, setAdSkipSeconds] = useState(10);
+  const [adSkipSeconds, setAdSkipSeconds] = useState(30);
   const hasTriggeredPreRollRef = useRef(false);
   const accumulatedPlaybackSecRef = useRef(0);
   const savedMoviePositionRef = useRef(0);
@@ -7406,7 +7406,7 @@ function ReelCustomPlayer({
   }, [player]);
 
   // Helper to switch the primary player instance to stream the ad video seamlessly
-  const playAdOnMainPlayer = async (ad, skipSec = 10) => {
+  const playAdOnMainPlayer = async (ad, skipSec = 30) => {
     if (!ad) return;
     const activePlayer = playerRef.current || player;
 
@@ -7419,12 +7419,15 @@ function ReelCustomPlayer({
       }
     } catch (_) {}
 
+    const rawSkip = Number(skipSec);
+    const effectiveSkip = !isNaN(rawSkip) && rawSkip > 0 ? Math.max(30, rawSkip) : 30;
+
     isAdShowingRef.current = true;
     activeAdRef.current = ad;
     setActiveAd(ad);
     setIsAdShowing(true);
     setIsAdVideoEnded(false);
-    setAdSkipSeconds(skipSec);
+    setAdSkipSeconds(effectiveSkip);
     recordImpression(ad);
 
     // 2. If ad has a video URL, route it through the exact same player instance!
@@ -7497,7 +7500,8 @@ function ReelCustomPlayer({
       try {
         const ad = await fetchRandomAd();
         if (!isMounted || !ad || isPremium) return;
-        const skipSec = Number(ad.skip_seconds) || 10;
+        const rawSkip = Number(ad.skip_seconds);
+        const skipSec = !isNaN(rawSkip) && rawSkip > 0 ? Math.max(30, rawSkip) : 30;
         await playAdOnMainPlayer(ad, skipSec);
       } catch (err) {
         console.warn('[Player] Pre-roll ad note:', err?.message);
@@ -7511,7 +7515,7 @@ function ReelCustomPlayer({
     };
   }, [isPremium, videoUrl]);
 
-  // 2. 30-Minute Mid-Roll Ad Loop: Triggers every 30 minutes of playback with 5s skip (bypassed for VIP)
+  // 2. 30-Minute Mid-Roll Ad Loop: Triggers every 30 minutes of playback with 30s skip (bypassed for VIP)
   useEffect(() => {
     if (isPremium) return;
     const MIDROLL_INTERVAL_SEC = 1800; // 30 minutes in seconds
@@ -7525,7 +7529,9 @@ function ReelCustomPlayer({
           try {
             const ad = await fetchRandomAd();
             if (ad) {
-              await playAdOnMainPlayer(ad, 5); // 5 sec skip for midroll ads
+              const rawSkip = Number(ad.skip_seconds);
+              const skipSec = !isNaN(rawSkip) && rawSkip > 0 ? Math.max(30, rawSkip) : 30;
+              await playAdOnMainPlayer(ad, skipSec); // 30 sec min skip for midroll ads
             }
           } catch (e) {
             console.warn('[Player] Mid-roll ad note:', e?.message);

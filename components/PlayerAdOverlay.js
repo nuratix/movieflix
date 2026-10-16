@@ -30,7 +30,7 @@ export default function PlayerAdOverlay({
   ad,
   player,
   isVideoEnded = false,
-  initialSkipSeconds = 10,
+  initialSkipSeconds = 30,
   onSkip,
   onOpenAd,
   onClose,
@@ -38,9 +38,9 @@ export default function PlayerAdOverlay({
 }) {
   const insets = useSafeAreaInsets();
   const isVideo = Boolean(ad?.media_type === 'video' || ad?.video_url);
-  const [remainingSeconds, setRemainingSeconds] = useState(
-    Number(ad?.skip_seconds) || initialSkipSeconds
-  );
+  const rawSec = Number(ad?.skip_seconds);
+  const effectiveStartSec = !isNaN(rawSec) && rawSec > 0 ? Math.max(30, rawSec) : initialSkipSeconds;
+  const [remainingSeconds, setRemainingSeconds] = useState(effectiveStartSec);
   const [isMuted, setIsMuted] = useState(false);
 
   // Sync initial mute state if player exists
@@ -61,9 +61,10 @@ export default function PlayerAdOverlay({
     }
   };
 
-  // Countdown timer for Skip button
+  // Countdown timer for Skip button (minimum 30 seconds enforced)
   useEffect(() => {
-    const startSec = Number(ad?.skip_seconds) || initialSkipSeconds;
+    const rawSkip = Number(ad?.skip_seconds);
+    const startSec = !isNaN(rawSkip) && rawSkip > 0 ? Math.max(30, rawSkip) : initialSkipSeconds;
     setRemainingSeconds(startSec);
     if (startSec <= 0) return;
 
