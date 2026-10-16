@@ -1,4 +1,5 @@
 import https from 'https';
+import dns from 'dns';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import {
   DynamoDBDocumentClient,
@@ -10,6 +11,13 @@ import {
   CognitoIdentityProviderClient,
   GetUserCommand,
 } from '@aws-sdk/client-cognito-identity-provider';
+
+// Force Node.js to prioritize IPv4 so Telegram API connections never hang on unreachable IPv6
+try {
+  if (typeof dns.setDefaultResultOrder === 'function') {
+    dns.setDefaultResultOrder('ipv4first');
+  }
+} catch (_) {}
 
 // ─── Environment & Clients ───────────────────────────────────────────────────
 const TELEGRAM_BOT_TOKEN = (
@@ -103,6 +111,7 @@ async function callTelegram(method, body = {}) {
         port: 443,
         path: `/bot${token}/${method}`,
         method: 'POST',
+        family: 4, // Strict IPv4 to bypass dead IPv6 route on AWS host
         headers: {
           'Content-Type': 'application/json',
           'Content-Length': Buffer.byteLength(postData),
@@ -129,21 +138,10 @@ async function callTelegram(method, body = {}) {
         });
       });
 
-      req.on('error', async (err) => {
-        console.error(`[Telegram https Request Error: ${method}]`, err.message);
-        // Fallback to fetch if https fails
-        try {
-          if (typeof fetch === 'function') {
-            const fetchRes = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: postData,
-            });
-            const data = await fetchRes.json();
-            return resolve(data);
-          }
-        } catch (_) {}
-        resolve({ ok: false, error: err.message });
+      req.on('error', (err) => {
+        const msg = err?.message || err?.code || 'HTTPS network error';
+        console.error(`[Telegram https Request Error: ${method}]`, msg);
+        resolve({ ok: false, error: msg });
       });
 
       req.on('timeout', () => {
@@ -156,7 +154,7 @@ async function callTelegram(method, body = {}) {
       req.end();
     } catch (topErr) {
       console.error(`[Telegram callTelegram Exception: ${method}]`, topErr);
-      resolve({ ok: false, error: topErr.message });
+      resolve({ ok: false, error: topErr?.message || 'callTelegram failed' });
     }
   });
 }

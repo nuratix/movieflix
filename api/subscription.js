@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import dns from 'dns';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import {
   DynamoDBDocumentClient,
@@ -12,6 +13,13 @@ import {
   GetUserCommand,
 } from '@aws-sdk/client-cognito-identity-provider';
 import telegramHandler from './telegram.js';
+
+// Prioritize IPv4 on host networking
+try {
+  if (typeof dns.setDefaultResultOrder === 'function') {
+    dns.setDefaultResultOrder('ipv4first');
+  }
+} catch (_) {}
 
 // ─── AWS Clients & Configuration ─────────────────────────────────────────────
 const AWS_REGION = process.env.AWS_DEFAULT_REGION || process.env.AWS_REGION || 'ap-southeast-2';
