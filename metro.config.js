@@ -77,17 +77,7 @@ config.server = {
           await parseBody(req);
         }
 
-        let modulePath = null;
-        if (pathname.startsWith('/api/auth')) modulePath = './api/auth.js';
-        else if (pathname.startsWith('/api/content')) modulePath = './api/content.js';
-        else if (pathname.startsWith('/api/download')) modulePath = './api/download.js';
-        else if (pathname.startsWith('/api/proxy')) modulePath = './api/proxy.js';
-        else if (pathname.startsWith('/api/update')) modulePath = './api/update.js';
-        else if (pathname.startsWith('/api/imdb')) modulePath = './api/imdb.js';
-        else if (pathname.startsWith('/api/status')) modulePath = './api/status.js';
-        else if (pathname.startsWith('/api/ads')) modulePath = './api/ads.js';
-        else if (pathname.startsWith('/api/subscription') || pathname.startsWith('/api/payment')) modulePath = './api/subscription.js';
-        else if (pathname.startsWith('/api/telegram')) modulePath = './api/telegram.js';
+        let modulePath = './api/index.js';
 
         if (modulePath) {
           try {
