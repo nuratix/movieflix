@@ -245,7 +245,7 @@ export default async function handler(req, res) {
       : null;
 
     try {
-      const listRes = await fetch(
+      let listRes = await fetch(
         `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases`,
         {
           headers: {
@@ -255,6 +255,17 @@ export default async function handler(req, res) {
           },
         }
       );
+      if (listRes.status === 401 && authHeader) {
+        listRes = await fetch(
+          `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases`,
+          {
+            headers: {
+              'User-Agent': `Movieflix-Download-Proxy/${TARGET_VERSION}`,
+              'Accept': 'application/vnd.github.v3+json',
+            },
+          }
+        );
+      }
       if (listRes.ok) {
         const releases = await listRes.json();
         if (Array.isArray(releases) && releases.length > 0) {

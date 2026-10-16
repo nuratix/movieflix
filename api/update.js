@@ -143,10 +143,19 @@ export default async function handler(req, res) {
     let foundApk = null;
 
     try {
-      const githubRes = await fetch(
+      let githubRes = await fetch(
         `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases`,
         { headers }
       );
+
+      // If token unauthorized / expired (401), retry without token since nuratix/movieflix is public!
+      if (githubRes.status === 401 && headers.Authorization) {
+        delete headers.Authorization;
+        githubRes = await fetch(
+          `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases`,
+          { headers }
+        );
+      }
 
       if (githubRes.ok) {
         const releases = await githubRes.json();
@@ -191,10 +200,8 @@ export default async function handler(req, res) {
     if (latestRelease) {
       const remoteTag = latestRelease.tag_name || latestRelease.name || '';
       const cleanTag = remoteTag.replace(/^v/i, '');
-      if (isNewerVersion(cleanTag, TARGET_VERSION)) {
-        latestVersion = cleanTag;
-        latestTag = remoteTag;
-      }
+      latestVersion = cleanTag;
+      latestTag = remoteTag;
     }
 
     // STRICT REQUIREMENT:
