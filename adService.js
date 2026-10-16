@@ -4,8 +4,6 @@ import { Platform } from 'react-native';
 // Universal Ad service for Web, Android APK, and iOS.
 // Securely communicates with the MovieAds platform using configured env variables.
 
-const DIRECT_ADS_API = (process.env.EXPO_PUBLIC_ADS_API_URL || '').trim().replace(/\/+$/, '');
-const DIRECT_ADS_KEY = (process.env.EXPO_PUBLIC_ADS_SECRET_KEY || '').trim();
 const API_BASE =
   Platform.OS === 'web'
     ? ''
@@ -55,16 +53,9 @@ export async function fetchRandomAd(options = {}) {
 
     const qs = `?${params.toString()}`;
 
-    // On web or when proxy is available, use server /api/ads proxy to protect secret key
-    const useProxy = Platform.OS === 'web' || !DIRECT_ADS_API;
-    const url = useProxy
-      ? `${API_BASE}/api/ads${qs}`
-      : `${DIRECT_ADS_API}/api/v1/ads/random${qs}`;
-
+    // All clients route through server /api/ads proxy to protect secrets
+    const url = `${API_BASE}/api/ads${qs}`;
     const headers = { Accept: 'application/json' };
-    if (!useProxy && DIRECT_ADS_KEY) {
-      headers['X-Ad-Secret-Key'] = DIRECT_ADS_KEY;
-    }
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 6000); // 6s timeout

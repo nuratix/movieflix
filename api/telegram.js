@@ -630,8 +630,8 @@ export default async function handler(req, res) {
       if (userCode) {
         user = await getUserByCode(userCode);
       }
-      const targetUserId = (user?.userId || payloadData.userId || payloadData.email || 'telegram_user').toLowerCase().trim();
-      const targetEmail = (user?.userEmail || payloadData.email || targetUserId).toLowerCase().trim();
+      const targetUserId = (user?.userId || payloadData.userId || payloadData.email || (userCode ? `code_${userCode}` : 'telegram_user')).toLowerCase().trim();
+      const targetEmail = (user?.userEmail || payloadData.email || (userCode ? `Guest (${userCode})` : targetUserId)).toLowerCase().trim();
 
       const now = Date.now();
 
@@ -654,29 +654,46 @@ export default async function handler(req, res) {
       const expiresAt = new Date(expiresAtTimestamp).toISOString();
 
       // 1. Activate Subscription in DynamoDB
+      const subItem = {
+        userId: targetUserId,
+        userEmail: targetEmail,
+        status: 'active',
+        plan: plan.id,
+        planName: plan.name,
+        amount: plan.price,
+        stars: sp.total_amount,
+        currency: 'XTR',
+        paymentMethod: 'telegram_stars',
+        telegramPaymentChargeId: sp.telegram_payment_charge_id,
+        providerPaymentChargeId: sp.provider_payment_charge_id || '',
+        orderId,
+        startsAt: new Date(now).toISOString(),
+        expiresAt,
+        expiresAtTimestamp,
+        updatedAt: new Date(now).toISOString(),
+      };
+
       await ddbDoc.send(
         new PutCommand({
           TableName: SUBSCRIPTIONS_TABLE,
-          Item: {
-            userId: targetUserId,
-            userEmail: targetEmail,
-            status: 'active',
-            plan: plan.id,
-            planName: plan.name,
-            amount: plan.price,
-            stars: sp.total_amount,
-            currency: 'XTR',
-            paymentMethod: 'telegram_stars',
-            telegramPaymentChargeId: sp.telegram_payment_charge_id,
-            providerPaymentChargeId: sp.provider_payment_charge_id || '',
-            orderId,
-            startsAt: new Date(now).toISOString(),
-            expiresAt,
-            expiresAtTimestamp,
-            updatedAt: new Date(now).toISOString(),
-          },
+          Item: subItem,
         })
       );
+
+      // If userCode is available and targetUserId !== `code_${userCode}`, also alias for instant guest lookup
+      if (userCode && targetUserId !== `code_${userCode}`) {
+        try {
+          await ddbDoc.send(
+            new PutCommand({
+              TableName: SUBSCRIPTIONS_TABLE,
+              Item: {
+                ...subItem,
+                userId: `code_${userCode}`,
+              },
+            })
+          );
+        } catch (_) {}
+      }
 
       // 2. Record Order in DynamoDB
       await ddbDoc.send(
@@ -709,25 +726,29 @@ export default async function handler(req, res) {
         `📅 <b>Valid Until:</b> ${formatDate(expiresAt)}\n\n` +
         `🍿 <b>Pro Benefits Unlocked:</b>\n` +
         `• 4K Ultra HD & 1080p Streaming Quality\n` +
-        `• 100% Zero Ads in Movies & Shorts\n` +
+        `• 100% Zero Ads in Movies & Series\n` +
         `• All Premium Episodes & Faster Servers\n\n` +
         `Enjoy streaming your favourite movies and series on Movieflix!`;
 
-      await callTelegram('sendMessage', {
-        chat_id: chatId,
-        text: successHtml,
-        parse_mode: 'HTML',
-        reply_markup: {
-          inline_keyboard: [
-            [
-              {
-                text: '🎬 Open Movieflix Website',
-                url: effectiveApiBase,
-              },
+      try {
+        await callTelegram('sendMessage', {
+          chat_id: chatId,
+          text: successHtml,
+          parse_mode: 'HTML',
+          reply_markup: {
+            inline_keyboard: [
+              [
+                {
+                  text: '🎬 Open Movieflix Website',
+                  url: effectiveApiBase,
+                },
+              ],
             ],
-          ],
-        },
-      });
+          },
+        });
+      } catch (tgSendErr) {
+        console.warn('[Telegram Webhook] Failed to send confirmation message:', tgSendErr);
+      }
 
       return res.status(200).json({ ok: true });
     }

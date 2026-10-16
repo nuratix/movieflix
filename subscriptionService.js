@@ -26,8 +26,15 @@ export async function fetchSubscriptionPlans() {
 /**
  * Fetch current user's Ad-Free VIP subscription status
  */
-export async function fetchSubscriptionStatus(authToken = null) {
-  if (!authToken) {
+export async function fetchSubscriptionStatus(authToken = null, userCode = null) {
+  let effectiveCode = userCode;
+  if (!authToken && !effectiveCode) {
+    try {
+      effectiveCode = await AsyncStorage.getItem('@mf_telegram_account_code');
+    } catch (_) {}
+  }
+
+  if (!authToken && !effectiveCode) {
     return {
       success: true,
       authenticated: false,
@@ -37,18 +44,26 @@ export async function fetchSubscriptionStatus(authToken = null) {
   }
 
   try {
-    const res = await fetch(`${API_BASE}/api/subscription?action=status&_t=${Date.now()}`, {
+    const params = new URLSearchParams({
+      action: 'status',
+      _t: String(Date.now()),
+    });
+    if (effectiveCode) {
+      params.append('userCode', effectiveCode);
+    }
+
+    const res = await fetch(`${API_BASE}/api/subscription?${params.toString()}`, {
       method: 'GET',
       headers: {
         Accept: 'application/json',
-        Authorization: `Bearer ${authToken}`,
+        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
       },
     });
 
     if (!res.ok) {
       return {
         success: false,
-        authenticated: true,
+        authenticated: Boolean(authToken),
         is_premium: false,
         days_left: 0,
       };
@@ -59,7 +74,7 @@ export async function fetchSubscriptionStatus(authToken = null) {
     console.warn('[SubscriptionService] fetchStatus note:', err?.message);
     return {
       success: false,
-      authenticated: true,
+      authenticated: Boolean(authToken),
       is_premium: false,
       days_left: 0,
     };

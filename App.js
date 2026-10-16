@@ -1321,12 +1321,12 @@ function ReelApp() {
   const isPremium = Boolean(subscriptionStatus?.is_premium);
 
   const refreshSubscriptionStatus = async () => {
-    if (!authAccessToken) {
-      setSubscriptionStatus({ is_premium: false, days_left: 0 });
-      return;
-    }
     try {
-      const status = await fetchSubscriptionStatus(authAccessToken);
+      let guestCode = null;
+      try {
+        guestCode = await AsyncStorage.getItem('@mf_telegram_account_code');
+      } catch (_) {}
+      const status = await fetchSubscriptionStatus(authAccessToken, guestCode);
       setSubscriptionStatus(status || { is_premium: false, days_left: 0 });
     } catch (_) {
       setSubscriptionStatus({ is_premium: false, days_left: 0 });
@@ -4012,7 +4012,7 @@ function ReelApp() {
         subscriptionStatus={subscriptionStatus}
         onSubscriptionUpdated={(newStatus) => {
           setSubscriptionStatus(newStatus);
-          setIsPremium(Boolean(newStatus?.is_premium));
+          refreshSubscriptionStatus();
           showToast('🎉 Movieflix Pro Activated! Enjoy 4K Ad-Free Streaming!');
         }}
         onOpenAuth={(mode) => openAuthPage(mode || 'login', '/pricing')}
@@ -6661,7 +6661,7 @@ function ReelApp() {
         subscriptionStatus={subscriptionStatus}
         onSubscriptionUpdated={(newStatus) => {
           setSubscriptionStatus(newStatus);
-          setIsPremium(Boolean(newStatus?.is_premium));
+          refreshSubscriptionStatus();
           showToast('🎉 VIP Status Activated! Enjoy 100% Ad-Free Streaming!');
         }}
       />
@@ -6884,7 +6884,8 @@ function ReelCustomPlayer({
   const [showControls, setShowControls] = useState(true);
   const [currentSpeed, setCurrentSpeed] = useState('1.0×');
   const [isQualityModalOpen, setIsQualityModalOpen] = useState(false);
-  const [isAudioSubsModalOpen, setIsAudioSubsModalOpen] = useState(false);
+  const [isAudioModalOpen, setIsAudioModalOpen] = useState(false);
+  const [isSubsModalOpen, setIsSubsModalOpen] = useState(false);
   const [isEpisodesModalOpen, setIsEpisodesModalOpen] = useState(false);
   const [selectedSheetSeasonIdx, setSelectedSheetSeasonIdx] = useState(() => {
     if (Array.isArray(seasons) && seasons.length > 0) {
@@ -8319,13 +8320,37 @@ function ReelCustomPlayer({
                   </Text>
                 </TouchableOpacity>
 
-                {/* 2. Audio & Subtitles Sheet Button */}
+                {/* 2. Audio & Language / Dub Button */}
                 <TouchableOpacity
                   style={styles.playerGlassActionBtn}
-                  onPress={() => { wakeControls(); setIsAudioSubsModalOpen(true); }}
+                  onPress={() => { wakeControls(); setIsAudioModalOpen(true); }}
                 >
-                  <MaterialIcons name="subtitles" size={14} color="#FFFFFF" style={{ marginRight: 4 }} />
-                  <Text style={styles.playerGlassActionText}>Audio/Subs</Text>
+                  <MaterialIcons name="audiotrack" size={14} color="#FFFFFF" style={{ marginRight: 4 }} />
+                  <Text style={styles.playerGlassActionText}>Audio</Text>
+                </TouchableOpacity>
+
+                {/* 3. CC (Subtitles / Closed Captions) Button */}
+                <TouchableOpacity
+                  style={[
+                    styles.playerGlassActionBtn,
+                    selectedSubtitle !== 'Off' && { borderColor: 'rgba(229, 9, 20, 0.7)', backgroundColor: 'rgba(229, 9, 20, 0.25)' },
+                  ]}
+                  onPress={() => { wakeControls(); setIsSubsModalOpen(true); }}
+                >
+                  <MaterialIcons
+                    name="closed-caption"
+                    size={15}
+                    color={selectedSubtitle !== 'Off' ? '#e50914' : '#FFFFFF'}
+                    style={{ marginRight: 3 }}
+                  />
+                  <Text
+                    style={[
+                      styles.playerGlassActionText,
+                      selectedSubtitle !== 'Off' && { color: '#FFFFFF', fontWeight: '700' },
+                    ]}
+                  >
+                    CC
+                  </Text>
                 </TouchableOpacity>
 
                 {/* 3. Playback Speed */}
@@ -8428,24 +8453,26 @@ function ReelCustomPlayer({
         </TouchableOpacity>
       </Modal>
 
-      {/* REAL AUDIO & SUBTITLES MODAL */}
-      <Modal visible={isAudioSubsModalOpen} transparent animationType="fade" onRequestClose={() => setIsAudioSubsModalOpen(false)}>
+      {/* ─── REAL AUDIO TRACK & DUB MODAL ─── */}
+      <Modal visible={isAudioModalOpen} transparent animationType="fade" onRequestClose={() => setIsAudioModalOpen(false)}>
         <TouchableOpacity
           style={styles.modalBackdrop}
           activeOpacity={1}
-          onPress={() => setIsAudioSubsModalOpen(false)}
+          onPress={() => setIsAudioModalOpen(false)}
         >
           <View style={styles.glassModalSheet}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-              <Text style={styles.glassModalTitle}>Audio & Subtitles</Text>
-              <TouchableOpacity onPress={() => setIsAudioSubsModalOpen(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <MaterialIcons name="audiotrack" size={18} color="#e50914" style={{ marginRight: 8 }} />
+                <Text style={styles.glassModalTitle}>Audio & Language</Text>
+              </View>
+              <TouchableOpacity onPress={() => setIsAudioModalOpen(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
                 <Feather name="x-circle" size={20} color="#a3a3a3" />
               </TouchableOpacity>
             </View>
 
             <ScrollView showsVerticalScrollIndicator={true} style={{ maxHeight: 380 }}>
-              {/* Audio Language Selection */}
-              <Text style={styles.modalSectionSubTitle}>AUDIO TRACK / DUB</Text>
+              <Text style={styles.modalSectionSubTitle}>AUDIO TRACK / DUB LANGUAGES</Text>
 
               {/* Sibling Audio Dubs (e.g. Hindi, English, Original) */}
               {availableAudioVariants && availableAudioVariants.length > 0 ? (
@@ -8455,7 +8482,10 @@ function ReelCustomPlayer({
                     <TouchableOpacity
                       key={`dub-${v.slug || v.subject_id || idx}`}
                       style={[styles.modalOptionItem, isSelected && styles.modalOptionItemActive]}
-                      onPress={() => handleSelectAudioVariant(v)}
+                      onPress={() => {
+                        handleSelectAudioVariant(v);
+                        setIsAudioModalOpen(false);
+                      }}
                     >
                       <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
                         <Feather name="volume-2" size={16} color={isSelected ? "#e50914" : "#a3a3a3"} style={{ marginRight: 8 }} />
@@ -8470,11 +8500,17 @@ function ReelCustomPlayer({
               ) : (
                 <TouchableOpacity
                   style={[styles.modalOptionItem, styles.modalOptionItemActive]}
-                  onPress={() => handleSelectAudioTrack('default')}
+                  onPress={() => {
+                    handleSelectAudioTrack('default');
+                    setIsAudioModalOpen(false);
+                  }}
                 >
-                  <Text style={[styles.modalOptionText, styles.modalOptionTextActive]}>
-                    Original Audio (Default)
-                  </Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                    <Feather name="volume-2" size={16} color="#e50914" style={{ marginRight: 8 }} />
+                    <Text style={[styles.modalOptionText, styles.modalOptionTextActive]}>
+                      Original Audio (Default)
+                    </Text>
+                  </View>
                   <Feather name="check" size={16} color="#e50914" />
                 </TouchableOpacity>
               )}
@@ -8487,7 +8523,10 @@ function ReelCustomPlayer({
                   <TouchableOpacity
                     key={`audio-stream-${t.id || idx}`}
                     style={[styles.modalOptionItem, isSelected && styles.modalOptionItemActive]}
-                    onPress={() => handleSelectAudioTrack(t)}
+                    onPress={() => {
+                      handleSelectAudioTrack(t);
+                      setIsAudioModalOpen(false);
+                    }}
                   >
                     <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
                       <Feather name="music" size={15} color={isSelected ? "#e50914" : "#a3a3a3"} style={{ marginRight: 8 }} />
@@ -8499,20 +8538,46 @@ function ReelCustomPlayer({
                   </TouchableOpacity>
                 );
               })}
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
 
-              {/* Subtitles Selection */}
-              <Text style={[styles.modalSectionSubTitle, { marginTop: 18 }]}>
-                SUBTITLES (ALL LANGUAGES AVAILABLE)
-              </Text>
+      {/* ─── REAL SUBTITLES & CC MODAL ─── */}
+      <Modal visible={isSubsModalOpen} transparent animationType="fade" onRequestClose={() => setIsSubsModalOpen(false)}>
+        <TouchableOpacity
+          style={styles.modalBackdrop}
+          activeOpacity={1}
+          onPress={() => setIsSubsModalOpen(false)}
+        >
+          <View style={styles.glassModalSheet}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <MaterialIcons name="closed-caption" size={19} color="#e50914" style={{ marginRight: 8 }} />
+                <Text style={styles.glassModalTitle}>Subtitles & Captions (CC)</Text>
+              </View>
+              <TouchableOpacity onPress={() => setIsSubsModalOpen(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Feather name="x-circle" size={20} color="#a3a3a3" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={true} style={{ maxHeight: 380 }}>
+              <Text style={styles.modalSectionSubTitle}>SUBTITLES (ALL LANGUAGES AVAILABLE)</Text>
 
               {/* Off Option */}
               <TouchableOpacity
                 style={[styles.modalOptionItem, selectedSubtitle === 'Off' && styles.modalOptionItemActive]}
-                onPress={() => handleSelectSubtitle('Off')}
+                onPress={() => {
+                  handleSelectSubtitle('Off');
+                  setIsSubsModalOpen(false);
+                }}
               >
-                <Text style={[styles.modalOptionText, selectedSubtitle === 'Off' && styles.modalOptionTextActive]}>
-                  Off
-                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                  <Feather name="slash" size={15} color={selectedSubtitle === 'Off' ? '#e50914' : '#a3a3a3'} style={{ marginRight: 8 }} />
+                  <Text style={[styles.modalOptionText, selectedSubtitle === 'Off' && styles.modalOptionTextActive]}>
+                    Off
+                  </Text>
+                </View>
                 {selectedSubtitle === 'Off' && <Feather name="check" size={16} color="#e50914" />}
               </TouchableOpacity>
 
@@ -8525,7 +8590,10 @@ function ReelCustomPlayer({
                   <TouchableOpacity
                     key={`lang-${lang.code}-${idx}`}
                     style={[styles.modalOptionItem, isSelected && styles.modalOptionItemActive]}
-                    onPress={() => handleSelectSubtitle(lang)}
+                    onPress={() => {
+                      handleSelectSubtitle(lang);
+                      setIsSubsModalOpen(false);
+                    }}
                   >
                     <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
                       <Feather name="message-square" size={15} color={isSelected ? "#e50914" : "#a3a3a3"} style={{ marginRight: 8 }} />
@@ -8551,11 +8619,17 @@ function ReelCustomPlayer({
                   <TouchableOpacity
                     key={`sub-${st.id || idx}`}
                     style={[styles.modalOptionItem, isSelected && styles.modalOptionItemActive]}
-                    onPress={() => handleSelectEmbeddedSubtitle(st)}
+                    onPress={() => {
+                      handleSelectEmbeddedSubtitle(st);
+                      setIsSubsModalOpen(false);
+                    }}
                   >
-                    <Text style={[styles.modalOptionText, isSelected && styles.modalOptionTextActive]}>
-                      {label} (Embedded)
-                    </Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                      <Feather name="subtitles" size={15} color={isSelected ? "#e50914" : "#a3a3a3"} style={{ marginRight: 8 }} />
+                      <Text style={[styles.modalOptionText, isSelected && styles.modalOptionTextActive]}>
+                        {label} (Embedded)
+                      </Text>
+                    </View>
                     {isSelected && <Feather name="check" size={16} color="#e50914" />}
                   </TouchableOpacity>
                 );
