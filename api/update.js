@@ -5,7 +5,7 @@
 
 const GITHUB_OWNER = process.env.GITHUB_OWNER || 'nuratix';
 const GITHUB_REPO = process.env.GITHUB_REPO || 'movieflix';
-const TARGET_VERSION = '1.1.9';
+const TARGET_VERSION = '1.1.10';
 
 /**
  * Compare two semver strings (e.g., "1.1.7" vs "1.1.6", or "v1.1.7" vs "1.1.6")

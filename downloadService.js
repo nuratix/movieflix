@@ -143,12 +143,17 @@ export async function startDownload({
     }
 
     const now = Date.now();
-    // Throttle progress updates to at least 2500ms apart and 2% change, or on completion.
-    // This updates the single notification loader bar smoothly without spamming or playing rapid sounds.
-    if ((now - lastSaveTime > 2500 && Math.abs(percent - lastNotifPercent) >= 2) || percent === 100) {
+    // Update local database progress for in-app UI smoothly
+    if (now - lastSaveTime > 3000 || percent === 100) {
       lastSaveTime = now;
-      lastNotifPercent = percent;
       updateDownloadProgress(id, percent, 'downloading', localVideoUri, written);
+    }
+
+    // Only update OS notification on milestones (25%, 50%, 75%, 100%)
+    // This sends ONLY ONE single persistent notification without rapid continuous spamming!
+    const isMilestone = percent === 25 || percent === 50 || percent === 75 || percent === 100;
+    if (isMilestone && percent !== lastNotifPercent) {
+      lastNotifPercent = percent;
       notifyDownloadProgress(id, movie.name || 'Title', percent, written, expected);
     }
   };
@@ -160,17 +165,17 @@ export async function startDownload({
   };
 
   try {
-    const backgroundSession = FileSystem.FileSystemSessionType?.BACKGROUND !== undefined
-      ? FileSystem.FileSystemSessionType.BACKGROUND
-      : 0;
+    const downloadOptions = {
+      headers: downloadHeaders,
+      ...(Platform.OS === 'ios' && FileSystem.FileSystemSessionType?.BACKGROUND !== undefined
+        ? { sessionType: FileSystem.FileSystemSessionType.BACKGROUND }
+        : {}),
+    };
 
     const downloadResumable = FileSystem.createDownloadResumable(
       videoUrl,
       localVideoUri,
-      {
-        headers: downloadHeaders,
-        sessionType: backgroundSession,
-      },
+      downloadOptions,
       callback
     );
 

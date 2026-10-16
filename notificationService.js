@@ -9,9 +9,12 @@ try {
       handleNotification: async (notification) => {
         const channelId = notification?.request?.content?.channelId;
         const identifier = notification?.request?.identifier || '';
-        const isProgress = channelId === 'download-progress' || identifier.startsWith('dl_');
+        const isProgress =
+          channelId === 'download-progress' ||
+          identifier.startsWith('dl_') ||
+          identifier.startsWith('update_');
         return {
-          shouldShowAlert: !isProgress,
+          shouldShowAlert: true,
           shouldPlaySound: !isProgress,
           shouldSetBadge: false,
         };
@@ -229,6 +232,48 @@ export async function cancelDownloadNotification(downloadId) {
   try {
     const notifId = `dl_${String(downloadId).replace(/[^a-zA-Z0-9_-]/g, '_')}`;
     await Notifications.dismissNotificationAsync(notifId).catch(() => {});
+  } catch (e) {}
+}
+
+/**
+ * Trigger single notification for in-app APK update download
+ */
+export async function notifyUpdateDownloadStarted(version = '1.1.10') {
+  if (!Notifications?.scheduleNotificationAsync) return;
+  try {
+    await Notifications.scheduleNotificationAsync({
+      identifier: 'update_apk_download',
+      content: {
+        title: `MovieFlix Update v${version}`,
+        body: 'Downloading update package... Tap when finished to install.',
+        channelId: 'download-progress',
+        priority: Notifications.AndroidNotificationPriority?.LOW ?? 'low',
+        sound: null,
+        sticky: true,
+        autoDismiss: false,
+      },
+      trigger: null,
+    });
+  } catch (e) {}
+}
+
+export async function notifyUpdateDownloadCompleted(version = '1.1.10') {
+  if (!Notifications?.scheduleNotificationAsync) return;
+  try {
+    if (Notifications.dismissNotificationAsync) {
+      await Notifications.dismissNotificationAsync('update_apk_download').catch(() => {});
+    }
+    await Notifications.scheduleNotificationAsync({
+      identifier: 'update_apk_download',
+      content: {
+        title: `MovieFlix Update Ready (v${version}) 🎉`,
+        body: 'Download complete. Tap to install the latest version.',
+        sound: 'default',
+        channelId: 'downloads',
+        priority: Notifications.AndroidNotificationPriority?.HIGH ?? 'high',
+      },
+      trigger: null,
+    });
   } catch (e) {}
 }
 

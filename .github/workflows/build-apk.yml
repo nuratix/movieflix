@@ -88,13 +88,14 @@ jobs:
             Official Production Build via **GitHub Actions Cloud**!
 
             #### 🚀 Release Notes (v${{ steps.prepare_apk.outputs.version }}):
+            * **Bugs Fixed & UI Optimization**: Comprehensive bug fixes, fluid UI interactions, and optimized playback controls.
+            * **Instant Ad Skip**: Fixed ad skip button to dismiss immediately on click without getting stuck or waiting for the ad video to finish.
+            * **All Qualities Download (1080p & 4K)**: Fixed download engine to support all video qualities including 1080p, 4K, 720p, 480p, and 360p with flexible resolution matching.
+            * **Clean Notification Bar**: Fixed notification shade display on Android for downloads and updates; sends single silent progress updates without notification spam.
+            * **In-App APK Updater**: Direct in-app background download and APK package installation on Android.
             * **Separated Player Controls**: Dedicated Audio & Language / Dub selector button and separate Subtitles & Closed Captions (CC) button with dynamic active indicator.
             * **VIP Pro Subscription & Guest Sync**: Seamless Pro status activation for both registered accounts and 6-digit guest account IDs.
             * **Security Hardening**: Complete backend secret isolation with zero token or secret leaks in APK bundles.
-            * **Reliable In-App Updates**: High availability update and download verification on official domain.
-            * **Player Episode Selector Sheet**: Clean bottom sheet displaying all episode numbers and season tabs.
-            * **Single Silent Download Notification**: Clean progress bar notification without repetitive sound spam.
-            * **Ultra-Smooth Video Seeker**: Zero lag scrubber bar with debounced seeking.
           files: |
             output/movieflix-v${{ steps.prepare_apk.outputs.version }}.apk
         env:

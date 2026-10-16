@@ -116,7 +116,9 @@ export default function PlayerAdOverlay({
   const handleSkip = (e) => {
     e?.stopPropagation?.();
     if (!canSkip) return;
-    if (onSkip) onSkip();
+    if (onSkip) {
+      onSkip();
+    }
   };
 
   if (!ad) return null;
@@ -124,11 +126,10 @@ export default function PlayerAdOverlay({
   return (
     <View style={styles.overlayContainer} pointerEvents="box-none">
       {/* ─── FULLSCREEN BACKGROUND MEDIA (ONLY FOR STATIC IMAGE ADS OR END STATE) ─── */}
-      <TouchableWithoutFeedback onPress={handlePressAd}>
-        <View style={StyleSheet.absoluteFillObject} pointerEvents="box-none">
-          {/* Static Image Ads: Render full-screen poster image since no video is streaming */}
-          {!isVideo && (
-            Boolean(ad?.poster_url) ? (
+      {!isVideo && (
+        <TouchableWithoutFeedback onPress={handlePressAd}>
+          <View style={StyleSheet.absoluteFillObject}>
+            {Boolean(ad?.poster_url) ? (
               <ExpoImage
                 source={{ uri: ad.poster_url }}
                 style={StyleSheet.absoluteFill}
@@ -140,27 +141,27 @@ export default function PlayerAdOverlay({
                 <MaterialIcons name="campaign" size={60} color="#e50914" />
                 <Text style={styles.fallbackAdTitle}>{ad.name || 'Sponsored Promotion'}</Text>
               </View>
-            )
-          )}
+            )}
+          </View>
+        </TouchableWithoutFeedback>
+      )}
 
-          {/* Video Completed State: Blurred Overlay with Center "Get Started" Button (Does not replay) */}
-          {Boolean(isVideo && isVideoEnded) && (
-            <View style={styles.videoEndedOverlay}>
-              <TouchableOpacity
-                style={styles.centerTryNowBtn}
-                onPress={handlePressAd}
-                activeOpacity={0.85}
-              >
-                <Text style={styles.centerTryNowText}>Get Started</Text>
-                <Feather name="arrow-up-right" size={20} color="#FFFFFF" style={{ marginLeft: 6 }} />
-              </TouchableOpacity>
-              <Text style={styles.centerTryNowTitle} numberOfLines={2}>
-                {ad.name || 'Sponsored Promotion'}
-              </Text>
-            </View>
-          )}
+      {/* Video Completed State: Overlay with Center "Get Started" Button */}
+      {Boolean(isVideo && isVideoEnded) && (
+        <View style={styles.videoEndedOverlay}>
+          <TouchableOpacity
+            style={styles.centerTryNowBtn}
+            onPress={handlePressAd}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.centerTryNowText}>Get Started</Text>
+            <Feather name="arrow-up-right" size={20} color="#FFFFFF" style={{ marginLeft: 6 }} />
+          </TouchableOpacity>
+          <Text style={styles.centerTryNowTitle} numberOfLines={2}>
+            {ad.name || 'Sponsored Promotion'}
+          </Text>
         </View>
-      </TouchableWithoutFeedback>
+      )}
 
       {/* ─── TOP BAR: SPONSORED BADGE & SKIP AD BUTTON ─── */}
       <View
@@ -232,6 +233,7 @@ export default function PlayerAdOverlay({
             ]}
             onPress={handleSkip}
             disabled={!canSkip}
+            hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
             activeOpacity={0.8}
           >
             {canSkip ? (

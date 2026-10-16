@@ -2,7 +2,7 @@
   "expo": {
     "name": "Movieflix",
     "slug": "movieflix",
-    "version": "1.1.9",
+    "version": "1.1.10",
     "orientation": "default",
     "userInterfaceStyle": "dark",
     "backgroundColor": "#000000",
@@ -27,7 +27,7 @@
     },
     "android": {
       "package": "com.movieflix.app",
-      "versionCode": 10,
+      "versionCode": 11,
       "usesCleartextTraffic": false,
       "backgroundColor": "#000000",
       "splash": {

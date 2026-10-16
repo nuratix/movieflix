@@ -8,7 +8,7 @@ import crypto from 'crypto';
 const GITHUB_OWNER = process.env.GITHUB_OWNER || 'nuratix';
 const GITHUB_REPO = process.env.GITHUB_REPO || 'movieflix';
 const GITHUB_TOKEN = (process.env.GITHUB_TOKEN || '').trim();
-const TARGET_VERSION = '1.1.9';
+const TARGET_VERSION = '1.1.10';
 const FALLBACK_APK_URL = `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest/download/movieflix-v${TARGET_VERSION}.apk`;
 
 function getClientIp(req) {

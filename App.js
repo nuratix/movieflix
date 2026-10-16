@@ -42,6 +42,8 @@ import {
   scheduleBreakReminder,
   cancelBreakReminder,
   notifyBreakTimeNow,
+  notifyUpdateDownloadStarted,
+  notifyUpdateDownloadCompleted,
 } from './notificationService';
 import {
   initSecureStorage,
@@ -68,6 +70,7 @@ import {
 import {
   CURRENT_APP_VERSION,
   checkForUpdateAsync,
+  downloadAndInstallApkAsync,
 } from './updateService';
 import {
   verifyAppSecurityAsync,
@@ -3200,8 +3203,8 @@ function ReelApp() {
       );
     } else if (isDownloadPageOpen) {
       updateWebMetaTags(
-        'Download MovieFlix APK v1.1.9 (Official) - Free Android Movies & TV App',
-        'Download official MovieFlix Android APK (v1.1.9). Stream and download unlimited 4K/1080p movies, TV series, and anime with multi-audio dubs and zero ads. 100% Safe & Verified.',
+        'Download MovieFlix APK v1.1.10 (Official) - Free Android Movies & TV App',
+        'Download official MovieFlix Android APK (v1.1.10). Stream and download unlimited 4K/1080p movies, TV series, and anime with multi-audio dubs and zero ads. 100% Safe & Verified.',
         'https://mws.wallpaperdomain.xyz/assets/og-banner.png',
         'https://mws.wallpaperdomain.xyz/download'
       );
@@ -3220,7 +3223,7 @@ function ReelApp() {
       updateWebMetaTags(title, desc, img, url);
     } else {
       updateWebMetaTags(
-        'MovieFlix - Watch & Download Free Movies, TV Series & Official APK (v1.1.9)',
+        'MovieFlix - Watch & Download Free Movies, TV Series & Official APK (v1.1.10)',
         'Stream and download thousands of HD movies, web series, Hindi dubbed blockbusters, and anime in 4K/1080p with zero ads. Download the official MovieFlix Android APK.',
         'https://mws.wallpaperdomain.xyz/assets/og-banner.png',
         'https://mws.wallpaperdomain.xyz/'
@@ -3748,13 +3751,14 @@ function ReelApp() {
       const sources = sJson?.sources || [];
       setDownloadSources(sources);
 
-      // Auto-select best available quality from real sources
+      // Auto-select best available quality from real sources (prefer 1080p, 4K, then 720p)
       if (sources.length > 0) {
-        const has720 = sources.find(s => s.resolution === '720p');
-        const has1080 = sources.find(s => s.resolution === '1080p');
-        setDownloadQuality((has720 || has1080 || sources[0]).resolution);
+        const has1080 = sources.find(s => /1080/i.test(String(s.resolution || '')));
+        const has4k = sources.find(s => /2160|4k/i.test(String(s.resolution || '')));
+        const has720 = sources.find(s => /720/i.test(String(s.resolution || '')));
+        setDownloadQuality((has1080 || has4k || has720 || sources[0]).resolution);
       } else {
-        setDownloadQuality('720p');
+        setDownloadQuality('1080p');
       }
 
       const capUrl = `${API_BASE}/api/content?endpoint=captions&id=${encodeURIComponent(movie.subject_id)}&detail_path=${encodeURIComponent(movie.slug)}&se=${se}&ep=${ep}&title=${encodeURIComponent(movie.name || '')}`;
@@ -3782,10 +3786,18 @@ function ReelApp() {
       setDownloadSources(sources);
 
       if (sources.length > 0) {
-        const hasCurrent = sources.find(s => s.resolution === downloadQuality);
+        const matchRes = (sRes, q) => {
+          if (!sRes || !q) return false;
+          const a = String(sRes).toLowerCase().replace(/[^0-9k]/g, '');
+          const b = String(q).toLowerCase().replace(/[^0-9k]/g, '');
+          return a === b || a.includes(b) || b.includes(a);
+        };
+        const hasCurrent = sources.find(s => matchRes(s.resolution, downloadQuality));
         if (!hasCurrent) {
-          const has720 = sources.find(s => s.resolution === '720p');
-          setDownloadQuality((has720 || sources[0]).resolution);
+          const has1080 = sources.find(s => /1080/i.test(String(s.resolution || '')));
+          const has4k = sources.find(s => /2160|4k/i.test(String(s.resolution || '')));
+          const has720 = sources.find(s => /720/i.test(String(s.resolution || '')));
+          setDownloadQuality((has1080 || has4k || has720 || sources[0]).resolution);
         }
       }
 
@@ -3836,6 +3848,13 @@ function ReelApp() {
       showToast(`Started download: ${downloadMovie.name} (${downloadQuality})... Check Me > Downloads.`);
     }
 
+    const matchResolution = (sRes, q) => {
+      if (!sRes || !q) return false;
+      const a = String(sRes).toLowerCase().replace(/[^0-9k]/g, '');
+      const b = String(q).toLowerCase().replace(/[^0-9k]/g, '');
+      return a === b || a.includes(b) || b.includes(a);
+    };
+
     // Concurrently trigger downloads for all selected episodes
     for (const ep of epsToDownload) {
       (async () => {
@@ -3844,7 +3863,7 @@ function ReelApp() {
           let subUrl = null;
 
           if (ep === downloadEpisodeNum && downloadSources.length > 0) {
-            targetSource = downloadSources.find(s => s.resolution === downloadQuality) || downloadSources[0];
+            targetSource = downloadSources.find(s => matchResolution(s.resolution, downloadQuality)) || downloadSources[0];
             if (downloadSubtitle !== 'None') {
               const matchedCap = downloadCaptions.find(c => {
                 const name = getFriendlyLanguageName(c.lanName, c.lan);
@@ -3858,7 +3877,7 @@ function ReelApp() {
             const sRes = await apiFetch(streamUrl);
             const sJson = await sRes.json();
             const sources = sJson?.sources || [];
-            targetSource = sources.find(s => s.resolution === downloadQuality) || sources[0];
+            targetSource = sources.find(s => matchResolution(s.resolution, downloadQuality)) || sources[0];
 
             if (downloadSubtitle !== 'None') {
               try {
@@ -3927,9 +3946,24 @@ function ReelApp() {
     }
   };
 
-  const handleOpenUpdate = () => {
+  const handleOpenUpdate = async () => {
     setIsUpdateModalOpen(false);
-    Linking.openURL('https://mws.wallpaperdomain.xyz/download');
+    if (Platform.OS === 'android' && updateInfo?.apkAsset) {
+      const ver = updateInfo.latestVersion || '1.1.10';
+      showToast(`Downloading MovieFlix v${ver}... Check notification bar.`);
+      try {
+        notifyUpdateDownloadStarted(ver);
+        await downloadAndInstallApkAsync(updateInfo.apkAsset, (p) => {
+          setApkDownloadProgress(p.percent);
+        });
+        notifyUpdateDownloadCompleted(ver);
+      } catch (e) {
+        console.warn('[Update] In-app install fallback:', e?.message);
+        Linking.openURL('https://mws.wallpaperdomain.xyz/download');
+      }
+    } else {
+      Linking.openURL('https://mws.wallpaperdomain.xyz/download');
+    }
   };
   // ─────────────────────────────────────────────────────────────────────────
 
@@ -6269,10 +6303,10 @@ function ReelApp() {
                   <View style={styles.dlOptionsGrid}>
                     {downloadSources.map((src, sIdx) => {
                       const res = src.resolution || '720p';
-                      const isSelected = downloadQuality === res;
+                      const isSelected = downloadQuality === res || (downloadQuality && res.toLowerCase().replace(/[^0-9k]/g, '') === downloadQuality.toLowerCase().replace(/[^0-9k]/g, ''));
                       const realSizeStr = src.size && Number(src.size) > 0
                         ? formatBytes(Number(src.size))
-                        : (res === '1080p' ? '~1.1 GB' : res === '720p' ? '~580 MB' : res === '480p' ? '~320 MB' : '~180 MB');
+                        : (/2160|4k/i.test(res) ? '~3.5 GB' : /1080/i.test(res) ? '~1.1 GB' : /720/i.test(res) ? '~580 MB' : /480/i.test(res) ? '~320 MB' : '~180 MB');
                       const formatBadge = src.format || 'MP4';
 
                       return (
@@ -6308,8 +6342,9 @@ function ReelApp() {
                 ) : (
                   <View style={styles.dlOptionsGrid}>
                     {[
-                      { id: '1080p', label: '1080p FHD', note: '~1.1 GB' },
-                      { id: '720p', label: '720p HD', note: '~580 MB (Recommended)' },
+                      { id: '4k', label: '4K Ultra HD', note: '~3.5 GB' },
+                      { id: '1080p', label: '1080p FHD', note: '~1.1 GB (Recommended)' },
+                      { id: '720p', label: '720p HD', note: '~580 MB' },
                       { id: '480p', label: '480p SD', note: '~320 MB' },
                       { id: '360p', label: '360p Saver', note: '~180 MB' },
                     ].map((q) => {
@@ -7377,6 +7412,7 @@ function ReelCustomPlayer({
       currentStreamUrlRef.current = videoUrl;
       const doReplace = async () => {
         try {
+          setPlayerStatus('loading');
           const src = buildVideoSource(videoUrl);
           if (typeof player.replaceAsync === 'function') {
             await player.replaceAsync(src);
@@ -7437,10 +7473,10 @@ function ReelCustomPlayer({
 
       try {
         const adSrc = buildVideoSource(ad.video_url);
-        if (typeof activePlayer.replace === 'function') {
+        if (typeof activePlayer.replaceAsync === 'function') {
+          await activePlayer.replaceAsync(adSrc);
+        } else if (typeof activePlayer.replace === 'function') {
           activePlayer.replace(adSrc);
-        } else if (typeof activePlayer.replaceAsync === 'function') {
-          activePlayer.replaceAsync(adSrc).catch(console.warn);
         }
         activePlayer.currentTime = 0;
         activePlayer.play();
@@ -7456,7 +7492,7 @@ function ReelCustomPlayer({
   };
 
   // ─── Video Player Ads Handlers & Lifecycle ───
-  const handleSkipAd = useCallback(() => {
+  const handleSkipAd = useCallback(async () => {
     const wasAdVideo = Boolean(activeAdRef.current?.video_url);
     const resumePos = savedMoviePositionRef.current;
 
@@ -7471,18 +7507,20 @@ function ReelCustomPlayer({
     if (!activePlayer) return;
 
     if (wasAdVideo && videoUrl) {
-      // 1. Immediately pause the player so ExoPlayer stops decoding the ad video!
+      // 1. Immediately pause and silence the ad video so audio and video stop INSTANTLY
       try {
         activePlayer.pause();
       } catch (_) {}
 
-      // 2. Immediately replace source with the movie stream (synchronous / non-blocking)
+      setPlayerStatus('loading');
+
+      // 2. Replace source with movie stream using replaceAsync
       try {
         const movieSrc = buildVideoSource(videoUrl);
-        if (typeof activePlayer.replace === 'function') {
+        if (typeof activePlayer.replaceAsync === 'function') {
+          await activePlayer.replaceAsync(movieSrc);
+        } else if (typeof activePlayer.replace === 'function') {
           activePlayer.replace(movieSrc);
-        } else if (typeof activePlayer.replaceAsync === 'function') {
-          activePlayer.replaceAsync(movieSrc).catch(console.warn);
         }
       } catch (err) {
         console.warn('[Player] Restore movie stream note:', err?.message);
@@ -7496,15 +7534,23 @@ function ReelCustomPlayer({
         activePlayer.play();
       } catch (_) {}
 
-      // Extra tick to ensure player is unpaused and playing movie at saved position
+      // Extra safety ticks to guarantee playback has started
       setTimeout(() => {
         try {
-          if (resumePos > 0 && Math.abs(activePlayer.currentTime - resumePos) > 1) {
+          if (resumePos > 0 && Math.abs(activePlayer.currentTime - resumePos) > 1.5) {
             activePlayer.currentTime = resumePos;
           }
           activePlayer.play();
         } catch (_) {}
-      }, 100);
+      }, 150);
+
+      setTimeout(() => {
+        try {
+          if (!activePlayer.playing) {
+            activePlayer.play();
+          }
+        } catch (_) {}
+      }, 400);
     } else {
       try {
         activePlayer.play();
@@ -7674,35 +7720,6 @@ function ReelCustomPlayer({
     };
   }, [player]);
 
-  // Handle source switch smoothly and seek to resume time if set
-  useEffect(() => {
-    if (isAdShowingRef.current) return;
-    setPlayerStatus('loading');
-    const activePlayer = playerRef.current || player;
-    if (videoUrl && activePlayer) {
-      const src = buildVideoSource(videoUrl);
-      const afterSwitch = () => {
-        try {
-          if (initialResumeTime > 0) {
-            activePlayer.currentTime = initialResumeTime;
-          }
-          activePlayer.play();
-        } catch (e) {
-          console.warn('[Player] afterSwitch note:', e);
-        }
-      };
-      try {
-        if (typeof activePlayer.replaceAsync === 'function') {
-          activePlayer.replaceAsync(src).then(afterSwitch).catch(console.warn);
-        } else if (typeof activePlayer.replace === 'function') {
-          activePlayer.replace(src);
-          afterSwitch();
-        }
-      } catch (e) {
-        console.warn('[Player] replace note:', e);
-      }
-    }
-  }, [videoUrl, initialResumeTime]);
 
   const isBufferingOrLoading =
     playerStatus === 'loading' ||
