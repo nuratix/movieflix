@@ -97,27 +97,41 @@ export default function PricingScreen({
     }
   };
 
-  const handleSandboxRedirect = async () => {
+  const handleSimulateSandboxPayment = async () => {
     setErrorMessage('');
     setSuccessMessage('');
     setSimulating(true);
     try {
-      const res = await createSubscriptionInvoice(selectedPlanId, authAccessToken, {
-        isSandbox: true,
-        userEmail: authUser?.email || 'sandbox_tester@movieflix.com',
+      const userMail = (authUser?.email || 'sandbox_test_user@movieflix.lol').toLowerCase().trim();
+      const res = await fetch(`${API_BASE}/api/subscription?action=sandbox_simulate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(authAccessToken ? { Authorization: `Bearer ${authAccessToken}` } : {}),
+        },
+        body: JSON.stringify({
+          planId: selectedPlanId,
+          userId: userMail,
+          userEmail: userMail,
+        }),
       });
-      if (res.invoiceUrl) {
-        setSuccessMessage('Redirecting to NOWPayments payment website...');
-        if (isWeb && typeof window !== 'undefined') {
-          window.location.href = res.invoiceUrl;
-        } else {
-          await Linking.openURL(res.invoiceUrl);
-        }
-      } else {
-        setErrorMessage(res.error || 'Failed to generate payment invoice.');
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to simulate payment in sandbox.');
+      }
+
+      setSuccessMessage('✓ Sandbox test payment successful ($0.00)! Movieflix Pro has been activated on your account.');
+      if (typeof onSubscriptionUpdated === 'function') {
+        onSubscriptionUpdated({
+          is_premium: true,
+          plan_name: data.planName || 'Movieflix Pro',
+          expires_at: data.expiresAt || new Date(Date.now() + 30 * 86400000).toISOString(),
+          days_left: 30,
+        });
       }
     } catch (err) {
-      setErrorMessage(err.message || 'Payment redirection failed.');
+      setErrorMessage(err.message || 'Sandbox simulation failed.');
     } finally {
       setSimulating(false);
     }
@@ -371,7 +385,39 @@ export default function PricingScreen({
           </View>
         ) : null}
 
-        {/* ─── ACTION BUTTON: PAY WITH CRYPTO ─── */}
+        {/* ─── SANDBOX TEST MODE (LIKE PAYPAL SANDBOX - $0.00 FREE TEST) ─── */}
+        <View style={styles.sandboxBox}>
+          <View style={styles.sandboxHeaderRow}>
+            <View style={styles.sandboxBadge}>
+              <Feather name="shield" size={13} color="#10b981" style={{ marginRight: 5 }} />
+              <Text style={styles.sandboxBadgeText}>SANDBOX TEST MODE · $0.00</Text>
+            </View>
+            <Text style={styles.sandboxFreeText}>Free Test (No Real Money)</Text>
+          </View>
+          <Text style={styles.sandboxDescriptionText}>
+            Test subscribing to Movieflix Pro without paying real crypto (just like PayPal Sandbox test mode). Clicking below simulates an approved payment webhook and instantly activates Pro on your account.
+          </Text>
+
+          <TouchableOpacity
+            style={styles.sandboxActionButton}
+            onPress={handleSimulateSandboxPayment}
+            disabled={simulating || loadingPay}
+            activeOpacity={0.8}
+          >
+            {simulating ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <View style={styles.sandboxActionInner}>
+                <Feather name="zap" size={16} color="#FFFFFF" style={{ marginRight: 8 }} />
+                <Text style={styles.sandboxActionText}>
+                  Complete Sandbox Test Payment ($0.00)
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        </View>
+
+        {/* ─── LIVE CRYPTO PAYMENT (REAL MONEY VIA NOWPAYMENTS) ─── */}
         <TouchableOpacity
           style={[styles.checkoutBtn, loadingPay && styles.btnDisabled]}
           onPress={handleCheckout}
@@ -384,16 +430,19 @@ export default function PricingScreen({
             <View style={styles.checkoutBtnContent}>
               <Ionicons name="card-outline" size={18} color="#FFFFFF" style={{ marginRight: 8 }} />
               <Text style={styles.checkoutBtnText}>
-                {isPremium ? 'Extend Movieflix Pro' : 'Upgrade to Movieflix Pro'}
+                {isPremium ? 'Extend with Real Crypto' : 'Pay with Real Crypto (Live)'}
               </Text>
               <Feather name="arrow-right" size={16} color="#FFFFFF" style={{ marginLeft: 6 }} />
             </View>
           )}
         </TouchableOpacity>
+        <Text style={styles.liveNoticeText}>
+          * Live payment opens the NOWPayments hosted website and requires real crypto (BTC, USDT, ETH, etc.).
+        </Text>
 
         {/* CRYPTO ICONS ROW */}
         <View style={styles.cryptoRow}>
-          <Text style={styles.cryptoRowLabel}>Accepted via NOWPayments:</Text>
+          <Text style={styles.cryptoRowLabel}>Accepted Cryptocurrencies (NOWPayments):</Text>
           <View style={styles.cryptoBadgeList}>
             <View style={styles.coinBadge}><Text style={styles.coinBadgeText}>BTC</Text></View>
             <View style={styles.coinBadge}><Text style={styles.coinBadgeText}>USDT</Text></View>
@@ -403,25 +452,6 @@ export default function PricingScreen({
             <View style={styles.coinBadge}><Text style={styles.coinBadgeText}>TRX</Text></View>
           </View>
         </View>
-
-        {/* ─── INSTANT TEST SIMULATION BUTTON (FOR TEST MODE) ─── */}
-        <TouchableOpacity
-          style={styles.sandboxSimulateBtn}
-          onPress={handleSandboxRedirect}
-          disabled={simulating || loadingPay}
-          activeOpacity={0.8}
-        >
-          {simulating ? (
-            <ActivityIndicator size="small" color="#e50914" />
-          ) : (
-            <View style={styles.sandboxSimulateInner}>
-              <Feather name="external-link" size={15} color="#e50914" style={{ marginRight: 8 }} />
-              <Text style={styles.sandboxSimulateText}>
-                Open NOWPayments Sandbox Checkout
-              </Text>
-            </View>
-          )}
-        </TouchableOpacity>
 
         {/* SECURITY & MANUAL RENEWAL ASSURANCE */}
         <View style={styles.assuranceBox}>
@@ -819,24 +849,75 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '700',
   },
-  sandboxSimulateBtn: {
-    backgroundColor: 'rgba(229, 9, 20, 0.08)',
+  sandboxBox: {
+    backgroundColor: 'rgba(16, 185, 129, 0.08)',
     borderWidth: 1,
-    borderColor: 'rgba(229, 9, 20, 0.28)',
+    borderColor: 'rgba(16, 185, 129, 0.35)',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 20,
+  },
+  sandboxHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  sandboxBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(16, 185, 129, 0.16)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  sandboxBadgeText: {
+    color: '#10b981',
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+  },
+  sandboxFreeText: {
+    color: '#34d399',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  sandboxDescriptionText: {
+    color: '#a3a3a3',
+    fontSize: 12,
+    lineHeight: 17,
+    marginBottom: 14,
+  },
+  sandboxActionButton: {
+    backgroundColor: '#059669',
     borderRadius: 12,
     paddingVertical: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 20,
+    shadowColor: '#059669',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.35,
+    shadowRadius: 6,
+    elevation: 3,
   },
-  sandboxSimulateInner: {
+  sandboxActionInner: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  sandboxSimulateText: {
-    color: '#e50914',
-    fontSize: 12,
-    fontWeight: '700',
+  sandboxActionText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
+  liveNoticeText: {
+    color: '#737373',
+    fontSize: 11,
+    textAlign: 'center',
+    marginTop: -8,
+    marginBottom: 16,
+    lineHeight: 15,
   },
   alertBoxError: {
     flexDirection: 'row',

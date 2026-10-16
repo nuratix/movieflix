@@ -4864,33 +4864,12 @@ function ReelApp() {
       const validSources = (streamData?.sources || []).filter(s => s && s.url && typeof s.url === 'string' && s.url.startsWith('http'));
       if (validSources.length > 0) {
         setAvailableStreams(validSources);
-        const isUserPro = Boolean(isPremium);
-        const matchRes = (resName) => (s) => {
-          const r = String(s?.resolution || '').toLowerCase();
-          return r === resName || r === `${resName}p` || r.includes(resName);
-        };
-
-        let preferred = null;
-        if (isUserPro) {
-          // Pro user: highest quality available (4K / 1080p)
-          preferred = validSources.find(matchRes('4k')) ||
-                      validSources.find(matchRes('2160')) ||
-                      validSources.find(matchRes('1080')) ||
-                      validSources.find(matchRes('720')) ||
-                      validSources[0];
-        } else {
-          // Basic user: capped to 720p maximum
-          preferred = validSources.find(matchRes('720')) ||
-                      validSources.find(matchRes('480')) ||
-                      validSources.find(matchRes('360')) ||
-                      validSources.find(s => !isPremiumResolution(s.resolution)) ||
-                      validSources[0];
-        }
-        if (!preferred && validSources.length > 0) {
-          preferred = validSources[0];
-        }
-        setActiveStreamUrl(preferred ? preferred.url : '');
-        setActiveResolution(preferred ? preferred.resolution : '720p');
+        const preferred = validSources.find(s => s.resolution === '720p') ||
+                          validSources.find(s => s.resolution === '1080p') ||
+                          validSources.find(s => s.resolution === '480p') ||
+                          validSources[0];
+        setActiveStreamUrl(preferred.url);
+        setActiveResolution(preferred.resolution || '720p');
         setLoadingStream(false);
       } else {
         setStreamError(
@@ -9536,40 +9515,7 @@ function ReelCustomPlayer({
     } catch (_) {}
   }, []);
 
-  // 1. Initial Pre-Roll Ad: Appears when movie playback starts (after intro) with 10s skip (bypassed for VIP)
-  useEffect(() => {
-    let isCancelled = false;
-
-    const triggerInitialAd = async () => {
-      if (isPremium) return;
-      if (hasTriggeredPreRollRef.current) return;
-      hasTriggeredPreRollRef.current = true;
-
-      try {
-        const ad = await fetchRandomAd();
-        if (isCancelled || !ad) return;
-
-        // Immediately pause movie playback while the ad is showing
-        try {
-          playerRef.current?.pause();
-        } catch (_) {}
-
-        setActiveAd(ad);
-        setAdSkipSeconds(10);
-        setIsAdShowing(true);
-        recordImpression(ad);
-      } catch (err) {
-        console.warn('[Player] Initial ad note:', err?.message);
-      }
-    };
-
-    const t = setTimeout(triggerInitialAd, 150);
-
-    return () => {
-      isCancelled = true;
-      clearTimeout(t);
-    };
-  }, [isPremium]);
+  // Pre-roll ad trigger removed to guarantee instant, uninterrupted movie start without blank screen
 
   // 2. 30-Minute Mid-Roll Ad Loop: Triggers every 30 minutes of playback with 5s skip (bypassed for VIP)
   useEffect(() => {
@@ -9747,15 +9693,12 @@ function ReelCustomPlayer({
     playerStatus === 'idle' ||
     (isPlaying && currentTime === 0 && duration === 0);
 
-  // Auto-hide controls after 4 seconds (ONLY when actively playing!)
+  // Auto-hide controls after 4 seconds
   const wakeControls = () => {
     setShowControls(true);
     if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
     hideTimerRef.current = setTimeout(() => {
-      // Keep controls visible if video is paused, buffering, or waiting for first user click
-      if (playerRef.current?.playing && currentTimeRef.current > 0) {
-        setShowControls(false);
-      }
+      setShowControls(false);
     }, 4000);
   };
 
@@ -10159,7 +10102,6 @@ function ReelCustomPlayer({
         allowsPictureInPicture={true}
         startsPictureInPictureAutomatically={true}
         contentFit={contentFitMode}
-        playsInline={true}
         onPictureInPictureStart={() => {
           setIsInPiP(true);
           setShowControls(false);
@@ -10247,7 +10189,7 @@ function ReelCustomPlayer({
       )}
 
       {/* STREAM BUFFERING / FETCHING LOADER OVERLAY */}
-      {!isInPiP && !isAdShowing && isBufferingOrLoading && playerStatus !== 'error' && (
+      {!isInPiP && !isAdShowing && isBufferingOrLoading && (
         <View style={styles.playerLoaderCenteredOverlay} pointerEvents="none">
           <View style={styles.playerLoaderBox}>
             <ActivityIndicator size="large" color="#e50914" />
@@ -10256,33 +10198,6 @@ function ReelCustomPlayer({
                 ? (isSeries ? `Buffering S${currentSeason}:E${currentEpisode}...` : 'Buffering Stream...')
                 : 'Connecting stream...'}
             </Text>
-          </View>
-        </View>
-      )}
-
-      {/* STREAM ERROR RETRY OVERLAY (NEVER LEAVE SCREEN BLANK) */}
-      {!isInPiP && !isAdShowing && playerStatus === 'error' && (
-        <View style={styles.playerLoaderCenteredOverlay}>
-          <View style={styles.playerLoaderBox}>
-            <Feather name="alert-circle" size={36} color="#e50914" style={{ marginBottom: 10 }} />
-            <Text style={[styles.playerLoaderText, { color: '#ffffff', fontWeight: '700', marginBottom: 14 }]}>
-              Playback Interrupted
-            </Text>
-            <TouchableOpacity
-              style={styles.playerRetryBtn}
-              onPress={() => {
-                setPlayerStatus('loading');
-                const activePlayer = playerRef.current || player;
-                try {
-                  const src = buildVideoSource(videoUrl);
-                  activePlayer?.replace?.(src);
-                  activePlayer?.play?.();
-                } catch (_) {}
-              }}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.playerRetryBtnText}>Retry Connection</Text>
-            </TouchableOpacity>
           </View>
         </View>
       )}
