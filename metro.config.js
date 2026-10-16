@@ -87,6 +87,7 @@ config.server = {
         else if (pathname.startsWith('/api/status')) modulePath = './api/status.js';
         else if (pathname.startsWith('/api/ads')) modulePath = './api/ads.js';
         else if (pathname.startsWith('/api/subscription') || pathname.startsWith('/api/payment')) modulePath = './api/subscription.js';
+        else if (pathname.startsWith('/api/telegram')) modulePath = './api/telegram.js';
 
         if (modulePath) {
           try {

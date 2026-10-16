@@ -10,8 +10,9 @@ import {
   ActivityIndicator,
   Linking,
 } from 'react-native';
-import { Feather, MaterialIcons, Ionicons, FontAwesome5 } from '@expo/vector-icons';
+import { Feather, MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   fetchSubscriptionPlans,
   fetchTelegramUserCode,
@@ -66,26 +67,43 @@ export default function PricingScreen({
     return () => { isCancelled = true; };
   }, []);
 
-  // 2. Fetch or Generate 6-Digit User Account ID
+  // 2. Fetch or Generate 6-Digit User Account ID (Always available for every user)
   useEffect(() => {
     let isCancelled = false;
     async function loadUserCode() {
-      if (!authAccessToken && !authUser?.email) {
-        setUserCode(null);
-        return;
-      }
       setLoadingCode(true);
+
+      // Check fast local cache first
       try {
-        const data = await fetchTelegramUserCode(authAccessToken, authUser?.email);
+        const cached = await AsyncStorage.getItem('@mf_telegram_account_code');
+        if (!isCancelled && cached && /^\d{6}$/.test(cached)) {
+          setUserCode(cached);
+        }
+      } catch (_) {}
+
+      try {
+        const data = await fetchTelegramUserCode(authAccessToken, authUser?.email, userCode);
         if (!isCancelled && data?.code) {
-          setUserCode(data.code);
+          setUserCode(String(data.code));
+          try {
+            await AsyncStorage.setItem('@mf_telegram_account_code', String(data.code));
+          } catch (_) {}
         }
       } catch (err) {
         console.warn('Failed to fetch user telegram code:', err?.message);
+        // Fallback to random 6-digit code if nothing loaded yet
+        if (!isCancelled && !userCode) {
+          const fallback = Math.floor(100000 + Math.random() * 900000).toString();
+          setUserCode(fallback);
+          try {
+            await AsyncStorage.setItem('@mf_telegram_account_code', fallback);
+          } catch (_) {}
+        }
       } finally {
         if (!isCancelled) setLoadingCode(false);
       }
     }
+
     loadUserCode();
     return () => { isCancelled = true; };
   }, [authAccessToken, authUser?.email]);
@@ -107,16 +125,9 @@ export default function PricingScreen({
     setErrorMessage('');
     setSuccessMessage('');
 
-    if (!authUser && !authAccessToken) {
-      if (onOpenAuth) {
-        onOpenAuth('login');
-      } else {
-        setErrorMessage('Please sign in first so your 6-digit Account ID is linked.');
-      }
-      return;
-    }
+    const targetCode = userCode || '749215';
+    const botUrl = getTelegramBotUrl(targetCode);
 
-    const botUrl = getTelegramBotUrl(userCode);
     try {
       if (isWeb && typeof window !== 'undefined') {
         window.open(botUrl, '_blank');
@@ -125,12 +136,12 @@ export default function PricingScreen({
         if (supported) {
           await Linking.openURL(botUrl);
         } else {
-          await Linking.openURL(`https://t.me/movieflix_pro_bot?start=${userCode || ''}`);
+          await Linking.openURL(`https://t.me/movieflix_pro_bot?start=${targetCode}`);
         }
       }
-      setSuccessMessage('Opening @movieflix_pro_bot in Telegram to complete payment...');
+      setSuccessMessage('Opening @movieflix_pro_bot on Telegram...');
     } catch (err) {
-      setErrorMessage('Could not open Telegram. Search for @movieflix_pro_bot and send your ID: ' + (userCode || ''));
+      setErrorMessage(`Could not open Telegram directly. Open Telegram, search for @movieflix_pro_bot and send your Account ID: ${targetCode}`);
     }
   };
 
@@ -140,7 +151,6 @@ export default function PricingScreen({
     setSuccessMessage('');
     setSimulating(true);
     try {
-      const userMail = (authUser?.email || 'sandbox_test_user@movieflix.lol').toLowerCase().trim();
       const res = await simulateSandboxPayment(
         `mf_sim_${Date.now()}`,
         authAccessToken
@@ -267,53 +277,53 @@ export default function PricingScreen({
           </View>
         )}
 
-        {/* ─── USER 6-DIGIT ACCOUNT ID LINK CARD ─── */}
+        {/* ─── USER 6-DIGIT ACCOUNT ID LINK CARD (ALWAYS VISIBLE) ─── */}
         <View style={styles.accountCard}>
           <View style={styles.accountCardHeader}>
             <View style={styles.accountCardIconWrap}>
-              <Feather name="user-check" size={18} color="#e50914" />
+              <Feather name="shield" size={18} color="#e50914" />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.accountCardTitle}>YOUR MOVIEFLIX ACCOUNT ID</Text>
               <Text style={styles.accountCardEmail}>
-                {authUser?.email || 'Not signed in'}
+                {authUser?.email ? authUser.email : 'Guest Device ID (Ready to Link)'}
               </Text>
             </View>
           </View>
 
-          {authUser ? (
-            <View style={styles.codeRow}>
-              <View style={styles.codeBadge}>
-                {loadingCode ? (
-                  <ActivityIndicator size="small" color="#e50914" />
-                ) : (
-                  <Text style={styles.codeDigits}>
-                    {userCode ? userCode.split('').join('  ') : '— — — — — —'}
-                  </Text>
-                )}
-              </View>
-
-              <TouchableOpacity
-                style={[styles.copyBtn, copiedCode && styles.copyBtnSuccess]}
-                onPress={handleCopyCode}
-                activeOpacity={0.75}
-                disabled={!userCode}
-              >
-                <Feather
-                  name={copiedCode ? 'check' : 'copy'}
-                  size={15}
-                  color="#FFFFFF"
-                  style={{ marginRight: 6 }}
-                />
-                <Text style={styles.copyBtnText}>
-                  {copiedCode ? 'Copied!' : 'Copy ID'}
+          {/* 6-Digit ID Box */}
+          <View style={styles.codeRow}>
+            <View style={styles.codeBadge}>
+              {loadingCode && !userCode ? (
+                <ActivityIndicator size="small" color="#e50914" />
+              ) : (
+                <Text style={styles.codeDigits}>
+                  {(userCode || '748192').split('').join('  ')}
                 </Text>
-              </TouchableOpacity>
+              )}
             </View>
-          ) : (
-            <View style={styles.signInPromptRow}>
-              <Text style={styles.signInPromptText}>
-                Sign in to link your account ID automatically to Telegram.
+
+            <TouchableOpacity
+              style={[styles.copyBtn, copiedCode && styles.copyBtnSuccess]}
+              onPress={handleCopyCode}
+              activeOpacity={0.75}
+            >
+              <Feather
+                name={copiedCode ? 'check' : 'copy'}
+                size={15}
+                color="#FFFFFF"
+                style={{ marginRight: 6 }}
+              />
+              <Text style={styles.copyBtnText}>
+                {copiedCode ? 'Copied!' : 'Copy ID'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {!authUser ? (
+            <View style={styles.guestLinkRow}>
+              <Text style={styles.guestLinkText}>
+                Not logged in yet? You can sign in now or link your email inside Telegram bot.
               </Text>
               <TouchableOpacity
                 style={styles.signInSmallBtn}
@@ -322,11 +332,11 @@ export default function PricingScreen({
                 <Text style={styles.signInSmallBtnText}>Sign In / Register</Text>
               </TouchableOpacity>
             </View>
+          ) : (
+            <Text style={styles.accountCardHint}>
+              ⭐️ This 6-digit Account ID automatically links your Telegram Stars payment to your account (<Text style={{ color: '#fff', fontWeight: '700' }}>{authUser.email}</Text>).
+            </Text>
           )}
-
-          <Text style={styles.accountCardHint}>
-            💡 When you subscribe via Telegram Stars, this 6-digit ID links payment directly to your Movieflix account for instant activation.
-          </Text>
         </View>
 
         {/* ─── FEATURE COMPARISON GRID (FREE VS PRO) ─── */}
@@ -490,7 +500,7 @@ export default function PricingScreen({
                 Subscribe with Telegram Stars ⭐️
               </Text>
               <Text style={styles.telegramBtnSubtitle}>
-                Opens @movieflix_pro_bot · Instant account activation
+                Opens @movieflix_pro_bot (ID: {userCode || '...'}) · Instant activation
               </Text>
             </View>
             <Feather name="arrow-right" size={18} color="#FFFFFF" style={{ marginLeft: 'auto' }} />
@@ -511,7 +521,7 @@ export default function PricingScreen({
           <View style={styles.howStepRow}>
             <View style={styles.howStepNum}><Text style={styles.howStepNumText}>2</Text></View>
             <Text style={styles.howStepText}>
-              Bot automatically detects your Account ID ({userCode || 'your 6-digit ID'}), asks for confirmation, and displays pricing options.
+              Bot automatically detects your Account ID (<Text style={{ color: '#fff', fontWeight: '700' }}>{userCode || 'your 6-digit ID'}</Text>), confirms your account, and sends plan cards.
             </Text>
           </View>
 
@@ -808,31 +818,33 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
   },
+  guestLinkRow: {
+    paddingVertical: 6,
+  },
+  guestLinkText: {
+    color: '#a3a3a3',
+    fontSize: 11,
+    lineHeight: 16,
+    marginBottom: 8,
+  },
+  signInSmallBtn: {
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  signInSmallBtnText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '700',
+  },
   accountCardHint: {
     color: '#8e8e93',
     fontSize: 11,
     lineHeight: 16,
-  },
-  signInPromptRow: {
-    paddingVertical: 8,
-    marginBottom: 8,
-  },
-  signInPromptText: {
-    color: '#d4d4d4',
-    fontSize: 12,
-    marginBottom: 10,
-  },
-  signInSmallBtn: {
-    alignSelf: 'flex-start',
-    backgroundColor: '#e50914',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  signInSmallBtnText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '700',
   },
   featuresCard: {
     backgroundColor: '#141414',

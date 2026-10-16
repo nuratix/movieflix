@@ -93,9 +93,13 @@ async function callTelegram(method, body = {}) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
-    return await res.json();
+    const data = await res.json();
+    if (!data.ok) {
+      console.error(`[Telegram API Error on ${method}]`, data);
+    }
+    return data;
   } catch (err) {
-    console.error(`[Telegram API Error: ${method}]`, err);
+    console.error(`[Telegram API Network Error: ${method}]`, err);
     return { ok: false, error: err.message };
   }
 }
@@ -138,28 +142,30 @@ async function authenticateUser(req, body = {}, query = {}) {
 }
 
 // ─── Helper: Get or Generate Unique 6-Digit User Account Code ─────────────────
-async function getOrGenerateUserCode(userId, email) {
+export async function getOrGenerateUserCode(userId, email) {
   const cleanId = String(userId || email || '').toLowerCase().trim();
-  const cleanEmail = String(email || userId || '').toLowerCase().trim();
-  if (!cleanId) return null;
+  const cleanEmail = email ? String(email).toLowerCase().trim() : '';
 
   // 1. Check if user already has an active code
-  try {
-    const existing = await ddbDoc.send(
-      new GetCommand({
-        TableName: ORDERS_TABLE,
-        Key: { orderId: `user_account_code_${cleanId}` },
-      })
-    );
-    if (existing?.Item?.code) {
-      return existing.Item.code;
+  if (cleanId) {
+    try {
+      const existing = await ddbDoc.send(
+        new GetCommand({
+          TableName: ORDERS_TABLE,
+          Key: { orderId: `user_account_code_${cleanId}` },
+        })
+      );
+      if (existing?.Item?.code) {
+        return existing.Item.code;
+      }
+    } catch (e) {
+      console.warn('[Get Code Note]', e.message);
     }
-  } catch (e) {
-    console.warn('[Get Code Note]', e.message);
   }
 
   // 2. Generate random 6-digit numeric ID (e.g. 748192)
   const code = Math.floor(100000 + Math.random() * 900000).toString();
+  const targetId = cleanId || `guest_${code}`;
 
   try {
     // Store forward lookup: user_code_748192 -> { userId, userEmail, code }
@@ -169,22 +175,23 @@ async function getOrGenerateUserCode(userId, email) {
         Item: {
           orderId: `user_code_${code}`,
           code: code,
-          userId: cleanId,
+          userId: targetId,
           userEmail: cleanEmail,
+          isGuest: !cleanEmail,
           type: 'account_code_link',
           createdAt: new Date().toISOString(),
         },
       })
     );
 
-    // Store reverse lookup: user_account_code_cleanId -> code
+    // Store reverse lookup: user_account_code_targetId -> code
     await ddbDoc.send(
       new PutCommand({
         TableName: ORDERS_TABLE,
         Item: {
-          orderId: `user_account_code_${cleanId}`,
+          orderId: `user_account_code_${targetId}`,
           code: code,
-          userId: cleanId,
+          userId: targetId,
           userEmail: cleanEmail,
           type: 'account_code_reverse',
           updatedAt: new Date().toISOString(),
@@ -199,18 +206,64 @@ async function getOrGenerateUserCode(userId, email) {
 }
 
 // ─── Helper: Look up User by 6-digit Code ─────────────────────────────────────
-async function getUserByCode(code) {
-  if (!code || String(code).length !== 6) return null;
+export async function getUserByCode(code) {
+  if (!code) return null;
+  const cleanCode = String(code).trim();
+  if (cleanCode.length !== 6) return null;
   try {
     const res = await ddbDoc.send(
       new GetCommand({
         TableName: ORDERS_TABLE,
-        Key: { orderId: `user_code_${String(code).trim()}` },
+        Key: { orderId: `user_code_${cleanCode}` },
       })
     );
     return res.Item || null;
   } catch (err) {
     console.error('[Lookup Code Error]', err);
+    return null;
+  }
+}
+
+// ─── Helper: Link Email to an Existing Account Code ───────────────────────────
+async function linkEmailToCode(code, email) {
+  const cleanEmail = String(email || '').toLowerCase().trim();
+  if (!code || !cleanEmail) return null;
+
+  try {
+    // 1. Update forward lookup
+    await ddbDoc.send(
+      new PutCommand({
+        TableName: ORDERS_TABLE,
+        Item: {
+          orderId: `user_code_${code}`,
+          code: String(code),
+          userId: cleanEmail,
+          userEmail: cleanEmail,
+          isGuest: false,
+          type: 'account_code_link',
+          updatedAt: new Date().toISOString(),
+        },
+      })
+    );
+
+    // 2. Update reverse lookup
+    await ddbDoc.send(
+      new PutCommand({
+        TableName: ORDERS_TABLE,
+        Item: {
+          orderId: `user_account_code_${cleanEmail}`,
+          code: String(code),
+          userId: cleanEmail,
+          userEmail: cleanEmail,
+          type: 'account_code_reverse',
+          updatedAt: new Date().toISOString(),
+        },
+      })
+    );
+
+    return { code, userId: cleanEmail, userEmail: cleanEmail };
+  } catch (err) {
+    console.error('[Link Email Error]', err);
     return null;
   }
 }
@@ -253,17 +306,18 @@ export default async function handler(req, res) {
   if (action === 'get_user_code') {
     let user = await authenticateUser(req, body, query);
     const guestEmail = String(body.email || query.email || '').trim().toLowerCase();
+    const guestCode = String(body.guest_code || query.guest_code || '').trim();
 
     if (!user && guestEmail) {
       user = { userId: guestEmail, email: guestEmail };
     }
 
+    // Always generate an Account ID even for guest/unauthenticated users!
     if (!user) {
-      return res.status(401).json({
-        success: false,
-        error: 'Unauthorized',
-        message: 'Please sign in or provide email to generate your 6-digit Account ID.',
-      });
+      const guestId = guestCode && /^\d{6}$/.test(guestCode)
+        ? `guest_${guestCode}`
+        : `guest_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      user = { userId: guestId, email: null, isGuest: true };
     }
 
     const code = await getOrGenerateUserCode(user.userId, user.email);
@@ -272,7 +326,8 @@ export default async function handler(req, res) {
     return res.status(200).json({
       success: true,
       code,
-      email: user.email,
+      email: user.email || '',
+      isGuest: Boolean(user.isGuest),
       botUsername: BOT_USERNAME,
       botUrl,
       plans: Object.values(SUBSCRIPTION_PLANS),
@@ -299,7 +354,7 @@ export default async function handler(req, res) {
   // ─────────────────────────────────────────────────────────────────────────
   // 3. GET TELEGRAM WEBHOOK INFO / PLANS
   // ─────────────────────────────────────────────────────────────────────────
-  if (req.method === 'GET' && !action) {
+  if (req.method === 'GET' && !action && !body.update_id && !body.message) {
     const info = await callTelegram('getWebhookInfo');
     return res.status(200).json({
       success: true,
@@ -421,23 +476,23 @@ export default async function handler(req, res) {
         })
       );
 
-      // 3. Send Telegram Celebration & Confirmation Message
-      const successMsg =
-        `🎉 *Payment Successful\\!*\n\n` +
-        `Your *Movieflix Pro* subscription is now *ACTIVE*\\!\n\n` +
-        `⭐ *Plan*: ${plan.name} \\(${sp.total_amount} Stars\\)\n` +
-        `📧 *Account*: \`${targetEmail}\`\n` +
-        `📅 *Valid Until*: ${formatDate(expiresAt)}\n\n` +
-        `🍿 *Pro Benefits Unlocked*:\n` +
+      // 3. Send Telegram Celebration & Confirmation Message (Using Safe HTML)
+      const successHtml =
+        `🎉 <b>Payment Successful!</b>\n\n` +
+        `Your <b>Movieflix Pro</b> subscription is now <b>ACTIVE</b>!\n\n` +
+        `⭐ <b>Plan:</b> ${plan.name} (${sp.total_amount} Stars)\n` +
+        `📧 <b>Account:</b> <code>${targetEmail}</code>\n` +
+        `📅 <b>Valid Until:</b> ${formatDate(expiresAt)}\n\n` +
+        `🍿 <b>Pro Benefits Unlocked:</b>\n` +
         `• 4K Ultra HD & 1080p Streaming Quality\n` +
         `• 100% Zero Ads in Movies & Shorts\n` +
         `• All Premium Episodes & Faster Servers\n\n` +
-        `Enjoy streaming your favourite movies and series on Movieflix\\!`;
+        `Enjoy streaming your favourite movies and series on Movieflix!`;
 
       await callTelegram('sendMessage', {
         chat_id: chatId,
-        text: successMsg,
-        parse_mode: 'Markdown',
+        text: successHtml,
+        parse_mode: 'HTML',
         reply_markup: {
           inline_keyboard: [
             [
@@ -464,20 +519,19 @@ export default async function handler(req, res) {
       // C1: User clicked "Yes, Continue" -> Show Plan Cards
       if (data.startsWith('confirm_yes:')) {
         const code = data.replace('confirm_yes:', '').trim();
-        const user = await getUserByCode(code);
 
-        const plansText =
-          `✨ *Choose Your Movieflix Pro Plan*:\n\n` +
-          `🍿 *Included with Pro*:\n` +
+        const plansHtml =
+          `✨ <b>Choose Your Movieflix Pro Plan:</b>\n\n` +
+          `🍿 <b>Included with Pro:</b>\n` +
           `• 4K Ultra HD & 1080p Bitrate\n` +
           `• Zero Ads in Player & Shorts\n` +
           `• Access to All Premium Episodes\n\n` +
-          `⭐ *Pay directly with Telegram Stars*:`;
+          `⭐ <b>Pay directly with Telegram Stars:</b>`;
 
         await callTelegram('sendMessage', {
           chat_id: chatId,
-          text: plansText,
-          parse_mode: 'Markdown',
+          text: plansHtml,
+          parse_mode: 'HTML',
           reply_markup: {
             inline_keyboard: [
               [
@@ -548,9 +602,9 @@ export default async function handler(req, res) {
         await callTelegram('sendMessage', {
           chat_id: chatId,
           text:
-            `👉 Please enter your *6-digit Movieflix Account ID* (found under Pricing in the app), ` +
-            `or reply with your registered *email address*:`,
-          parse_mode: 'Markdown',
+            `👉 Please reply with your <b>6-digit Movieflix Account ID</b> (found under Pricing on Movieflix), ` +
+            `or type your registered <b>email address</b>:`,
+          parse_mode: 'HTML',
         });
         return res.status(200).json({ ok: true });
       }
@@ -562,22 +616,30 @@ export default async function handler(req, res) {
       const chatId = msg.chat.id;
       const text = msg.text.trim();
 
-      // Case D1: /start with deep link parameter (/start 123456)
+      // Case D1: /start with or without parameter
       if (text.startsWith('/start')) {
         const param = text.replace('/start', '').trim();
 
+        // Parameter is 6 digits: /start 123456
         if (param && /^\d{6}$/.test(param)) {
-          const user = await getUserByCode(param);
-          if (user) {
+          let user = await getUserByCode(param);
+
+          // If not in DB yet, auto-register code
+          if (!user) {
+            await getOrGenerateUserCode(`guest_${param}`, null);
+            user = await getUserByCode(param);
+          }
+
+          if (user && user.userEmail && !user.userEmail.startsWith('guest_')) {
             await callTelegram('sendMessage', {
               chat_id: chatId,
               text:
-                `👋 *Welcome to Movieflix Pro Bot\\!*\n\n` +
+                `👋 <b>Welcome to Movieflix Pro Bot!</b>\n\n` +
                 `We identified your Movieflix account:\n` +
-                `📧 *Email*: \`${user.userEmail}\`\n` +
-                `🆔 *Account ID*: \`${user.code}\`\n\n` +
+                `📧 <b>Email:</b> <code>${user.userEmail}</code>\n` +
+                `🆔 <b>Account ID:</b> <code>${user.code}</code>\n\n` +
                 `Is this your account?`,
-              parse_mode: 'Markdown',
+              parse_mode: 'HTML',
               reply_markup: {
                 inline_keyboard: [
                   [
@@ -596,37 +658,53 @@ export default async function handler(req, res) {
               },
             });
             return res.status(200).json({ ok: true });
+          } else {
+            // Guest Account ID detected — ask for email to link
+            await callTelegram('sendMessage', {
+              chat_id: chatId,
+              text:
+                `👋 <b>Welcome to Movieflix Pro Bot!</b>\n\n` +
+                `🆔 <b>Detected Account ID:</b> <code>${param}</code>\n\n` +
+                `👉 Please reply with your <b>email address</b> to link your Movieflix account:`,
+              parse_mode: 'HTML',
+            });
+            return res.status(200).json({ ok: true });
           }
         }
 
-        // Default /start greeting if code is missing or not found
+        // Generic /start greeting
         await callTelegram('sendMessage', {
           chat_id: chatId,
           text:
-            `👋 *Welcome to the official Movieflix Pro Bot\\!*\n\n` +
-            `Upgrade your Movieflix account to *Pro* to unlock:\n` +
-            `• 🎬 Stream all titles in *4K Ultra HD & 1080p*\n` +
-            `• 🚫 *Zero Ads* in Movies, Series & Shorts\n` +
+            `👋 <b>Welcome to the official Movieflix Pro Bot!</b>\n\n` +
+            `Upgrade your Movieflix account to <b>Pro</b> to unlock:\n` +
+            `• 🎬 Stream all titles in <b>4K Ultra HD & 1080p</b>\n` +
+            `• 🚫 <b>Zero Ads</b> in Movies, Series & Shorts\n` +
             `• 🍿 All Premium & VIP Episodes\n\n` +
-            `👉 To link your account, please reply with your *6-digit Movieflix Account ID* ` +
-            `(found under Pro/Pricing in Movieflix), or type your registered *email address*:`,
-          parse_mode: 'Markdown',
+            `👉 To link your account, reply with your <b>6-digit Movieflix Account ID</b> ` +
+            `(found under Pro/Pricing in Movieflix), or type your registered <b>email address</b>:`,
+          parse_mode: 'HTML',
         });
         return res.status(200).json({ ok: true });
       }
 
       // Case D2: User sent 6-digit numeric ID (e.g. "749215")
       if (/^\d{6}$/.test(text)) {
-        const user = await getUserByCode(text);
-        if (user) {
+        let user = await getUserByCode(text);
+        if (!user) {
+          await getOrGenerateUserCode(`guest_${text}`, null);
+          user = await getUserByCode(text);
+        }
+
+        if (user && user.userEmail && !user.userEmail.startsWith('guest_')) {
           await callTelegram('sendMessage', {
             chat_id: chatId,
             text:
-              `🔍 *Account Found\\!*\n\n` +
-              `📧 *Email*: \`${user.userEmail}\`\n` +
-              `🆔 *Account ID*: \`${user.code}\`\n\n` +
+              `🔍 <b>Account Found!</b>\n\n` +
+              `📧 <b>Email:</b> <code>${user.userEmail}</code>\n` +
+              `🆔 <b>Account ID:</b> <code>${user.code}</code>\n\n` +
               `Confirm to proceed with subscription:`,
-            parse_mode: 'Markdown',
+            parse_mode: 'HTML',
             reply_markup: {
               inline_keyboard: [
                 [
@@ -648,9 +726,9 @@ export default async function handler(req, res) {
           await callTelegram('sendMessage', {
             chat_id: chatId,
             text:
-              `❌ Account ID \`${text}\` was not found\\.\n\n` +
-              `Please open the [Movieflix Website](${effectiveApiBase}/pricing) to view your 6-digit Account ID, or type your registered email address:`,
-            parse_mode: 'Markdown',
+              `🔍 <b>Account ID:</b> <code>${text}</code>\n\n` +
+              `👉 Please reply with your <b>email address</b> so we can link your Movieflix subscription:`,
+            parse_mode: 'HTML',
           });
         }
         return res.status(200).json({ ok: true });
@@ -664,11 +742,11 @@ export default async function handler(req, res) {
         await callTelegram('sendMessage', {
           chat_id: chatId,
           text:
-            `🔍 *Account Linked\\!*\n\n` +
-            `📧 *Email*: \`${email}\`\n` +
-            `🆔 *Assigned ID*: \`${code}\`\n\n` +
+            `🔍 <b>Account Linked!</b>\n\n` +
+            `📧 <b>Email:</b> <code>${email}</code>\n` +
+            `🆔 <b>Assigned ID:</b> <code>${code}</code>\n\n` +
             `Do you want to activate Movieflix Pro for this email?`,
-          parse_mode: 'Markdown',
+          parse_mode: 'HTML',
           reply_markup: {
             inline_keyboard: [
               [
@@ -693,8 +771,8 @@ export default async function handler(req, res) {
       await callTelegram('sendMessage', {
         chat_id: chatId,
         text:
-          `👉 Please enter your *6-digit Movieflix Account ID* (from the app), or your registered *email address*:`,
-        parse_mode: 'Markdown',
+          `👉 Please enter your <b>6-digit Movieflix Account ID</b> (from the app), or your registered <b>email address</b>:`,
+        parse_mode: 'HTML',
       });
       return res.status(200).json({ ok: true });
     }

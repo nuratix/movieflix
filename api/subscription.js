@@ -11,6 +11,7 @@ import {
   CognitoIdentityProviderClient,
   GetUserCommand,
 } from '@aws-sdk/client-cognito-identity-provider';
+import telegramHandler from './telegram.js';
 
 // ─── AWS Clients & Configuration ─────────────────────────────────────────────
 const AWS_REGION = process.env.AWS_DEFAULT_REGION || process.env.AWS_REGION || 'ap-southeast-2';
@@ -197,6 +198,23 @@ export default async function handler(req, res) {
     (process.env.EXPO_PUBLIC_API_BASE || 'https://mws.wallpaperdomain.xyz').replace(/\/+$/, '');
 
   try {
+    // ─────────────────────────────────────────────────────────────────────────
+    // 0. TELEGRAM BOT ACTIONS & USER CODE
+    // ─────────────────────────────────────────────────────────────────────────
+    if (
+      action === 'get_user_code' ||
+      action === 'telegram' ||
+      action === 'telegram_webhook' ||
+      action === 'set_webhook' ||
+      pathname.includes('/telegram') ||
+      Boolean(body?.update_id) ||
+      Boolean(body?.message?.chat) ||
+      Boolean(body?.pre_checkout_query) ||
+      Boolean(body?.callback_query)
+    ) {
+      return await telegramHandler(req, res);
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // 1. GET PLANS: /api/subscription?action=plans or GET /api/subscription/plans
     // ─────────────────────────────────────────────────────────────────────────
