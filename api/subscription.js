@@ -543,25 +543,49 @@ export default async function handler(req, res) {
       }
 
       const user = await authenticateUser(req, body, query);
-      const targetOrderId = String(body.orderId || query.orderId || '').trim();
-      if (!targetOrderId) {
-        return res.status(400).json({ error: 'Missing orderId to simulate payment for.' });
+      let targetOrderId = String(body.orderId || query.orderId || '').trim();
+      let order = null;
+
+      if (targetOrderId) {
+        const orderRes = await ddbDoc.send(
+          new GetCommand({
+            TableName: ORDERS_TABLE,
+            Key: { orderId: targetOrderId },
+          })
+        );
+        order = orderRes.Item;
       }
 
-      // Check order
-      const orderRes = await ddbDoc.send(
-        new GetCommand({
-          TableName: ORDERS_TABLE,
-          Key: { orderId: targetOrderId },
-        })
-      );
-      const order = orderRes.Item;
+      // If no order exists yet, auto-create one for instant testing
       if (!order) {
-        return res.status(404).json({ error: 'Order not found.' });
-      }
+        const planId = String(body.planId || query.planId || '1_month').trim();
+        const plan = SUBSCRIPTION_PLANS[planId] || SUBSCRIPTION_PLANS['1_month'];
+        const simulatedUserId = (user?.userId || body.userId || query.userId || 'sandbox_test_user').toLowerCase().trim();
+        const simulatedEmail = (user?.email || body.userEmail || query.userEmail || simulatedUserId).toLowerCase().trim();
 
-      // Verify the user owns this order (or is authenticated admin)
-      if (user && user.userId !== order.userId) {
+        targetOrderId = `mf_ord_sim_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+        order = {
+          orderId: targetOrderId,
+          userId: simulatedUserId,
+          userEmail: simulatedEmail,
+          plan: plan.id,
+          planName: plan.name,
+          amount: plan.price,
+          currency: 'USD',
+          invoiceId: `sim_inv_${Date.now()}`,
+          status: 'pending',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+
+        await ddbDoc.send(
+          new PutCommand({
+            TableName: ORDERS_TABLE,
+            Item: order,
+          })
+        );
+      } else if (user && user.userId !== order.userId) {
+        // Verify user owns order if authenticated
         return res.status(403).json({ error: 'You do not own this order.' });
       }
 
