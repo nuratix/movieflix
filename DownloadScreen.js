@@ -140,7 +140,7 @@ export default function DownloadScreen({
 
   const handleShare = async () => {
     const shareUrl = 'https://mws.wallpaperdomain.xyz/download';
-    const message = `Download MovieFlix v${releaseInfo.version} official APK for Android — 4K movies & series with zero ads: ${shareUrl}`;
+    const message = `Download MovieFlix v${releaseInfo.version} official APK for Android — 4K movies & series with fast downloads: ${shareUrl}`;
     if (Platform.OS === 'web') {
       if (navigator.share) {
         navigator.share({ title: 'MovieFlix APK', text: message, url: shareUrl }).catch(() => {});
@@ -235,8 +235,6 @@ export default function DownloadScreen({
               <Text style={styles.appDeveloperName}>movieflix</Text>
               <View style={styles.appCategoryRow}>
                 <Text style={styles.appCategoryText}>Entertainment</Text>
-                <View style={styles.categoryDot} />
-                <Text style={styles.appContainsNoAds}>Contains no ads</Text>
               </View>
             </View>
           </View>
@@ -371,7 +369,7 @@ export default function DownloadScreen({
             </View>
 
             <Text style={styles.aboutParagraph}>
-              Stream and download thousands of HD movies, trending TV series, Hindi dubbed blockbusters, and anime in 4K/1080p with zero ads. The official MovieFlix app provides native hardware video acceleration, multi-audio voice track switching, synchronized subtitle rendering, and seamless background downloads directly to your device.
+              Stream and download thousands of HD movies, trending TV series, Hindi dubbed blockbusters, and anime in 4K/1080p. The official MovieFlix app provides native hardware video acceleration, multi-audio voice track switching, synchronized subtitle rendering, and seamless background downloads directly to your device.
             </Text>
 
             {/* Play Store Category Tags */}
@@ -389,7 +387,7 @@ export default function DownloadScreen({
                 <Text style={styles.tagChipText}>Offline Cinema</Text>
               </View>
               <View style={styles.tagChip}>
-                <Text style={styles.tagChipText}>100% Ad-Free</Text>
+                <Text style={styles.tagChipText}>Fast Downloads</Text>
               </View>
               <View style={styles.tagChip}>
                 <Text style={styles.tagChipText}>Universal Android</Text>
@@ -491,8 +489,8 @@ export default function DownloadScreen({
                   <Feather name="slash" size={15} color="#E50914" />
                 </View>
                 <View style={styles.safetyTextCol}>
-                  <Text style={styles.safetyPointTitle}>Zero third-party advertising SDKs</Text>
-                  <Text style={styles.safetyPointSub}>No trackers, banner networks, or ad beacons embedded.</Text>
+                  <Text style={styles.safetyPointTitle}>Privacy Focused Architecture</Text>
+                  <Text style={styles.safetyPointSub}>No cross-app tracking SDKs or location surveillance embedded.</Text>
                 </View>
               </View>
             </View>
@@ -509,7 +507,7 @@ export default function DownloadScreen({
               <View style={styles.donationTextCol}>
                 <Text style={styles.donationCardTitle}>Support MovieFlix</Text>
                 <Text style={styles.donationCardDesc}>
-                  Keep streaming 100% free and ad-free with cryptocurrency & Bitcoin donations.
+                  Support independent streaming infrastructure and high-speed bandwidth with cryptocurrency donations.
                 </Text>
               </View>
             </View>
@@ -738,18 +736,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   appCategoryText: {
-    color: '#8E8E93',
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  categoryDot: {
-    width: 3,
-    height: 3,
-    borderRadius: 1.5,
-    backgroundColor: '#8E8E93',
-    marginHorizontal: 6,
-  },
-  appContainsNoAds: {
     color: '#8E8E93',
     fontSize: 12,
     fontWeight: '500',

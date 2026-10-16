@@ -87,7 +87,7 @@ export default function PrivacyScreen({ onClose }) {
                 • <Text style={styles.boldText}>No Phone Numbers or Contacts:</Text> We do not require or access your phone number or contacts list.
               </Text>
               <Text style={styles.bulletItem}>
-                • <Text style={styles.boldText}>No Billing or Payment Info:</Text> MovieFlix is free. We never request credit cards, bank accounts, or billing addresses.
+                • <Text style={styles.boldText}>No Financial Data:</Text> We do not collect or store credit cards, bank accounts, or financial payment credentials.
               </Text>
               <Text style={styles.bulletItem}>
                 • <Text style={styles.boldText}>No Precise Location Tracking:</Text> We do not track or request your GPS or cellular location.
@@ -151,9 +151,9 @@ export default function PrivacyScreen({ onClose }) {
 
           {/* Section 5 */}
           <View style={styles.sectionBlock}>
-            <Text style={styles.sectionHeading}>5. Zero Third-Party Advertising Trackers</Text>
+            <Text style={styles.sectionHeading}>5. Zero Third-Party Tracking & Surveillance</Text>
             <Text style={styles.paragraph}>
-              We do not integrate advertising networks, tracking SDKs, Facebook Pixel, or cross-app analytics surveillance. We do not sell, trade, or share user activity with data brokers.
+              We do not integrate surveillance tracking SDKs, Facebook Pixel, or cross-app analytics surveillance. We do not sell, trade, or share user activity with data brokers.
             </Text>
           </View>
 

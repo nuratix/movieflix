@@ -427,10 +427,10 @@ const PAGES = {
     outPath: path.join(distDir, 'download', 'index.html'),
     altPath: path.join(distDir, 'apk', 'index.html'),
     title: 'Download MovieFlix APK v1.1.8 (Official) - Free Android Movies & TV App',
-    description: 'Download official MovieFlix Android APK (v1.1.8). Stream and download unlimited 4K/1080p movies, TV series, anime, and shorts with multi-audio dubs and zero ads. 100% Safe & Verified.',
+    description: 'Download official MovieFlix Android APK (v1.1.8). Stream and download unlimited 4K/1080p movies, TV series, and anime with multi-audio dubs. 100% Safe & Verified.',
     canonical: `${BASE_URL}/download`,
     ogType: 'website',
-    keywords: 'movieflix apk, download movieflix, movieflix android apk, movieflix official apk, movieflix apk download latest version, movieflix 1.1.8 apk, free movie downloader apk, stream movies android apk, safe movie app apk, no ads movie apk',
+    keywords: 'movieflix apk, download movieflix, movieflix android apk, movieflix official apk, movieflix apk download latest version, movieflix 1.1.8 apk, free movie downloader apk, stream movies android apk, safe movie app apk',
     schema: {
       "@context": "https://schema.org",
       "@graph": [
@@ -457,7 +457,7 @@ const PAGES = {
             "bestRating": "5",
             "worstRating": "1"
           },
-          "description": "Official MovieFlix Android APK v1.1.8. Enjoy high-speed downloads, unlimited 4K streaming, multi-language subtitles, and zero ads on Android."
+          "description": "Official MovieFlix Android APK v1.1.8. Enjoy high-speed downloads, unlimited 4K streaming, and multi-language subtitles on Android."
         },
         {
           "@type": "HowTo",

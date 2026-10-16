@@ -2721,7 +2721,7 @@ function ReelApp() {
 
     enterFullscreenSystemBar();
 
-    // Smooth landscape transition without sudden screen flash (mobile only)
+    // Smooth landscape transition: APK (mobile) & Web Browser
     if (Platform.OS !== 'web') {
       setTimeout(() => {
         ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE).catch((e) => {
@@ -2729,6 +2729,36 @@ function ReelApp() {
         });
         enterFullscreenSystemBar();
       }, 150);
+    } else {
+      // Browser: Automatically fit app in landscape and fullscreen on play
+      if (typeof document !== 'undefined') {
+        try {
+          const docEl = document.documentElement;
+          if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+            if (docEl.requestFullscreen) {
+              docEl.requestFullscreen().catch(() => {});
+            } else if (docEl.webkitRequestFullscreen) {
+              docEl.webkitRequestFullscreen().catch(() => {});
+            } else if (docEl.mozRequestFullScreen) {
+              docEl.mozRequestFullScreen().catch(() => {});
+            } else if (docEl.msRequestFullscreen) {
+              docEl.msRequestFullscreen().catch(() => {});
+            }
+          }
+        } catch (e) {
+          console.log("Web fullscreen request note:", e);
+        }
+
+        try {
+          if (window.screen?.orientation?.lock) {
+            window.screen.orientation.lock('landscape').catch(() => {
+              window.screen.orientation.lock('landscape-primary').catch(() => {});
+            });
+          }
+        } catch (e) {
+          console.log("Web orientation lock note:", e);
+        }
+      }
     }
 
     if (offlineVideoUrl) {
@@ -7027,6 +7057,24 @@ function ReelCustomPlayer({
         });
       }
     };
+  }, []);
+
+  // Web Browser: Automatically fit player in landscape on mount
+  useEffect(() => {
+    if (Platform.OS === 'web' && typeof document !== 'undefined') {
+      try {
+        const docEl = document.documentElement;
+        if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+          if (docEl.requestFullscreen) docEl.requestFullscreen().catch(() => {});
+          else if (docEl.webkitRequestFullscreen) docEl.webkitRequestFullscreen().catch(() => {});
+        }
+        if (window.screen?.orientation?.lock) {
+          window.screen.orientation.lock('landscape').catch(() => {
+            window.screen.orientation.lock('landscape-primary').catch(() => {});
+          });
+        }
+      } catch (_) {}
+    }
   }, []);
 
   const parseSpeed = (spdStr) => {
