@@ -73,8 +73,9 @@ export default async function handler(req, res) {
   // Server-side OMDB keys (configured via Vercel env variable OMDB_API_KEY or OMDB_API_KEYS)
   const envKeys = process.env.OMDB_API_KEYS || process.env.OMDB_API_KEY;
   if (!envKeys) {
-    return res.status(500).json({
-      error: 'IMDb service is not configured. Please configure OMDB_API_KEY in server environment.',
+    return res.status(200).json({
+      Response: 'False',
+      Error: 'IMDb service is not configured. Please configure OMDB_API_KEY in server environment.',
     });
   }
   const apiKeys = envKeys
@@ -110,7 +111,7 @@ export default async function handler(req, res) {
   }
 
   if (!omdbData) {
-    return res.status(404).json({ Response: 'False', Error: 'Movie or series not found' });
+    return res.status(200).json({ Response: 'False', Error: 'Movie or series not found' });
   }
 
   // Cache response for 24h on CDN, 1h in browser to conserve API quota

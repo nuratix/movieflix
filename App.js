@@ -106,6 +106,14 @@ if (Platform.OS !== 'web') {
   SplashScreen.preventAutoHideAsync().catch(() => {});
 }
 
+// ─── Video Resolution VIP Helper (Module Scope) ──────────────────────────────
+export const isPremiumResolution = (resStr = '') => {
+  const lower = String(resStr || '').toLowerCase();
+  if (lower.includes('4k') || lower.includes('2160') || lower.includes('1440') || lower.includes('1080')) return true;
+  const num = parseInt(lower.replace(/[^0-9]/g, ''), 10);
+  return !isNaN(num) && num > 720;
+};
+
 // ─── Apple-Grade Haptics Feedback Helper ─────────────────────────────────────
 const triggerHaptic = (type = 'selection') => {
   if (Platform.OS === 'web') return;
@@ -5214,8 +5222,12 @@ function ReelApp() {
       currentUrl === '/series' ||
       currentUrl === '/tv' ||
       currentUrl === '/animation' ||
+      currentUrl === '/shorts' ||
       currentUrl === '/shots' ||
       currentUrl === '/reels' ||
+      currentUrl.startsWith('/shorts') ||
+      currentUrl.startsWith('/shots') ||
+      currentUrl.startsWith('/short') ||
       currentUrl.startsWith('/me');
 
     if (!isTabRoute) return;
@@ -5227,7 +5239,7 @@ function ReelApp() {
       else if (meSubTab === 'Downloads') targetUrl = '/me/downloads';
       else targetUrl = '/me';
     } else if (mainTab === 'Shots') {
-      targetUrl = '/shots';
+      targetUrl = currentUrl.startsWith('/shorts') ? '/shorts' : '/shots';
     } else {
       if (homeCategory === 'Movies') targetUrl = '/movies';
       else if (homeCategory === 'TV Series' || homeCategory === 'Series') targetUrl = '/series';
@@ -5538,8 +5550,10 @@ function ReelApp() {
         return;
       }
       if (
+        pathname === '/shorts' ||
         pathname === '/shots' ||
         pathname === '/reels' ||
+        pathname.startsWith('/shorts') ||
         pathname.startsWith('/shots/') ||
         pathname.startsWith('/short/')
       ) {
@@ -5547,6 +5561,8 @@ function ReelApp() {
         setNotFoundPath('');
         const sId = pathname.startsWith('/short/')
           ? pathname.replace('/short/', '').split('/')[0]
+          : pathname.startsWith('/shorts/')
+          ? pathname.replace('/shorts/', '').split('/')[0]
           : pathname.startsWith('/shots/')
           ? pathname.replace('/shots/', '').split('/')[0]
           : '';
@@ -5662,13 +5678,17 @@ function ReelApp() {
         return;
       }
       if (
+        pathname === '/shorts' ||
         pathname === '/shots' ||
         pathname === '/reels' ||
+        pathname.startsWith('/shorts') ||
         pathname.startsWith('/shots/') ||
         pathname.startsWith('/short/')
       ) {
         const sId = pathname.startsWith('/short/')
           ? pathname.replace('/short/', '').split('/')[0]
+          : pathname.startsWith('/shorts/')
+          ? pathname.replace('/shorts/', '').split('/')[0]
           : pathname.startsWith('/shots/')
           ? pathname.replace('/shots/', '').split('/')[0]
           : '';
@@ -10472,7 +10492,9 @@ function ReelCustomPlayer({
             {availableStreams && availableStreams.length > 0 ? (
               availableStreams.map((s, idx) => {
                 const isSelected = s.resolution === activeResolution;
-                const isProQuality = isPremiumResolution(s.resolution);
+                const isProQuality = typeof isPremiumResolution === 'function'
+                  ? isPremiumResolution(s.resolution)
+                  : /1080|1440|2160|4k/i.test(String(s.resolution || ''));
                 const isLocked = isProQuality && !isPremium;
 
                 return (

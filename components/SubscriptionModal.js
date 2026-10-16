@@ -15,7 +15,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import {
   fetchTelegramUserCode,
   getTelegramBotUrl,
-  simulateSandboxPayment,
   formatExpirationDate,
 } from '../subscriptionService';
 
@@ -33,7 +32,6 @@ export default function SubscriptionModal({
   const [errorMessage, setErrorMessage] = useState('');
   const [userCode, setUserCode] = useState(null);
   const [copiedCode, setCopiedCode] = useState(false);
-  const [simulating, setSimulating] = useState(false);
   const [successInfo, setSuccessInfo] = useState(null);
 
   useEffect(() => {
@@ -120,27 +118,6 @@ export default function SubscriptionModal({
       setErrorMessage(err.message || 'Could not open Telegram bot.');
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleSimulatePayment = async () => {
-    setSimulating(true);
-    setErrorMessage('');
-    try {
-      const res = await simulateSandboxPayment(`mf_ord_sim_${Date.now()}`, authAccessToken);
-      setSuccessInfo(res);
-      if (typeof onSubscriptionUpdated === 'function') {
-        onSubscriptionUpdated({
-          is_premium: true,
-          plan_name: 'Movieflix Pro',
-          expires_at: res.expiresAt,
-          days_left: 30,
-        });
-      }
-    } catch (err) {
-      setErrorMessage(err.message || 'Sandbox simulation failed.');
-    } finally {
-      setSimulating(false);
     }
   };
 
@@ -266,25 +243,6 @@ export default function SubscriptionModal({
                 );
               })}
             </View>
-
-            {/* Sandbox Simulation Button */}
-            <TouchableOpacity
-              style={styles.sandboxBtn}
-              onPress={handleSimulatePayment}
-              disabled={simulating}
-              activeOpacity={0.85}
-            >
-              {simulating ? (
-                <ActivityIndicator size="small" color="#10b981" />
-              ) : (
-                <>
-                  <Feather name="zap" size={14} color="#10b981" />
-                  <Text style={styles.sandboxBtnText}>
-                    Free Instant Test ($0.00 Sandbox)
-                  </Text>
-                </>
-              )}
-            </TouchableOpacity>
           </ScrollView>
 
           {/* Action Footer */}
@@ -571,23 +529,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#a8a29e',
     marginLeft: 28,
-  },
-  sandboxBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 10,
-    borderRadius: 8,
-    backgroundColor: 'rgba(16, 185, 129, 0.08)',
-    borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.25)',
-    gap: 6,
-    marginBottom: 4,
-  },
-  sandboxBtnText: {
-    color: '#10b981',
-    fontSize: 12,
-    fontWeight: '700',
   },
   footer: {
     padding: 16,

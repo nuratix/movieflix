@@ -20,6 +20,41 @@ try {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Load environment variables from .env.production.local or .env
+function loadEnv() {
+  const envFiles = ['.env.production.local', '.env'];
+  for (const rel of envFiles) {
+    const fullPath = path.resolve(__dirname, rel);
+    if (fs.existsSync(fullPath)) {
+      try {
+        if (typeof process.loadEnvFile === 'function') {
+          process.loadEnvFile(fullPath);
+        } else {
+          const content = fs.readFileSync(fullPath, 'utf8');
+          for (const line of content.split('\n')) {
+            const trimmed = line.trim();
+            if (!trimmed || trimmed.startsWith('#')) continue;
+            const eqIdx = trimmed.indexOf('=');
+            if (eqIdx > 0) {
+              const k = trimmed.slice(0, eqIdx).trim();
+              let v = trimmed.slice(eqIdx + 1).trim();
+              if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
+                v = v.slice(1, -1);
+              }
+              if (!process.env[k]) {
+                process.env[k] = v;
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.warn(`[Env] Failed to load ${rel}:`, err?.message);
+      }
+    }
+  }
+}
+loadEnv();
+
 const PORT = parseInt(process.env.PORT || '8081', 10);
 const HOST = process.env.HOST || '0.0.0.0';
 const DIST_DIR = path.resolve(__dirname, 'dist');

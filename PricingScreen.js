@@ -17,7 +17,6 @@ import {
   fetchSubscriptionPlans,
   fetchTelegramUserCode,
   getTelegramBotUrl,
-  simulateSandboxPayment,
   formatExpirationDate,
 } from './subscriptionService';
 
@@ -41,7 +40,6 @@ export default function PricingScreen({
   const [loadingCode, setLoadingCode] = useState(false);
   const [userCode, setUserCode] = useState('749215');
   const [copiedCode, setCopiedCode] = useState(false);
-  const [simulating, setSimulating] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
 
@@ -141,33 +139,6 @@ export default function PricingScreen({
       setSuccessMessage('Redirecting to @movieflix_pro_bot on Telegram...');
     } catch (err) {
       setErrorMessage(`Open Telegram, search for @movieflix_pro_bot and send your Account ID: ${targetCode}`);
-    }
-  };
-
-  // Sandbox Test Payment ($0.00 Free Instant Test)
-  const handleSimulateSandboxPayment = async () => {
-    setErrorMessage('');
-    setSuccessMessage('');
-    setSimulating(true);
-    try {
-      const res = await simulateSandboxPayment(
-        `mf_sim_${Date.now()}`,
-        authAccessToken
-      );
-
-      setSuccessMessage('✓ Sandbox test activated ($0.00). Pro membership is now active on your account.');
-      if (typeof onSubscriptionUpdated === 'function') {
-        onSubscriptionUpdated({
-          is_premium: true,
-          plan_name: res.planName || 'Movieflix Pro',
-          expires_at: res.expiresAt || new Date(Date.now() + 30 * 86400000).toISOString(),
-          days_left: 30,
-        });
-      }
-    } catch (err) {
-      setErrorMessage(err.message || 'Sandbox simulation failed.');
-    } finally {
-      setSimulating(false);
     }
   };
 
@@ -433,26 +404,6 @@ export default function PricingScreen({
               <Text style={styles.featureLineDesc}>No recurring debits or automatic renewals. You control your plan.</Text>
             </View>
           </View>
-        </View>
-
-        {/* ─── QUIET DEVELOPER / SANDBOX TEST ROW ─── */}
-        <View style={styles.devSandboxWrap}>
-          <Text style={styles.devSandboxLabel}>DEVELOPER TEST MODE</Text>
-          <TouchableOpacity
-            style={styles.devSandboxBtn}
-            onPress={handleSimulateSandboxPayment}
-            disabled={simulating}
-            activeOpacity={0.7}
-          >
-            {simulating ? (
-              <ActivityIndicator size="small" color="#a1a1aa" />
-            ) : (
-              <View style={styles.devSandboxBtnInner}>
-                <Feather name="zap" size={12} color="#10b981" style={{ marginRight: 6 }} />
-                <Text style={styles.devSandboxBtnText}>Instant Sandbox Test ($0.00)</Text>
-              </View>
-            )}
-          </TouchableOpacity>
         </View>
 
         {/* FOOTER GUARANTEE */}
@@ -808,38 +759,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 16,
     marginTop: 1,
-  },
-  devSandboxWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.06)',
-    paddingTop: 14,
-    paddingBottom: 4,
-  },
-  devSandboxLabel: {
-    color: '#52525b',
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-  },
-  devSandboxBtn: {
-    backgroundColor: 'rgba(255, 255, 255, 0.04)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-    borderRadius: 6,
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-  },
-  devSandboxBtnInner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  devSandboxBtnText: {
-    color: '#a1a1aa',
-    fontSize: 11,
-    fontWeight: '600',
   },
   alertError: {
     flexDirection: 'row',
