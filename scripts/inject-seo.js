@@ -367,7 +367,7 @@ const getBotProtectionBodyHtml = () => `
 const PAGES = {
   home: {
     outPath: path.join(distDir, 'index.html'),
-    title: 'MovieFlix - Watch & Download Free Movies, TV Series & Official APK (v1.1.8)',
+    title: 'MovieFlix - Watch & Download Free Movies, TV Series & Official APK (v1.1.9)',
     description: 'Stream and download thousands of HD movies, web series, Hindi dubbed blockbusters, and anime in 4K/1080p with zero ads. Download the official MovieFlix Android APK.',
     canonical: `${BASE_URL}/`,
     ogType: 'website',
@@ -408,7 +408,7 @@ const PAGES = {
           "operatingSystem": "Android 7.0 and up",
           "applicationCategory": "EntertainmentApplication",
           "applicationSubCategory": "VideoStreamingApplication",
-          "softwareVersion": "1.1.8",
+          "softwareVersion": "1.1.9",
           "fileSize": "98MB",
           "downloadUrl": `${BASE_URL}/api/download`,
           "installUrl": `${BASE_URL}/download`,
@@ -426,11 +426,11 @@ const PAGES = {
   download: {
     outPath: path.join(distDir, 'download', 'index.html'),
     altPath: path.join(distDir, 'apk', 'index.html'),
-    title: 'Download MovieFlix APK v1.1.8 (Official) - Free Android Movies & TV App',
-    description: 'Download official MovieFlix Android APK (v1.1.8). Stream and download unlimited 4K/1080p movies, TV series, and anime with multi-audio dubs. 100% Safe & Verified.',
+    title: 'Download MovieFlix APK v1.1.9 (Official) - Free Android Movies & TV App',
+    description: 'Download official MovieFlix Android APK (v1.1.9). Stream and download unlimited 4K/1080p movies, TV series, and anime with multi-audio dubs. 100% Safe & Verified.',
     canonical: `${BASE_URL}/download`,
     ogType: 'website',
-    keywords: 'movieflix apk, download movieflix, movieflix android apk, movieflix official apk, movieflix apk download latest version, movieflix 1.1.8 apk, free movie downloader apk, stream movies android apk, safe movie app apk',
+    keywords: 'movieflix apk, download movieflix, movieflix android apk, movieflix official apk, movieflix apk download latest version, movieflix 1.1.9 apk, free movie downloader apk, stream movies android apk, safe movie app apk',
     schema: {
       "@context": "https://schema.org",
       "@graph": [
@@ -441,7 +441,7 @@ const PAGES = {
           "operatingSystem": "Android 7.0+",
           "applicationCategory": "EntertainmentApplication",
           "applicationSubCategory": "VideoStreamingApplication",
-          "softwareVersion": "1.1.8",
+          "softwareVersion": "1.1.9",
           "fileSize": "98MB",
           "downloadUrl": `${BASE_URL}/api/download`,
           "installUrl": `${BASE_URL}/download`,
@@ -457,7 +457,7 @@ const PAGES = {
             "bestRating": "5",
             "worstRating": "1"
           },
-          "description": "Official MovieFlix Android APK v1.1.8. Enjoy high-speed downloads, unlimited 4K streaming, and multi-language subtitles on Android."
+          "description": "Official MovieFlix Android APK v1.1.9. Enjoy high-speed downloads, unlimited 4K streaming, and multi-language subtitles on Android."
         },
         {
           "@type": "HowTo",

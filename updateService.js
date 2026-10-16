@@ -4,7 +4,7 @@ import { Linking, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Current App Version (aligned with package.json & app.json)
-export const CURRENT_APP_VERSION = '1.1.8';
+export const CURRENT_APP_VERSION = '1.1.9';
 
 // Secure Backend Update & Download Endpoints (Hosted on Vercel)
 // The client APK communicates exclusively with the backend service.

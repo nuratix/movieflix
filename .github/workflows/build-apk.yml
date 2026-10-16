@@ -88,12 +88,13 @@ jobs:
             Official Production Build via **GitHub Actions Cloud**!
 
             #### 🚀 Release Notes (v${{ steps.prepare_apk.outputs.version }}):
-            * **Search Pagination & Load More**: Full search pagination support with `+More` pill in search bar capsule, header load more button, and bottom grid "Load More Search Results" button. Auto-deduplicated.
-            * **Shorts Catalog Previews & Watch This**: Direct middle-portion 1-2 min preview clips for movies and web series with instant "Watch This" play page redirect and database-synced likes.
-            * **Player Episode Selector Sheet**: Clean bottom sheet displaying all episode numbers and season tabs, with instant loading indicator on episode switch.
-            * **Single Silent Download Notification**: Clean progress bar notification without repetitive sound spam or multiple notification alerts.
-            * **Ultra-Smooth Video Seeker & Player**: Zero lag scrubber bar with debounced seeking.
-            * **Maintenance & Emergency Donate Gates**: Centralized status checks for high availability.
+            * **Separated Player Controls**: Dedicated Audio & Language / Dub selector button and separate Subtitles & Closed Captions (CC) button with dynamic active indicator.
+            * **VIP Pro Subscription & Guest Sync**: Seamless Pro status activation for both registered accounts and 6-digit guest account IDs.
+            * **Security Hardening**: Complete backend secret isolation with zero token or secret leaks in APK bundles.
+            * **Reliable In-App Updates**: High availability update and download verification on official domain.
+            * **Player Episode Selector Sheet**: Clean bottom sheet displaying all episode numbers and season tabs.
+            * **Single Silent Download Notification**: Clean progress bar notification without repetitive sound spam.
+            * **Ultra-Smooth Video Seeker**: Zero lag scrubber bar with debounced seeking.
           files: |
             output/movieflix-v${{ steps.prepare_apk.outputs.version }}.apk
         env:

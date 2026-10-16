@@ -3,8 +3,8 @@ import crypto from 'crypto';
 // ─── Build Server Security Configuration ──────────────────────────────────────
 const OFFICIAL_PACKAGE_NAME = 'com.movieflix.app';
 const OFFICIAL_ORIGIN_URL = 'https://mws.wallpaperdomain.xyz';
-const OFFICIAL_BUILD_VERSION = '1.1.8';
-const OFFICIAL_VERSION_CODE = 9;
+const OFFICIAL_BUILD_VERSION = '1.1.9';
+const OFFICIAL_VERSION_CODE = 10;
 const OFFICIAL_BUILD_FINGERPRINT = 'mf_sec_sha256_b48f9d0c2e1a7b3c6e5a9d8f0b1c2e3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e';
 
 function getIntegritySecret() {
@@ -50,6 +50,7 @@ function checkRateLimit(ip) {
 }
 
 const ALLOWED_ORIGINS = new Set([
+  'https://mws.wallpaperdomain.com',
   'https://mws.wallpaperdomain.xyz',
   'https://netfilm.world',
   'http://localhost:3000',

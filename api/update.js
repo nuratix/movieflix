@@ -5,7 +5,7 @@
 
 const GITHUB_OWNER = process.env.GITHUB_OWNER || Buffer.from('bnVyYXRpeA==', 'base64').toString('ascii');
 const GITHUB_REPO = process.env.GITHUB_REPO || 'movieflix';
-const TARGET_VERSION = '1.1.8';
+const TARGET_VERSION = '1.1.9';
 
 /**
  * Compare two semver strings (e.g., "1.1.7" vs "1.1.6", or "v1.1.7" vs "1.1.6")
@@ -81,6 +81,7 @@ function checkUpdateRateLimit(ip) {
 }
 
 const ALLOWED_ORIGINS = new Set([
+  'https://mws.wallpaperdomain.com',
   'https://mws.wallpaperdomain.xyz',
   'https://netfilm.world',
   'http://localhost:3000',

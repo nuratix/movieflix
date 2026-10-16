@@ -5,6 +5,42 @@
 
 import crypto from 'crypto';
 
+const GITHUB_OWNER = process.env.GITHUB_OWNER || Buffer.from('bnVyYXRpeA==', 'base64').toString('ascii');
+const GITHUB_REPO = process.env.GITHUB_REPO || 'movieflix';
+const GITHUB_TOKEN = process.env.GITHUB_TOKEN ? process.env.GITHUB_TOKEN.trim() : '';
+const TARGET_VERSION = '1.1.9';
+const FALLBACK_APK_URL = `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest/download/movieflix-v${TARGET_VERSION}.apk`;
+
+function isNewerVersion(remoteVer, currentVer = TARGET_VERSION) {
+  if (!remoteVer) return false;
+  const clean = (v) =>
+    (v || '')
+      .replace(/^v/i, '')
+      .split(/[-+]/)[0]
+      .split('.')
+      .map((n) => parseInt(n, 10) || 0);
+
+  const r = clean(remoteVer);
+  const c = clean(currentVer);
+
+  const len = Math.max(r.length, c.length);
+  for (let i = 0; i < len; i++) {
+    const rPart = r[i] || 0;
+    const cPart = c[i] || 0;
+    if (rPart > cPart) return true;
+    if (rPart < cPart) return false;
+  }
+  return false;
+}
+
+function checkDownloadRateLimit(key) {
+  return true;
+}
+
+function getJwtSecret() {
+  return process.env.JWT_SECRET || 'movieflix-jwt-secret-2026';
+}
+
 let totalDownloadsCount = 3850;
 
 function getDb() {
@@ -82,6 +118,7 @@ function verifyJwt(token) {
 }
 
 const ALLOWED_ORIGINS = new Set([
+  'https://mws.wallpaperdomain.com',
   'https://mws.wallpaperdomain.xyz',
   'https://netfilm.world',
   'http://localhost:3000',
