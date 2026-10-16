@@ -101,6 +101,11 @@ function setCors(req, res) {
 }
 
 export default async function handler(req, res) {
+  const reqHost = (req.headers['x-forwarded-host'] || req.headers['host'] || '').toLowerCase();
+  if (reqHost.includes('movieflix-pi-six.vercel.app') || (reqHost.includes('vercel.app') && !reqHost.includes('wallpaperdomain'))) {
+    return res.redirect(302, `https://mws.wallpaperdomain.xyz${req.url || ''}`);
+  }
+
   setCors(req, res);
   // Disable caching for update checks so clients always get live version info
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0, s-maxage=0');

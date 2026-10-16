@@ -186,6 +186,15 @@ const server = http.createServer(async (req, res) => {
   const parsedUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   const pathname = decodeURIComponent(parsedUrl.pathname || '/');
 
+  // Canonical Domain Redirect (e.g. from movieflix-pi-six.vercel.app to mws.wallpaperdomain.xyz)
+  const reqHost = (req.headers['x-forwarded-host'] || req.headers.host || '').toLowerCase();
+  if (reqHost.includes('movieflix-pi-six.vercel.app') || (reqHost.includes('vercel.app') && !reqHost.includes('wallpaperdomain'))) {
+    res.statusCode = 302;
+    res.setHeader('Location', `https://mws.wallpaperdomain.xyz${req.url || ''}`);
+    res.end();
+    return;
+  }
+
   // ───────────────────────────────────────────────────────────────────────────
   // 1. API ROUTES (/api/*)
   // ───────────────────────────────────────────────────────────────────────────

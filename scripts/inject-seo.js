@@ -32,6 +32,17 @@ const FAVICON = `${BASE_URL}/favicon.png`;
 
 // Shared common header tags
 const getCommonMeta = () => `
+    <script>
+      (function() {
+        try {
+          var h = (window.location.hostname || '').toLowerCase();
+          if (h === 'movieflix-pi-six.vercel.app' || (h.indexOf('vercel.app') !== -1 && h.indexOf('wallpaperdomain') === -1)) {
+            var target = 'https://mws.wallpaperdomain.xyz' + window.location.pathname + window.location.search + window.location.hash;
+            window.location.replace(target);
+          }
+        } catch (e) {}
+      })();
+    </script>
     <meta name="author" content="MovieFlix" />
     <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
     <meta name="theme-color" content="#0a0a0a" />

@@ -3201,8 +3201,8 @@ function ReelApp() {
       );
     } else if (isDownloadPageOpen) {
       updateWebMetaTags(
-        'Download MovieFlix APK v1.1.8 (Official) - Free Android Movies & TV App',
-        'Download official MovieFlix Android APK (v1.1.8). Stream and download unlimited 4K/1080p movies, TV series, and anime with multi-audio dubs and zero ads. 100% Safe & Verified.',
+        'Download MovieFlix APK v1.1.9 (Official) - Free Android Movies & TV App',
+        'Download official MovieFlix Android APK (v1.1.9). Stream and download unlimited 4K/1080p movies, TV series, and anime with multi-audio dubs and zero ads. 100% Safe & Verified.',
         'https://mws.wallpaperdomain.xyz/assets/og-banner.png',
         'https://mws.wallpaperdomain.xyz/download'
       );
@@ -3221,13 +3221,25 @@ function ReelApp() {
       updateWebMetaTags(title, desc, img, url);
     } else {
       updateWebMetaTags(
-        'MovieFlix - Watch & Download Free Movies, TV Series & Official APK (v1.1.8)',
+        'MovieFlix - Watch & Download Free Movies, TV Series & Official APK (v1.1.9)',
         'Stream and download thousands of HD movies, web series, Hindi dubbed blockbusters, and anime in 4K/1080p with zero ads. Download the official MovieFlix Android APK.',
         'https://mws.wallpaperdomain.xyz/assets/og-banner.png',
         'https://mws.wallpaperdomain.xyz/'
       );
     }
   }, [isDownloadPageOpen, isPricingPageOpen, isPrivacyPageOpen, is404PageOpen, mainTab, detailMovie]);
+
+  // 1b. Enforce canonical domain redirect for deprecated domains (e.g. movieflix-pi-six.vercel.app)
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined' || !window.location) return;
+    try {
+      const h = (window.location.hostname || '').toLowerCase();
+      if (h === 'movieflix-pi-six.vercel.app' || (h.includes('vercel.app') && !h.includes('wallpaperdomain'))) {
+        const canonicalUrl = 'https://mws.wallpaperdomain.xyz' + window.location.pathname + window.location.search + window.location.hash;
+        window.location.replace(canonicalUrl);
+      }
+    } catch (_) {}
+  }, []);
 
   // 2. Handle Web Browser Back / Forward History (popstate)
   useEffect(() => {

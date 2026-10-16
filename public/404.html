@@ -2,6 +2,17 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
+    <script>
+      (function() {
+        try {
+          var h = (window.location.hostname || '').toLowerCase();
+          if (h === 'movieflix-pi-six.vercel.app' || (h.indexOf('vercel.app') !== -1 && h.indexOf('wallpaperdomain') === -1)) {
+            var target = 'https://mws.wallpaperdomain.xyz' + window.location.pathname + window.location.search + window.location.hash;
+            window.location.replace(target);
+          }
+        } catch (e) {}
+      })();
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>404 - Page Not Found | MovieFlix</title>
     <meta name="robots" content="noindex, follow" />

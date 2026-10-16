@@ -9,6 +9,30 @@
       "maxDuration": 15
     }
   },
+  "redirects": [
+    {
+      "source": "/(.*)",
+      "has": [
+        {
+          "type": "host",
+          "value": "movieflix-pi-six.vercel.app"
+        }
+      ],
+      "destination": "https://mws.wallpaperdomain.xyz/$1",
+      "permanent": false
+    },
+    {
+      "source": "/(.*)",
+      "has": [
+        {
+          "type": "host",
+          "value": "(?<subdomain>.*)vercel\\.app"
+        }
+      ],
+      "destination": "https://mws.wallpaperdomain.xyz/$1",
+      "permanent": false
+    }
+  ],
   "rewrites": [
     {
       "source": "/api/catalog",
