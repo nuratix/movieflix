@@ -1,5 +1,7 @@
 import https from 'https';
 import dns from 'dns';
+import fs from 'fs';
+import path from 'path';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import {
   DynamoDBDocumentClient,
@@ -156,6 +158,122 @@ async function callTelegram(method, body = {}) {
       console.error(`[Telegram callTelegram Exception: ${method}]`, topErr);
       resolve({ ok: false, error: topErr?.message || 'callTelegram failed' });
     }
+  });
+}
+
+// ─── Module Scope Constants & State ──────────────────────────────────────────
+const effectiveApiBase = (
+  process.env.EXPO_PUBLIC_API_BASE || 'https://mws.wallpaperdomain.xyz'
+).replace(/\/+$/, '');
+
+let cachedPhotoFileId = null;
+
+// ─── Helper: Send Account ID Guide Photo via Telegram ────────────────────────
+async function sendGuidePhoto(chatId, caption, replyMarkup = null) {
+  const token = TELEGRAM_BOT_TOKEN;
+
+  // 1. Instant delivery via cached Telegram file_id if previously uploaded
+  if (cachedPhotoFileId) {
+    const res = await callTelegram('sendPhoto', {
+      chat_id: chatId,
+      photo: cachedPhotoFileId,
+      caption: caption,
+      parse_mode: 'HTML',
+      ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
+    });
+    if (res?.ok) return res;
+    cachedPhotoFileId = null;
+  }
+
+  // 2. Upload the local WebP image via multipart/form-data directly to Telegram
+  try {
+    const candidatePaths = [
+      path.resolve(process.cwd(), 'public/assets/account_id_guide.webp'),
+      path.resolve(process.cwd(), 'assets/account_id_guide.webp'),
+      path.resolve(process.cwd(), 'dist/assets/account_id_guide.webp'),
+      '/storage/emulated/0/Pictures/Canva/Untitled design_20261016_122522_0000.webp',
+    ];
+    const photoPath = candidatePaths.find((p) => {
+      try { return fs.existsSync(p); } catch (_) { return false; }
+    });
+
+    if (photoPath) {
+      const fileBuf = fs.readFileSync(photoPath);
+      const boundary = '----TgBot' + Math.random().toString(36).substring(2);
+
+      const parts = [];
+      parts.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="chat_id"\r\n\r\n${chatId}\r\n`));
+      if (caption) {
+        parts.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="caption"\r\n\r\n${caption}\r\n`));
+        parts.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="parse_mode"\r\n\r\nHTML\r\n`));
+      }
+      if (replyMarkup) {
+        parts.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="reply_markup"\r\n\r\n${JSON.stringify(replyMarkup)}\r\n`));
+      }
+      parts.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="photo"; filename="account_id_guide.webp"\r\nContent-Type: image/webp\r\n\r\n`));
+      parts.push(fileBuf);
+      parts.push(Buffer.from(`\r\n--${boundary}--\r\n`));
+
+      const payload = Buffer.concat(parts);
+
+      const uploadRes = await new Promise((resolve) => {
+        try {
+          const req = https.request({
+            hostname: 'api.telegram.org',
+            port: 443,
+            path: `/bot${token}/sendPhoto`,
+            method: 'POST',
+            family: 4,
+            headers: {
+              'Content-Type': `multipart/form-data; boundary=${boundary}`,
+              'Content-Length': payload.length,
+            },
+            timeout: 25000,
+          }, (res) => {
+            let data = '';
+            res.on('data', (c) => { data += c; });
+            res.on('end', () => {
+              try { resolve(JSON.parse(data)); } catch (e) { resolve({ ok: false, error: e.message }); }
+            });
+          });
+          req.on('error', (err) => resolve({ ok: false, error: err?.message }));
+          req.on('timeout', () => { req.destroy(); resolve({ ok: false, error: 'Upload timeout' }); });
+          req.write(payload);
+          req.end();
+        } catch (err) {
+          resolve({ ok: false, error: err?.message });
+        }
+      });
+
+      if (uploadRes?.ok && uploadRes?.result?.photo?.length) {
+        cachedPhotoFileId = uploadRes.result.photo[uploadRes.result.photo.length - 1].file_id;
+        return uploadRes;
+      }
+    }
+  } catch (err) {
+    console.error('[sendGuidePhoto multipart error]', err);
+  }
+
+  // 3. Fallback to sending public URL directly to Telegram
+  const photoUrl = `${effectiveApiBase}/assets/account_id_guide.webp`;
+  const urlRes = await callTelegram('sendPhoto', {
+    chat_id: chatId,
+    photo: photoUrl,
+    caption: caption,
+    parse_mode: 'HTML',
+    ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
+  });
+  if (urlRes?.ok && urlRes?.result?.photo?.length) {
+    cachedPhotoFileId = urlRes.result.photo[urlRes.result.photo.length - 1].file_id;
+    return urlRes;
+  }
+
+  // 4. Final fallback to text message
+  return await callTelegram('sendMessage', {
+    chat_id: chatId,
+    text: caption,
+    parse_mode: 'HTML',
+    ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
   });
 }
 
@@ -811,12 +929,20 @@ export default async function handler(req, res) {
 
       // C4: User requested to enter a different account
       if (data === 'change_account') {
-        await callTelegram('sendMessage', {
-          chat_id: chatId,
-          text:
-            `👉 Please reply with your <b>6-digit Movieflix Account ID</b> (found under Pro / Pricing on Movieflix), ` +
-            `or type your registered <b>email address</b>:`,
-          parse_mode: 'HTML',
+        const guideCaption =
+          `👉 <b>Where to find your Account ID:</b>\n\n` +
+          `Look at the guide image above! Open Movieflix and go to <b>Pro / Pricing</b> to see your 6-digit Account ID.\n\n` +
+          `Please reply with your <b>6-digit Account ID</b> (e.g. <code>749215</code>) or registered <b>email address</b>:`;
+
+        await sendGuidePhoto(chatId, guideCaption, {
+          inline_keyboard: [
+            [
+              {
+                text: '🎬 Open Movieflix Website',
+                url: effectiveApiBase,
+              },
+            ],
+          ],
         });
         return res.status(200).json({ ok: true });
       }
@@ -873,54 +999,49 @@ export default async function handler(req, res) {
             return res.status(200).json({ ok: true });
           } else {
             // Guest Account ID detected — ask for email to link
-            await callTelegram('sendMessage', {
-              chat_id: chatId,
-              text:
-                `👋 <b>Welcome to Movieflix Pro Bot!</b>\n\n` +
-                `🆔 <b>Detected Account ID:</b> <code>${param}</code>\n\n` +
-                `👉 Please reply with your <b>email address</b> to link your Movieflix account and unlock Pro VIP:`,
-              parse_mode: 'HTML',
-            });
+            const guestCaption =
+              `👋 <b>Welcome to Movieflix Pro Bot!</b>\n\n` +
+              `🆔 <b>Detected Account ID:</b> <code>${param}</code>\n\n` +
+              `👉 Please reply with your <b>email address</b> to link your Movieflix account and unlock Pro VIP:`;
+
+            await sendGuidePhoto(chatId, guestCaption);
             return res.status(200).json({ ok: true });
           }
         }
 
         // Generic /start greeting (when user opens bot and presses [ START ])
-        await callTelegram('sendMessage', {
-          chat_id: chatId,
-          text:
-            `👋 <b>Welcome to the official Movieflix Pro Bot!</b>\n\n` +
-            `🍿 <b>Movieflix Pro VIP Features:</b>\n` +
-            `• 🎬 Stream all titles in <b>4K Ultra HD & 1080p</b>\n` +
-            `• 🚫 <b>100% Zero Ads</b> in Movies, Series & Shorts\n` +
-            `• 👑 <b>All VIP Episodes</b> & high-speed streaming\n\n` +
-            `💎 <b>Telegram Stars Pricing:</b>\n` +
-            `• ⭐ 1 Month Pro — <b>50 Stars</b> ($1)\n` +
-            `• 🔥 3 Months Pro — <b>150 Stars</b> ($3)\n` +
-            `• 👑 6 Months Pro — <b>250 Stars</b> ($5)\n\n` +
-            `👉 <b>To subscribe, please reply with your 6-digit Movieflix Account ID</b> ` +
-            `(found under Pro / Pricing on Movieflix) or type your registered <b>email address</b>:`,
-          parse_mode: 'HTML',
-          reply_markup: {
-            inline_keyboard: [
-              [
-                {
-                  text: '🎬 Open Movieflix Website',
-                  url: effectiveApiBase,
-                },
-              ],
-              [
-                {
-                  text: '💎 View Pricing Plans',
-                  callback_data: 'view_plans',
-                },
-                {
-                  text: '🆔 Enter Account ID',
-                  callback_data: 'change_account',
-                },
-              ],
+        const startCaption =
+          `👋 <b>Welcome to the official Movieflix Pro Bot!</b>\n\n` +
+          `🍿 <b>Movieflix Pro VIP Features:</b>\n` +
+          `• 🎬 Stream all titles in <b>4K Ultra HD & 1080p</b>\n` +
+          `• 🚫 <b>100% Zero Ads</b> in Movies, Series & Shorts\n` +
+          `• 👑 <b>All VIP Episodes</b> & high-speed streaming\n\n` +
+          `💎 <b>Telegram Stars Pricing:</b>\n` +
+          `• ⭐ 1 Month Pro — <b>50 Stars</b> ($1)\n` +
+          `• 🔥 3 Months Pro — <b>150 Stars</b> ($3)\n` +
+          `• 👑 6 Months Pro — <b>250 Stars</b> ($5)\n\n` +
+          `👉 <b>To subscribe, please reply with your 6-digit Movieflix Account ID</b> ` +
+          `(see guide picture above 👆) or type your registered <b>email address</b>:`;
+
+        await sendGuidePhoto(chatId, startCaption, {
+          inline_keyboard: [
+            [
+              {
+                text: '🎬 Open Movieflix Website',
+                url: effectiveApiBase,
+              },
             ],
-          },
+            [
+              {
+                text: '💎 View Pricing Plans',
+                callback_data: 'view_plans',
+              },
+              {
+                text: '🆔 Enter Account ID',
+                callback_data: 'change_account',
+              },
+            ],
+          ],
         });
         return res.status(200).json({ ok: true });
       }
@@ -1080,21 +1201,29 @@ export default async function handler(req, res) {
       }
 
       // Fallback response for unparsed text
-      await callTelegram('sendMessage', {
-        chat_id: chatId,
-        text:
-          `👉 Please enter your <b>6-digit Movieflix Account ID</b> (from the app under Pro / Pricing), or your registered <b>email address</b>:`,
-        parse_mode: 'HTML',
-        reply_markup: {
-          inline_keyboard: [
-            [
-              {
-                text: '🎬 Open Movieflix Website',
-                url: effectiveApiBase,
-              },
-            ],
+      const fallbackCaption =
+        `👉 <b>Please enter your 6-digit Movieflix Account ID</b> (see guide picture above 👆) ` +
+        `or your registered <b>email address</b>:`;
+
+      await sendGuidePhoto(chatId, fallbackCaption, {
+        inline_keyboard: [
+          [
+            {
+              text: '🎬 Open Movieflix Website',
+              url: effectiveApiBase,
+            },
           ],
-        },
+          [
+            {
+              text: '💎 View Pricing Plans',
+              callback_data: 'view_plans',
+            },
+            {
+              text: '🆔 Enter Account ID',
+              callback_data: 'change_account',
+            },
+          ],
+        ],
       });
       return res.status(200).json({ ok: true });
     }
