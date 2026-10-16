@@ -61,8 +61,19 @@ export default function PlayerAdOverlay({
     }
   };
 
+  // If video ends, unlock skip immediately so user is never stuck
+  useEffect(() => {
+    if (isVideoEnded) {
+      setRemainingSeconds(0);
+    }
+  }, [isVideoEnded]);
+
   // Countdown timer for Skip button (minimum 30 seconds enforced)
   useEffect(() => {
+    if (isVideoEnded) {
+      setRemainingSeconds(0);
+      return;
+    }
     const rawSkip = Number(ad?.skip_seconds);
     const startSec = !isNaN(rawSkip) && rawSkip > 0 ? Math.max(30, rawSkip) : initialSkipSeconds;
     setRemainingSeconds(startSec);
@@ -79,9 +90,9 @@ export default function PlayerAdOverlay({
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [ad?.skip_seconds, initialSkipSeconds]);
+  }, [ad?.skip_seconds, initialSkipSeconds, isVideoEnded]);
 
-  const canSkip = remainingSeconds <= 0;
+  const canSkip = remainingSeconds <= 0 || isVideoEnded;
 
   // Handle opening destination ad URL
   const handlePressAd = async () => {
@@ -174,6 +185,16 @@ export default function PlayerAdOverlay({
               <Feather name="arrow-left" size={18} color="#FFFFFF" />
             </TouchableOpacity>
           )}
+          {/* VISIT NOW BUTTON IN TOP LEFT CORNER FROM AD STARTING */}
+          <TouchableOpacity
+            style={styles.topVisitNowBtn}
+            onPress={handlePressAd}
+            activeOpacity={0.8}
+          >
+            <Feather name="external-link" size={13} color="#FFFFFF" style={{ marginRight: 5 }} />
+            <Text style={styles.topVisitNowText}>Visit Now</Text>
+          </TouchableOpacity>
+
           <View style={styles.sponsoredBadge}>
             <MaterialIcons name="campaign" size={15} color="#e50914" style={{ marginRight: 6 }} />
             <Text style={styles.sponsoredText}>
@@ -290,6 +311,28 @@ const styles = StyleSheet.create({
     marginRight: 10,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  topVisitNowBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#e50914',
+    paddingHorizontal: 13,
+    paddingVertical: 7,
+    borderRadius: 20,
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: '#ff333f',
+    shadowColor: '#e50914',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.5,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  topVisitNowText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0.4,
   },
   soundBtn: {
     width: 34,

@@ -7433,11 +7433,15 @@ function ReelCustomPlayer({
     // 2. If ad has a video URL, route it through the exact same player instance!
     if (ad.video_url && activePlayer) {
       try {
+        activePlayer.pause();
+      } catch (_) {}
+
+      try {
         const adSrc = buildVideoSource(ad.video_url);
-        if (typeof activePlayer.replaceAsync === 'function') {
-          await activePlayer.replaceAsync(adSrc);
-        } else if (typeof activePlayer.replace === 'function') {
+        if (typeof activePlayer.replace === 'function') {
           activePlayer.replace(adSrc);
+        } else if (typeof activePlayer.replaceAsync === 'function') {
+          activePlayer.replaceAsync(adSrc).catch(console.warn);
         }
         activePlayer.currentTime = 0;
         activePlayer.play();
@@ -7453,7 +7457,7 @@ function ReelCustomPlayer({
   };
 
   // ─── Video Player Ads Handlers & Lifecycle ───
-  const handleSkipAd = useCallback(async () => {
+  const handleSkipAd = useCallback(() => {
     const wasAdVideo = Boolean(activeAdRef.current?.video_url);
     const resumePos = savedMoviePositionRef.current;
 
@@ -7468,21 +7472,40 @@ function ReelCustomPlayer({
     if (!activePlayer) return;
 
     if (wasAdVideo && videoUrl) {
-      // Seamlessly restore the main movie stream and seek back to saved playback position!
+      // 1. Immediately pause the player so ExoPlayer stops decoding the ad video!
+      try {
+        activePlayer.pause();
+      } catch (_) {}
+
+      // 2. Immediately replace source with the movie stream (synchronous / non-blocking)
       try {
         const movieSrc = buildVideoSource(videoUrl);
-        if (typeof activePlayer.replaceAsync === 'function') {
-          await activePlayer.replaceAsync(movieSrc);
-        } else if (typeof activePlayer.replace === 'function') {
+        if (typeof activePlayer.replace === 'function') {
           activePlayer.replace(movieSrc);
+        } else if (typeof activePlayer.replaceAsync === 'function') {
+          activePlayer.replaceAsync(movieSrc).catch(console.warn);
         }
+      } catch (err) {
+        console.warn('[Player] Restore movie stream note:', err?.message);
+      }
+
+      // 3. Immediately seek back to saved movie position and resume movie playback
+      try {
         if (resumePos > 0) {
           activePlayer.currentTime = resumePos;
         }
         activePlayer.play();
-      } catch (err) {
-        console.warn('[Player] Restore movie stream note:', err?.message);
-      }
+      } catch (_) {}
+
+      // Extra tick to ensure player is unpaused and playing movie at saved position
+      setTimeout(() => {
+        try {
+          if (resumePos > 0 && Math.abs(activePlayer.currentTime - resumePos) > 1) {
+            activePlayer.currentTime = resumePos;
+          }
+          activePlayer.play();
+        } catch (_) {}
+      }, 100);
     } else {
       try {
         activePlayer.play();
