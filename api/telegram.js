@@ -469,16 +469,44 @@ export default async function handler(req, res) {
       const sp = msg.successful_payment;
       const chatId = msg.chat.id;
 
+      const rawPayload = String(sp.invoice_payload || '').trim();
       let payloadData = {};
       try {
-        payloadData = JSON.parse(sp.invoice_payload);
+        payloadData = JSON.parse(rawPayload);
       } catch (_) {
-        payloadData = { raw: sp.invoice_payload };
+        payloadData = { raw: rawPayload };
       }
 
-      const planKey = payloadData.planId || '1_month';
+      let orderId = payloadData.orderId || payloadData.o || rawPayload || `mf_ord_tg_${Date.now()}`;
+      let planKey = payloadData.planId || payloadData.p || '1_month';
+      let userCode = payloadData.code || payloadData.c;
+
+      // Also parse format: mf_{code}_{planKey}_{timestamp}
+      if (!userCode && rawPayload.startsWith('mf_')) {
+        const parts = rawPayload.split('_');
+        if (parts.length >= 4) {
+          userCode = parts[1];
+          planKey = `${parts[2]}_${parts[3]}`;
+        }
+      }
+
+      // Check DynamoDB for pending order if needed
+      if (orderId) {
+        try {
+          const ordRes = await ddbDoc.send(
+            new GetCommand({
+              TableName: ORDERS_TABLE,
+              Key: { orderId },
+            })
+          );
+          if (ordRes?.Item) {
+            if (!userCode && ordRes.Item.code) userCode = ordRes.Item.code;
+            if (ordRes.Item.plan) planKey = ordRes.Item.plan;
+          }
+        } catch (_) {}
+      }
+
       const plan = SUBSCRIPTION_PLANS[planKey] || SUBSCRIPTION_PLANS['1_month'];
-      const userCode = payloadData.code;
 
       let user = null;
       if (userCode) {
@@ -487,7 +515,6 @@ export default async function handler(req, res) {
       const targetUserId = (user?.userId || payloadData.userId || payloadData.email || 'telegram_user').toLowerCase().trim();
       const targetEmail = (user?.userEmail || payloadData.email || targetUserId).toLowerCase().trim();
 
-      const orderId = payloadData.orderId || `mf_ord_tg_${Date.now()}`;
       const now = Date.now();
 
       // Check existing subscription to extend if already active
@@ -649,21 +676,59 @@ export default async function handler(req, res) {
         const plan = SUBSCRIPTION_PLANS[planKey] || SUBSCRIPTION_PLANS['1_month'];
         const user = await getUserByCode(code);
 
-        const orderId = `mf_ord_tg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-        const invoicePayload = JSON.stringify({
-          orderId,
-          code,
-          planId: plan.id,
-          userId: user?.userId,
-          email: user?.userEmail,
-        });
+        const orderId = `mf_${code || 'usr'}_${plan.id}_${Date.now()}`;
 
-        // Send Native Telegram Stars Invoice (currency: 'XTR', provider_token: '')
-        await callTelegram('sendInvoice', {
+        // 1. Save pending order in DynamoDB first
+        try {
+          await ddbDoc.send(
+            new PutCommand({
+              TableName: ORDERS_TABLE,
+              Item: {
+                orderId,
+                code: String(code || ''),
+                plan: plan.id,
+                planName: plan.name,
+                amount: plan.price,
+                stars: plan.stars,
+                currency: 'XTR',
+                userId: user?.userId || `guest_${code}`,
+                userEmail: user?.userEmail || '',
+                status: 'pending_payment',
+                chatId: String(chatId),
+                createdAt: new Date().toISOString(),
+              },
+            })
+          );
+        } catch (e) {
+          console.error('[Save Pending Order Error]', e);
+        }
+
+        // 2. Generate direct invoice link via createInvoiceLink
+        let invoiceUrl = '';
+        try {
+          const linkRes = await callTelegram('createInvoiceLink', {
+            title: `Movieflix Pro: ${plan.name}`.substring(0, 32),
+            description: `Unlock 4K Streaming & Zero Ads on Movieflix for ${plan.durationDays} days.`,
+            payload: orderId, // Strictly <= 128 bytes
+            currency: 'XTR',
+            prices: [
+              {
+                label: `${plan.name} (${plan.durationDays} Days)`,
+                amount: plan.stars,
+              },
+            ],
+          });
+          if (linkRes?.ok && linkRes?.result) {
+            invoiceUrl = linkRes.result;
+          }
+        } catch (_) {}
+
+        // 3. Send Native Telegram Stars Invoice (currency: 'XTR', provider_token: '')
+        const invoiceRes = await callTelegram('sendInvoice', {
           chat_id: chatId,
-          title: `Movieflix Pro: ${plan.name}`,
+          title: `Movieflix Pro: ${plan.name}`.substring(0, 32),
           description: `Unlock 4K Streaming & Zero Ads on Movieflix for ${plan.durationDays} days.`,
-          payload: invoicePayload,
+          payload: orderId, // Strictly <= 128 bytes
           provider_token: '', // MUST be empty for Telegram Stars!
           currency: 'XTR',    // Telegram Stars currency
           prices: [
@@ -673,6 +738,37 @@ export default async function handler(req, res) {
             },
           ],
         });
+
+        // 4. Send direct payment button message if available or as backup
+        if (invoiceUrl) {
+          await callTelegram('sendMessage', {
+            chat_id: chatId,
+            text:
+              `⭐️ <b>Movieflix Pro: ${plan.name}</b>\n\n` +
+              `• <b>Price:</b> ⭐️ <b>${plan.stars} Telegram Stars</b> (~$${plan.price} USD)\n` +
+              `• <b>Account:</b> <code>${user?.userEmail || code}</code>\n` +
+              `• <b>Duration:</b> ${plan.durationDays} Days\n\n` +
+              `👇 Tap the button below to pay with Telegram Stars:`,
+            parse_mode: 'HTML',
+            reply_markup: {
+              inline_keyboard: [
+                [
+                  {
+                    text: `⭐️ Pay ${plan.stars} Stars Now`,
+                    url: invoiceUrl,
+                  },
+                ],
+                [
+                  {
+                    text: '🔄 Choose Different Plan',
+                    callback_data: `confirm_yes:${code}`,
+                  },
+                ],
+              ],
+            },
+          });
+        }
+
         return res.status(200).json({ ok: true });
       }
 
