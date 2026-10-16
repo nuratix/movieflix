@@ -10,10 +10,11 @@ import {
   Platform,
   Linking,
 } from 'react-native';
-import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Feather, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
-  createSubscriptionInvoice,
+  fetchTelegramUserCode,
+  getTelegramBotUrl,
   simulateSandboxPayment,
   formatExpirationDate,
 } from '../subscriptionService';
@@ -30,17 +31,24 @@ export default function SubscriptionModal({
   const [selectedPlan, setSelectedPlan] = useState('3_months'); // default to most popular
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
-  const [pendingOrder, setPendingOrder] = useState(null);
+  const [userCode, setUserCode] = useState(null);
+  const [copiedCode, setCopiedCode] = useState(false);
   const [simulating, setSimulating] = useState(false);
   const [successInfo, setSuccessInfo] = useState(null);
 
   useEffect(() => {
     if (visible) {
       setErrorMessage('');
-      setPendingOrder(null);
       setSuccessInfo(null);
+      if (authAccessToken || authUser?.email) {
+        fetchTelegramUserCode(authAccessToken, authUser?.email)
+          .then((d) => {
+            if (d?.code) setUserCode(d.code);
+          })
+          .catch((e) => console.warn('Modal code fetch note:', e.message));
+      }
     }
-  }, [visible]);
+  }, [visible, authAccessToken, authUser?.email]);
 
   const isPremium = Boolean(subscriptionStatus?.is_premium);
   const daysLeft = subscriptionStatus?.days_left || 0;
@@ -51,36 +59,47 @@ export default function SubscriptionModal({
       id: '1_month',
       name: '1 Month',
       price: '$1',
+      stars: 50,
       unit: '/ 30 days',
       badge: 'Starter',
-      badgeBg: 'rgba(255, 255, 255, 0.1)',
-      desc: '30 days completely ad-free streaming & downloads.',
+      desc: '30 days 4K Ultra HD & zero ads (50 Stars)',
       highlight: false,
     },
     {
       id: '3_months',
       name: '3 Months',
       price: '$3',
+      stars: 150,
       unit: '/ 90 days',
       badge: 'Most Popular',
-      badgeBg: 'linear-gradient(135deg, #e50914, #b91c1c)',
-      desc: '90 days ad-free uninterrupted PRO access.',
+      desc: '90 days 4K Ultra HD & zero ads (150 Stars)',
       highlight: true,
     },
     {
       id: '6_months',
       name: '6 Months',
       price: '$5',
+      stars: 250,
       unit: '/ 180 days',
       badge: 'Save 17%',
-      badgeBg: 'linear-gradient(135deg, #10b981, #059669)',
-      desc: 'Best value! 180 days of premium ad-free cinema.',
+      desc: '180 days best value VIP cinema (250 Stars)',
       highlight: false,
     },
   ];
 
+  const handleCopyCode = async () => {
+    if (!userCode) return;
+    try {
+      if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.clipboard) {
+        await navigator.clipboard.writeText(userCode);
+      }
+    } catch (_) {}
+    setCopiedCode(true);
+    setTimeout(() => setCopiedCode(false), 2200);
+  };
+
   const handleSubscribe = async () => {
-    if (!authUser || !authAccessToken) {
+    if (!authUser && !authAccessToken) {
       onClose();
       if (typeof onOpenAuth === 'function') {
         onOpenAuth('login');
@@ -91,36 +110,32 @@ export default function SubscriptionModal({
     setLoading(true);
     setErrorMessage('');
     try {
-      const result = await createSubscriptionInvoice(selectedPlan, authAccessToken, {
-        userEmail: authUser?.email,
-      });
-      setPendingOrder(result);
-
-      if (result.invoiceUrl) {
-        if (Platform.OS === 'web' && typeof window !== 'undefined') {
-          // Redirect directly to NOWPayments hosted checkout website
-          window.location.href = result.invoiceUrl;
-        } else {
-          Linking.openURL(result.invoiceUrl).catch(() => {});
-        }
+      const botUrl = getTelegramBotUrl(userCode);
+      if (Platform.OS === 'web' && typeof window !== 'undefined') {
+        window.open(botUrl, '_blank');
+      } else {
+        await Linking.openURL(botUrl);
       }
     } catch (err) {
-      setErrorMessage(err.message || 'Failed to create payment invoice.');
+      setErrorMessage(err.message || 'Could not open Telegram bot.');
     } finally {
       setLoading(false);
     }
   };
 
   const handleSimulatePayment = async () => {
-    if (!pendingOrder?.orderId) return;
     setSimulating(true);
     setErrorMessage('');
     try {
-      const res = await simulateSandboxPayment(pendingOrder.orderId, authAccessToken);
+      const res = await simulateSandboxPayment(`mf_ord_sim_${Date.now()}`, authAccessToken);
       setSuccessInfo(res);
-      setPendingOrder(null);
       if (typeof onSubscriptionUpdated === 'function') {
-        onSubscriptionUpdated();
+        onSubscriptionUpdated({
+          is_premium: true,
+          plan_name: 'Movieflix Pro',
+          expires_at: res.expiresAt,
+          days_left: 30,
+        });
       }
     } catch (err) {
       setErrorMessage(err.message || 'Sandbox simulation failed.');
@@ -158,67 +173,64 @@ export default function SubscriptionModal({
               <MaterialCommunityIcons name="crown" size={32} color="#e50914" />
             </View>
 
-            <Text style={styles.title}>
-              {isPremium ? 'Extend Ad-Free PRO' : 'Upgrade to Ad-Free PRO'}
-            </Text>
-            <Text style={styles.subtitle}>
-              Enjoy movies, series & shorts with zero ads and instant playback.
+            <Text style={styles.modalTitle}>Movieflix Pro</Text>
+            <Text style={styles.modalSubtitle}>
+              Stream 4K Ultra HD · 100% Zero Ads · VIP Episodes
             </Text>
 
             {isPremium && (
-              <View style={styles.activePill}>
+              <View style={styles.activeBanner}>
                 <Feather name="check-circle" size={14} color="#10b981" />
-                <Text style={styles.activePillText}>
-                  Active until {expiresAtFormatted} ({daysLeft} days left)
+                <Text style={styles.activeBannerText}>
+                  Active · {daysLeft} days left (until {expiresAtFormatted})
                 </Text>
               </View>
             )}
           </LinearGradient>
 
           <ScrollView style={styles.bodyScroll} contentContainerStyle={styles.bodyContent}>
-            {/* Feature List */}
-            <View style={styles.featuresList}>
-              <View style={styles.featureItem}>
-                <Feather name="slash" size={15} color="#ef4444" style={styles.featureIcon} />
-                <Text style={styles.featureText}>No pre-roll, mid-roll, or player ads</Text>
-              </View>
-              <View style={styles.featureItem}>
-                <Feather name="zap" size={15} color="#e50914" style={styles.featureIcon} />
-                <Text style={styles.featureText}>Zero shorts feed ads & instant playback</Text>
-              </View>
-              <View style={styles.featureItem}>
-                <Feather name="shield" size={15} color="#3b82f6" style={styles.featureIcon} />
-                <Text style={styles.featureText}>One-time manual payment. No auto-debit renewals</Text>
-              </View>
-              <View style={styles.featureItem}>
-                <MaterialCommunityIcons name="bitcoin" size={16} color="#f97316" style={styles.featureIcon} />
-                <Text style={styles.featureText}>Pay with BTC, USDT, ETH, SOL, LTC, etc.</Text>
-              </View>
-            </View>
-
-            {/* Error Message */}
-            {Boolean(errorMessage) && (
-              <View style={styles.errorBox}>
-                <Feather name="alert-triangle" size={16} color="#f87171" />
-                <Text style={styles.errorText}>{errorMessage}</Text>
-              </View>
-            )}
-
-            {/* Success Celebration */}
-            {Boolean(successInfo) && (
-              <View style={styles.successBox}>
-                <Feather name="check-circle" size={24} color="#10b981" />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.successTitle}>PRO Activated Successfully!</Text>
-                  <Text style={styles.successDesc}>
-                    Your ad-free status is now active until {formatExpirationDate(successInfo.expiresAt)}.
+            {/* Account ID Link Box */}
+            {authUser && (
+              <View style={styles.accountBox}>
+                <View style={styles.accountBoxTop}>
+                  <Text style={styles.accountBoxLabel}>YOUR 6-DIGIT ACCOUNT ID</Text>
+                  <Text style={styles.accountBoxEmail}>{authUser.email}</Text>
+                </View>
+                <View style={styles.accountCodeRow}>
+                  <Text style={styles.codeDigits}>
+                    {userCode ? userCode.split('').join('  ') : '— — — — — —'}
                   </Text>
+                  <TouchableOpacity
+                    style={[styles.copyBtn, copiedCode && styles.copyBtnSuccess]}
+                    onPress={handleCopyCode}
+                    disabled={!userCode}
+                  >
+                    <Feather name={copiedCode ? 'check' : 'copy'} size={14} color="#fff" />
+                    <Text style={styles.copyBtnText}>{copiedCode ? 'Copied' : 'Copy'}</Text>
+                  </TouchableOpacity>
                 </View>
               </View>
             )}
 
-            {/* Plan Selector */}
-            <Text style={styles.sectionHeader}>SELECT YOUR DURATION</Text>
+            {/* Error Message */}
+            {errorMessage ? (
+              <View style={styles.errorBox}>
+                <Feather name="alert-triangle" size={15} color="#ef4444" />
+                <Text style={styles.errorText}>{errorMessage}</Text>
+              </View>
+            ) : null}
+
+            {/* Success Message */}
+            {successInfo ? (
+              <View style={styles.successBox}>
+                <Feather name="check-circle" size={16} color="#10b981" />
+                <Text style={styles.successText}>
+                  🎉 Movieflix Pro activated successfully!
+                </Text>
+              </View>
+            ) : null}
+
+            {/* Plans List */}
             <View style={styles.plansContainer}>
               {plans.map((p) => {
                 const isSelected = selectedPlan === p.id;
@@ -233,83 +245,46 @@ export default function SubscriptionModal({
                     onPress={() => setSelectedPlan(p.id)}
                     activeOpacity={0.8}
                   >
-                    <View style={styles.planHeader}>
-                      <View style={{ flex: 1 }}>
-                        <Text style={[styles.planName, isSelected && styles.planNameSelected]}>
-                          {p.name}
-                        </Text>
-                        <Text style={styles.planDesc}>{p.desc}</Text>
-                      </View>
-                      <View style={styles.priceWrap}>
-                        <Text style={styles.planPrice}>{p.price}</Text>
-                        <Text style={styles.planUnit}>{p.unit}</Text>
-                      </View>
-                    </View>
-
-                    <View style={styles.planFooter}>
-                      <View
-                        style={[
-                          styles.badge,
-                          p.id === '3_months'
-                            ? { backgroundColor: '#b91c1c' }
-                            : p.id === '6_months'
-                            ? { backgroundColor: '#059669' }
-                            : { backgroundColor: '#374151' },
-                        ]}
-                      >
-                        <Text style={styles.badgeText}>{p.badge}</Text>
+                    <View style={styles.planCardTop}>
+                      <View style={styles.planRadioRow}>
+                        <View style={[styles.radioCircle, isSelected && styles.radioCircleActive]}>
+                          {isSelected && <View style={styles.radioInner} />}
+                        </View>
+                        <Text style={styles.planName}>{p.name}</Text>
+                        <View style={styles.planBadge}>
+                          <Text style={styles.planBadgeText}>{p.badge}</Text>
+                        </View>
                       </View>
 
-                      <View
-                        style={[
-                          styles.radioCircle,
-                          isSelected && styles.radioCircleSelected,
-                        ]}
-                      >
-                        {isSelected && <View style={styles.radioDot} />}
+                      <View style={styles.starsWrap}>
+                        <Text style={styles.starsText}>⭐️ {p.stars} Stars</Text>
+                        <Text style={styles.starsSub}>({p.price} USD)</Text>
                       </View>
                     </View>
+                    <Text style={styles.planDesc}>{p.desc}</Text>
                   </TouchableOpacity>
                 );
               })}
             </View>
 
-            {/* Pending Order / Sandbox Simulation Box */}
-            {pendingOrder && (
-              <View style={styles.pendingBox}>
-                <View style={styles.pendingHeader}>
-                  <Feather name="clock" size={16} color="#e50914" />
-                  <Text style={styles.pendingTitle}>Invoice Generated: {pendingOrder.orderId}</Text>
-                </View>
-                <Text style={styles.pendingNotice}>
-                  Complete payment in the NOWPayments window, or click below to simulate an immediate verified webhook confirmation in Sandbox:
-                </Text>
-
-                <TouchableOpacity
-                  style={styles.sandboxSimulateBtn}
-                  onPress={handleSimulatePayment}
-                  disabled={simulating}
-                  activeOpacity={0.85}
-                >
-                  {simulating ? (
-                    <ActivityIndicator size="small" color="#000" />
-                  ) : (
-                    <>
-                      <Feather name="zap" size={16} color="#000" />
-                      <Text style={styles.sandboxSimulateBtnText}>
-                        Simulate Instant Sandbox Payment
-                      </Text>
-                    </>
-                  )}
-                </TouchableOpacity>
-              </View>
-            )}
-
-            {/* Crypto Badges */}
-            <View style={styles.cryptoRow}>
-              <Text style={styles.cryptoLabel}>Accepted via NOWPayments:</Text>
-              <Text style={styles.cryptoCoins}>USDT · BTC · ETH · SOL · LTC · TRX · DOGE</Text>
-            </View>
+            {/* Sandbox Simulation Button */}
+            <TouchableOpacity
+              style={styles.sandboxBtn}
+              onPress={handleSimulatePayment}
+              disabled={simulating}
+              activeOpacity={0.85}
+            >
+              {simulating ? (
+                <ActivityIndicator size="small" color="#10b981" />
+              ) : (
+                <>
+                  <Feather name="zap" size={14} color="#10b981" />
+                  <Text style={styles.sandboxBtnText}>
+                    Free Instant Test ($0.00 Sandbox)
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
           </ScrollView>
 
           {/* Action Footer */}
@@ -328,18 +303,18 @@ export default function SubscriptionModal({
               </TouchableOpacity>
             ) : (
               <TouchableOpacity
-                style={[styles.actionBtn, loading && styles.actionBtnDisabled]}
+                style={[styles.telegramBtn, loading && styles.actionBtnDisabled]}
                 onPress={handleSubscribe}
                 disabled={loading}
                 activeOpacity={0.85}
               >
                 {loading ? (
-                  <ActivityIndicator size="small" color="#000" />
+                  <ActivityIndicator size="small" color="#fff" />
                 ) : (
                   <>
-                    <MaterialCommunityIcons name="lightning-bolt" size={18} color="#000" />
-                    <Text style={styles.actionBtnText}>
-                      {isPremium ? 'Extend Ad-Free PRO' : 'Continue to Crypto Payment'}
+                    <FontAwesome5 name="telegram-plane" size={18} color="#fff" style={{ marginRight: 8 }} />
+                    <Text style={styles.telegramBtnText}>
+                      Pay with Telegram Stars ⭐️
                     </Text>
                   </>
                 )}
@@ -369,11 +344,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.1)',
     overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 16 },
-    shadowOpacity: 0.6,
-    shadowRadius: 30,
-    elevation: 20,
   },
   headerGradient: {
     paddingTop: 24,
@@ -400,293 +370,259 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: 'rgba(245, 158, 11, 0.15)',
-    borderWidth: 1,
-    borderColor: 'rgba(245, 158, 11, 0.35)',
+    backgroundColor: 'rgba(229, 9, 20, 0.12)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 10,
   },
-  title: {
-    color: '#ffffff',
-    fontSize: 20,
+  modalTitle: {
+    fontSize: 22,
     fontWeight: '800',
-    letterSpacing: 0.3,
-    textAlign: 'center',
-    marginBottom: 6,
+    color: '#fff',
+    letterSpacing: -0.3,
   },
-  subtitle: {
-    color: '#a8a29e',
+  modalSubtitle: {
     fontSize: 13,
+    color: '#a8a29e',
+    marginTop: 4,
     textAlign: 'center',
-    lineHeight: 18,
-    paddingHorizontal: 12,
   },
-  activePill: {
+  activeBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    backgroundColor: 'rgba(16, 185, 129, 0.15)',
-    borderColor: 'rgba(16, 185, 129, 0.35)',
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingVertical: 5,
+    backgroundColor: 'rgba(16, 185, 129, 0.12)',
+    paddingVertical: 4,
     paddingHorizontal: 10,
-    marginTop: 12,
+    borderRadius: 12,
+    marginTop: 10,
+    gap: 6,
   },
-  activePillText: {
-    color: '#10b981',
+  activeBannerText: {
     fontSize: 12,
-    fontWeight: '700',
+    color: '#10b981',
+    fontWeight: '600',
   },
   bodyScroll: {
-    flexGrow: 1,
+    maxHeight: 460,
   },
   bodyContent: {
     padding: 20,
   },
-  featuresList: {
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
-    borderRadius: 14,
+  accountBox: {
+    backgroundColor: 'rgba(229, 9, 20, 0.08)',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.06)',
-    padding: 14,
-    marginBottom: 18,
-    gap: 10,
+    borderColor: 'rgba(229, 9, 20, 0.3)',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
   },
-  featureItem: {
+  accountBoxTop: {
+    marginBottom: 6,
+  },
+  accountBoxLabel: {
+    color: '#a3a3a3',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.6,
+  },
+  accountBoxEmail: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  accountCodeRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    justifyContent: 'space-between',
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
   },
-  featureIcon: {
-    width: 18,
+  codeDigits: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '900',
+    letterSpacing: 3,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
   },
-  featureText: {
-    color: '#d6d3d1',
-    fontSize: 13,
-    fontWeight: '500',
+  copyBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#e50914',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+    gap: 4,
+  },
+  copyBtnSuccess: {
+    backgroundColor: '#10b981',
+  },
+  copyBtnText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  errorBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(239, 68, 68, 0.12)',
+    padding: 10,
+    borderRadius: 8,
+    marginBottom: 12,
+    gap: 8,
+  },
+  errorText: {
+    color: '#ef4444',
+    fontSize: 12,
     flex: 1,
   },
-  sectionHeader: {
-    color: '#78716c',
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 1,
-    marginBottom: 10,
+  successBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(16, 185, 129, 0.12)',
+    padding: 10,
+    borderRadius: 8,
+    marginBottom: 12,
+    gap: 8,
+  },
+  successText: {
+    color: '#10b981',
+    fontSize: 12,
+    fontWeight: '600',
+    flex: 1,
   },
   plansContainer: {
     gap: 10,
-    marginBottom: 16,
+    marginBottom: 14,
   },
   planCard: {
     backgroundColor: '#1c1917',
-    borderRadius: 14,
+    borderRadius: 12,
     borderWidth: 1.5,
     borderColor: 'rgba(255, 255, 255, 0.08)',
     padding: 14,
   },
   planCardSelected: {
     borderColor: '#e50914',
-    backgroundColor: 'rgba(245, 158, 11, 0.06)',
+    backgroundColor: 'rgba(229, 9, 20, 0.04)',
   },
   planCardHighlight: {
-    borderLeftWidth: 4,
-    borderLeftColor: '#e50914',
+    borderColor: 'rgba(229, 9, 20, 0.4)',
   },
-  planHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 10,
-  },
-  planName: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '700',
-    marginBottom: 2,
-  },
-  planNameSelected: {
-    color: '#e50914',
-  },
-  planDesc: {
-    color: '#a8a29e',
-    fontSize: 12,
-    lineHeight: 16,
-  },
-  priceWrap: {
-    alignItems: 'flex-end',
-    marginLeft: 8,
-  },
-  planPrice: {
-    color: '#ffffff',
-    fontSize: 20,
-    fontWeight: '800',
-  },
-  planUnit: {
-    color: '#78716c',
-    fontSize: 10,
-    fontWeight: '600',
-  },
-  planFooter: {
+  planCardTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.06)',
-  },
-  badge: {
-    paddingVertical: 3,
-    paddingHorizontal: 8,
-    borderRadius: 6,
-  },
-  badgeText: {
-    color: '#ffffff',
-    fontSize: 10,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  radioCircle: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    borderWidth: 2,
-    borderColor: '#57534e',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  radioCircleSelected: {
-    borderColor: '#e50914',
-  },
-  radioDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#e50914',
-  },
-  errorBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: 'rgba(239, 68, 68, 0.12)',
-    borderWidth: 1,
-    borderColor: 'rgba(239, 68, 68, 0.3)',
-    borderRadius: 10,
-    padding: 10,
-    marginBottom: 14,
-  },
-  errorText: {
-    color: '#f87171',
-    fontSize: 12,
-    fontWeight: '600',
-    flex: 1,
-  },
-  successBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: 'rgba(16, 185, 129, 0.15)',
-    borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.35)',
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 16,
-  },
-  successTitle: {
-    color: '#10b981',
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  successDesc: {
-    color: '#d1fae5',
-    fontSize: 12,
-    marginTop: 2,
-  },
-  pendingBox: {
-    backgroundColor: 'rgba(245, 158, 11, 0.08)',
-    borderWidth: 1,
-    borderColor: 'rgba(245, 158, 11, 0.3)',
-    borderRadius: 14,
-    padding: 14,
-    marginBottom: 16,
-  },
-  pendingHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
     marginBottom: 6,
   },
-  pendingTitle: {
-    color: '#e50914',
-    fontSize: 12,
+  planRadioRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  radioCircle: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 2,
+    borderColor: '#78716c',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  radioCircleActive: {
+    borderColor: '#e50914',
+  },
+  radioInner: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#e50914',
+  },
+  planName: {
+    fontSize: 15,
     fontWeight: '700',
+    color: '#fff',
   },
-  pendingNotice: {
-    color: '#d6d3d1',
+  planBadge: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  planBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#e50914',
+  },
+  starsWrap: {
+    alignItems: 'flex-end',
+  },
+  starsText: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#FBBF24',
+  },
+  starsSub: {
     fontSize: 11,
-    lineHeight: 16,
-    marginBottom: 10,
+    color: '#a8a29e',
   },
-  sandboxSimulateBtn: {
+  planDesc: {
+    fontSize: 12,
+    color: '#a8a29e',
+    marginLeft: 28,
+  },
+  sandboxBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    backgroundColor: '#e50914',
-    borderRadius: 10,
     paddingVertical: 10,
-    paddingHorizontal: 14,
+    borderRadius: 8,
+    backgroundColor: 'rgba(16, 185, 129, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.25)',
+    gap: 6,
+    marginBottom: 4,
   },
-  sandboxSimulateBtnText: {
-    color: '#000000',
-    fontSize: 13,
-    fontWeight: '800',
-  },
-  cryptoRow: {
-    alignItems: 'center',
-    paddingVertical: 4,
-  },
-  cryptoLabel: {
-    color: '#78716c',
-    fontSize: 11,
-    fontWeight: '600',
-    marginBottom: 3,
-  },
-  cryptoCoins: {
-    color: '#a8a29e',
-    fontSize: 11,
+  sandboxBtnText: {
+    color: '#10b981',
+    fontSize: 12,
     fontWeight: '700',
-    letterSpacing: 0.5,
   },
   footer: {
     padding: 16,
     borderTopWidth: 1,
     borderTopColor: 'rgba(255, 255, 255, 0.08)',
-    backgroundColor: '#171412',
+    backgroundColor: '#0c0a09',
   },
   actionBtn: {
+    backgroundColor: '#fff',
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    backgroundColor: '#e50914',
+    alignItems: 'center',
+    paddingVertical: 14,
     borderRadius: 12,
-    paddingVertical: 13,
-    shadowColor: '#e50914',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 10,
-    elevation: 4,
+    gap: 8,
   },
   actionBtnDisabled: {
     opacity: 0.6,
   },
   actionBtnText: {
-    color: '#000000',
+    color: '#000',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  telegramBtn: {
+    backgroundColor: '#2AABEE',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 14,
+    borderRadius: 12,
+  },
+  telegramBtnText: {
+    color: '#fff',
     fontSize: 14,
     fontWeight: '800',
-    letterSpacing: 0.3,
   },
 });

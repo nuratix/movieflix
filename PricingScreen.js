@@ -10,11 +10,12 @@ import {
   ActivityIndicator,
   Linking,
 } from 'react-native';
-import { Feather, MaterialIcons, Ionicons } from '@expo/vector-icons';
+import { Feather, MaterialIcons, Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   fetchSubscriptionPlans,
-  createSubscriptionInvoice,
+  fetchTelegramUserCode,
+  getTelegramBotUrl,
   simulateSandboxPayment,
   formatExpirationDate,
 } from './subscriptionService';
@@ -36,7 +37,9 @@ export default function PricingScreen({
   const [plans, setPlans] = useState([]);
   const [selectedPlanId, setSelectedPlanId] = useState('3_months'); // Default to Most Popular
   const [loadingPlans, setLoadingPlans] = useState(true);
-  const [loadingPay, setLoadingPay] = useState(false);
+  const [loadingCode, setLoadingCode] = useState(false);
+  const [userCode, setUserCode] = useState(null);
+  const [copiedCode, setCopiedCode] = useState(false);
   const [simulating, setSimulating] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
@@ -44,6 +47,7 @@ export default function PricingScreen({
   const isPremium = Boolean(subscriptionStatus?.is_premium);
   const daysLeft = subscriptionStatus?.days_left || 0;
 
+  // 1. Load Subscription Plans
   useEffect(() => {
     let isCancelled = false;
     async function loadPlans() {
@@ -62,71 +66,92 @@ export default function PricingScreen({
     return () => { isCancelled = true; };
   }, []);
 
-  const handleCheckout = async () => {
+  // 2. Fetch or Generate 6-Digit User Account ID
+  useEffect(() => {
+    let isCancelled = false;
+    async function loadUserCode() {
+      if (!authAccessToken && !authUser?.email) {
+        setUserCode(null);
+        return;
+      }
+      setLoadingCode(true);
+      try {
+        const data = await fetchTelegramUserCode(authAccessToken, authUser?.email);
+        if (!isCancelled && data?.code) {
+          setUserCode(data.code);
+        }
+      } catch (err) {
+        console.warn('Failed to fetch user telegram code:', err?.message);
+      } finally {
+        if (!isCancelled) setLoadingCode(false);
+      }
+    }
+    loadUserCode();
+    return () => { isCancelled = true; };
+  }, [authAccessToken, authUser?.email]);
+
+  // Copy 6-digit Code to Clipboard
+  const handleCopyCode = async () => {
+    if (!userCode) return;
+    try {
+      if (isWeb && typeof navigator !== 'undefined' && navigator.clipboard) {
+        await navigator.clipboard.writeText(userCode);
+      }
+    } catch (_) {}
+    setCopiedCode(true);
+    setTimeout(() => setCopiedCode(false), 2200);
+  };
+
+  // Launch Telegram Stars Bot
+  const handleSubscribeViaTelegram = async () => {
     setErrorMessage('');
     setSuccessMessage('');
 
-    if (!authUser || !authAccessToken) {
+    if (!authUser && !authAccessToken) {
       if (onOpenAuth) {
         onOpenAuth('login');
       } else {
-        setErrorMessage('Please sign in or create an account to activate Movieflix Pro.');
+        setErrorMessage('Please sign in first so your 6-digit Account ID is linked.');
       }
       return;
     }
 
-    setLoadingPay(true);
+    const botUrl = getTelegramBotUrl(userCode);
     try {
-      const res = await createSubscriptionInvoice(selectedPlanId, authAccessToken, {
-        userEmail: authUser?.email,
-      });
-      if (res.invoiceUrl) {
-        setSuccessMessage('Redirecting to NOWPayments hosted checkout...');
-        if (isWeb && typeof window !== 'undefined') {
-          window.location.href = res.invoiceUrl;
-        } else {
-          await Linking.openURL(res.invoiceUrl);
-        }
+      if (isWeb && typeof window !== 'undefined') {
+        window.open(botUrl, '_blank');
       } else {
-        setErrorMessage(res.error || 'Failed to generate crypto payment invoice.');
+        const supported = await Linking.canOpenURL(botUrl);
+        if (supported) {
+          await Linking.openURL(botUrl);
+        } else {
+          await Linking.openURL(`https://t.me/movieflix_pro_bot?start=${userCode || ''}`);
+        }
       }
+      setSuccessMessage('Opening @movieflix_pro_bot in Telegram to complete payment...');
     } catch (err) {
-      setErrorMessage(err.message || 'Payment initiation failed. Please check network.');
-    } finally {
-      setLoadingPay(false);
+      setErrorMessage('Could not open Telegram. Search for @movieflix_pro_bot and send your ID: ' + (userCode || ''));
     }
   };
 
+  // Sandbox Test Payment ($0.00 Free Instant Test)
   const handleSimulateSandboxPayment = async () => {
     setErrorMessage('');
     setSuccessMessage('');
     setSimulating(true);
     try {
       const userMail = (authUser?.email || 'sandbox_test_user@movieflix.lol').toLowerCase().trim();
-      const res = await fetch(`${API_BASE}/api/subscription?action=sandbox_simulate`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(authAccessToken ? { Authorization: `Bearer ${authAccessToken}` } : {}),
-        },
-        body: JSON.stringify({
-          planId: selectedPlanId,
-          userId: userMail,
-          userEmail: userMail,
-        }),
-      });
-
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Failed to simulate payment in sandbox.');
-      }
+      const res = await simulateSandboxPayment(
+        `mf_sim_${Date.now()}`,
+        authAccessToken
+      );
 
       setSuccessMessage('✓ Sandbox test payment successful ($0.00)! Movieflix Pro has been activated on your account.');
       if (typeof onSubscriptionUpdated === 'function') {
         onSubscriptionUpdated({
           is_premium: true,
-          plan_name: data.planName || 'Movieflix Pro',
-          expires_at: data.expiresAt || new Date(Date.now() + 30 * 86400000).toISOString(),
+          plan_name: res.planName || 'Movieflix Pro',
+          expires_at: res.expiresAt || new Date(Date.now() + 30 * 86400000).toISOString(),
           days_left: 30,
         });
       }
@@ -142,32 +167,32 @@ export default function PricingScreen({
       id: '1_month',
       name: '1 Month Pro',
       price: 1.0,
+      stars: 50,
       currency: 'USD',
       durationDays: 30,
       badge: 'STARTER',
-      description: 'Stream 4K & zero ads for 30 days',
-      period: '/ 1 month',
+      description: 'Stream 4K & zero ads for 30 days (50 Stars)',
     },
     {
       id: '3_months',
       name: '3 Months Pro',
       price: 3.0,
+      stars: 150,
       currency: 'USD',
       durationDays: 90,
       badge: 'MOST POPULAR',
       isPopular: true,
-      description: 'Stream 4K & zero ads for 90 days',
-      period: '/ 3 months',
+      description: 'Stream 4K & zero ads for 90 days (150 Stars)',
     },
     {
       id: '6_months',
       name: '6 Months Pro',
       price: 5.0,
+      stars: 250,
       currency: 'USD',
       durationDays: 180,
       badge: 'BEST VALUE · SAVE 17%',
-      description: 'Stream 4K & zero ads for 180 days',
-      period: '/ 6 months',
+      description: 'Stream 4K & zero ads for 180 days (250 Stars)',
     },
   ];
 
@@ -214,13 +239,13 @@ export default function PricingScreen({
         <View style={styles.heroSection}>
           <View style={styles.heroBadge}>
             <MaterialIcons name="workspace-premium" size={16} color="#e50914" />
-            <Text style={styles.heroBadgeText}>MOVIEFLIX PREMIUM MEMBERSHIP</Text>
+            <Text style={styles.heroBadgeText}>MOVIEFLIX PRO MEMBERSHIP</Text>
           </View>
           <Text style={styles.heroHeadline}>
             Stream in <Text style={styles.heroHighlight}>4K Ultra HD</Text> with Zero Ads
           </Text>
           <Text style={styles.heroSubheadline}>
-            Unlock 1080p & 4K quality, bypass all ads in movies & shorts, and get access to all premium episodes.
+            Unlock crisp 1080p & 4K quality, bypass all ads in movies & shorts, and get instant access to all premium episodes.
           </Text>
         </View>
 
@@ -242,9 +267,71 @@ export default function PricingScreen({
           </View>
         )}
 
+        {/* ─── USER 6-DIGIT ACCOUNT ID LINK CARD ─── */}
+        <View style={styles.accountCard}>
+          <View style={styles.accountCardHeader}>
+            <View style={styles.accountCardIconWrap}>
+              <Feather name="user-check" size={18} color="#e50914" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.accountCardTitle}>YOUR MOVIEFLIX ACCOUNT ID</Text>
+              <Text style={styles.accountCardEmail}>
+                {authUser?.email || 'Not signed in'}
+              </Text>
+            </View>
+          </View>
+
+          {authUser ? (
+            <View style={styles.codeRow}>
+              <View style={styles.codeBadge}>
+                {loadingCode ? (
+                  <ActivityIndicator size="small" color="#e50914" />
+                ) : (
+                  <Text style={styles.codeDigits}>
+                    {userCode ? userCode.split('').join('  ') : '— — — — — —'}
+                  </Text>
+                )}
+              </View>
+
+              <TouchableOpacity
+                style={[styles.copyBtn, copiedCode && styles.copyBtnSuccess]}
+                onPress={handleCopyCode}
+                activeOpacity={0.75}
+                disabled={!userCode}
+              >
+                <Feather
+                  name={copiedCode ? 'check' : 'copy'}
+                  size={15}
+                  color="#FFFFFF"
+                  style={{ marginRight: 6 }}
+                />
+                <Text style={styles.copyBtnText}>
+                  {copiedCode ? 'Copied!' : 'Copy ID'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={styles.signInPromptRow}>
+              <Text style={styles.signInPromptText}>
+                Sign in to link your account ID automatically to Telegram.
+              </Text>
+              <TouchableOpacity
+                style={styles.signInSmallBtn}
+                onPress={() => onOpenAuth && onOpenAuth('login')}
+              >
+                <Text style={styles.signInSmallBtnText}>Sign In / Register</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          <Text style={styles.accountCardHint}>
+            💡 When you subscribe via Telegram Stars, this 6-digit ID links payment directly to your Movieflix account for instant activation.
+          </Text>
+        </View>
+
         {/* ─── FEATURE COMPARISON GRID (FREE VS PRO) ─── */}
         <View style={styles.featuresCard}>
-          <Text style={styles.featuresSectionTitle}>Included in Movieflix Pro</Text>
+          <Text style={styles.featuresSectionTitle}>Included with Movieflix Pro</Text>
 
           <View style={styles.featureItem}>
             <View style={styles.featureIconBox}>
@@ -273,7 +360,7 @@ export default function PricingScreen({
                 <Text style={styles.featureTagPro}>PRO ONLY</Text>
               </View>
               <Text style={styles.featureSubtitle}>
-                No pre-roll video ads, no 30-minute mid-roll interruptions, and zero ads in Shorts reels.
+                Zero pre-roll video ads, zero mid-roll pauses, and zero promotional ads in Shorts reels.
               </Text>
             </View>
           </View>
@@ -313,11 +400,11 @@ export default function PricingScreen({
           </View>
         </View>
 
-        {/* ─── PRICING PLAN SELECTOR ─── */}
+        {/* ─── PRICING PLAN SELECTOR (TELEGRAM STARS) ─── */}
         <View style={styles.plansSection}>
           <Text style={styles.plansHeaderTitle}>Choose Your Plan</Text>
           <Text style={styles.plansHeaderSub}>
-            One-time payment. Never automatically rebilled — you renew only when you want.
+            Pay easily with Telegram Stars ⭐️ inside Telegram. One-time payment, no surprise renewals.
           </Text>
 
           {loadingPlans ? (
@@ -326,6 +413,7 @@ export default function PricingScreen({
             displayPlans.map((plan) => {
               const isSelected = selectedPlanId === plan.id;
               const isPopular = plan.id === '3_months';
+              const starsAmount = plan.stars || (plan.price === 1 ? 50 : plan.price === 3 ? 150 : 250);
 
               return (
                 <TouchableOpacity
@@ -352,14 +440,18 @@ export default function PricingScreen({
                       <View style={{ marginLeft: 12 }}>
                         <Text style={styles.planCardName}>{plan.name}</Text>
                         <Text style={styles.planCardDays}>
-                          {plan.durationDays} Days Unlimited Access
+                          {plan.durationDays} Days Unlimited 4K & No Ads
                         </Text>
                       </View>
                     </View>
 
                     <View style={styles.planPriceCol}>
-                      <Text style={styles.planPriceText}>${plan.price}</Text>
-                      <Text style={styles.planCurrencyText}>USD</Text>
+                      <View style={styles.starsRow}>
+                        <Text style={styles.starEmoji}>⭐️</Text>
+                        <Text style={styles.planStarsText}>{starsAmount}</Text>
+                        <Text style={styles.planStarsUnit}>Stars</Text>
+                      </View>
+                      <Text style={styles.planUsdText}>(${plan.price} USD)</Text>
                     </View>
                   </View>
 
@@ -385,23 +477,69 @@ export default function PricingScreen({
           </View>
         ) : null}
 
-        {/* ─── SANDBOX TEST MODE (LIKE PAYPAL SANDBOX - $0.00 FREE TEST) ─── */}
+        {/* ─── PRIMARY TELEGRAM STARS SUBSCRIBE BUTTON ─── */}
+        <TouchableOpacity
+          style={styles.telegramSubscribeBtn}
+          onPress={handleSubscribeViaTelegram}
+          activeOpacity={0.85}
+        >
+          <View style={styles.telegramBtnInner}>
+            <FontAwesome5 name="telegram-plane" size={20} color="#FFFFFF" style={{ marginRight: 10 }} />
+            <View style={{ alignItems: 'flex-start' }}>
+              <Text style={styles.telegramBtnTitle}>
+                Subscribe with Telegram Stars ⭐️
+              </Text>
+              <Text style={styles.telegramBtnSubtitle}>
+                Opens @movieflix_pro_bot · Instant account activation
+              </Text>
+            </View>
+            <Feather name="arrow-right" size={18} color="#FFFFFF" style={{ marginLeft: 'auto' }} />
+          </View>
+        </TouchableOpacity>
+
+        {/* HOW TELEGRAM STARS SUBSCRIPTION WORKS */}
+        <View style={styles.howItWorksCard}>
+          <Text style={styles.howItWorksTitle}>How Telegram Stars Payment Works</Text>
+
+          <View style={styles.howStepRow}>
+            <View style={styles.howStepNum}><Text style={styles.howStepNumText}>1</Text></View>
+            <Text style={styles.howStepText}>
+              Tap the button above to launch <Text style={{ color: '#2AABEE', fontWeight: '700' }}>@movieflix_pro_bot</Text> in Telegram.
+            </Text>
+          </View>
+
+          <View style={styles.howStepRow}>
+            <View style={styles.howStepNum}><Text style={styles.howStepNumText}>2</Text></View>
+            <Text style={styles.howStepText}>
+              Bot automatically detects your Account ID ({userCode || 'your 6-digit ID'}), asks for confirmation, and displays pricing options.
+            </Text>
+          </View>
+
+          <View style={styles.howStepRow}>
+            <View style={styles.howStepNum}><Text style={styles.howStepNumText}>3</Text></View>
+            <Text style={styles.howStepText}>
+              Pay with native Telegram Stars with 1 tap. Subscription activates instantly on Movieflix!
+            </Text>
+          </View>
+        </View>
+
+        {/* ─── SANDBOX TEST MODE ($0.00 FREE TEST) ─── */}
         <View style={styles.sandboxBox}>
           <View style={styles.sandboxHeaderRow}>
             <View style={styles.sandboxBadge}>
               <Feather name="shield" size={13} color="#10b981" style={{ marginRight: 5 }} />
               <Text style={styles.sandboxBadgeText}>SANDBOX TEST MODE · $0.00</Text>
             </View>
-            <Text style={styles.sandboxFreeText}>Free Test (No Real Money)</Text>
+            <Text style={styles.sandboxFreeText}>Free Developer / Demo Test</Text>
           </View>
           <Text style={styles.sandboxDescriptionText}>
-            Test subscribing to Movieflix Pro without paying real crypto (just like PayPal Sandbox test mode). Clicking below simulates an approved payment webhook and instantly activates Pro on your account.
+            Test subscribing to Movieflix Pro instantly without spending real Stars. Clicking below simulates an approved payment webhook and immediately unlocks 4K streaming & zero ads on your account.
           </Text>
 
           <TouchableOpacity
             style={styles.sandboxActionButton}
             onPress={handleSimulateSandboxPayment}
-            disabled={simulating || loadingPay}
+            disabled={simulating}
             activeOpacity={0.8}
           >
             {simulating ? (
@@ -410,55 +548,19 @@ export default function PricingScreen({
               <View style={styles.sandboxActionInner}>
                 <Feather name="zap" size={16} color="#FFFFFF" style={{ marginRight: 8 }} />
                 <Text style={styles.sandboxActionText}>
-                  Complete Sandbox Test Payment ($0.00)
+                  Activate Sandbox Test ($0.00 Free)
                 </Text>
               </View>
             )}
           </TouchableOpacity>
         </View>
 
-        {/* ─── LIVE CRYPTO PAYMENT (REAL MONEY VIA NOWPAYMENTS) ─── */}
-        <TouchableOpacity
-          style={[styles.checkoutBtn, loadingPay && styles.btnDisabled]}
-          onPress={handleCheckout}
-          disabled={loadingPay || simulating}
-          activeOpacity={0.85}
-        >
-          {loadingPay ? (
-            <ActivityIndicator size="small" color="#FFFFFF" />
-          ) : (
-            <View style={styles.checkoutBtnContent}>
-              <Ionicons name="card-outline" size={18} color="#FFFFFF" style={{ marginRight: 8 }} />
-              <Text style={styles.checkoutBtnText}>
-                {isPremium ? 'Extend with Real Crypto' : 'Pay with Real Crypto (Live)'}
-              </Text>
-              <Feather name="arrow-right" size={16} color="#FFFFFF" style={{ marginLeft: 6 }} />
-            </View>
-          )}
-        </TouchableOpacity>
-        <Text style={styles.liveNoticeText}>
-          * Live payment opens the NOWPayments hosted website and requires real crypto (BTC, USDT, ETH, etc.).
-        </Text>
-
-        {/* CRYPTO ICONS ROW */}
-        <View style={styles.cryptoRow}>
-          <Text style={styles.cryptoRowLabel}>Accepted Cryptocurrencies (NOWPayments):</Text>
-          <View style={styles.cryptoBadgeList}>
-            <View style={styles.coinBadge}><Text style={styles.coinBadgeText}>BTC</Text></View>
-            <View style={styles.coinBadge}><Text style={styles.coinBadgeText}>USDT</Text></View>
-            <View style={styles.coinBadge}><Text style={styles.coinBadgeText}>ETH</Text></View>
-            <View style={styles.coinBadge}><Text style={styles.coinBadgeText}>SOL</Text></View>
-            <View style={styles.coinBadge}><Text style={styles.coinBadgeText}>LTC</Text></View>
-            <View style={styles.coinBadge}><Text style={styles.coinBadgeText}>TRX</Text></View>
-          </View>
-        </View>
-
-        {/* SECURITY & MANUAL RENEWAL ASSURANCE */}
+        {/* SECURITY ASSURANCE */}
         <View style={styles.assuranceBox}>
           <View style={styles.assuranceItem}>
             <Feather name="shield" size={14} color="#a3a3a3" style={{ marginRight: 6 }} />
             <Text style={styles.assuranceText}>
-              Cryptographically verified via signed IPN webhook.
+              Official Telegram Stars API payment verified by Telegram Bot webhook.
             </Text>
           </View>
           <View style={styles.assuranceItem}>
@@ -470,7 +572,7 @@ export default function PricingScreen({
           <View style={styles.assuranceItem}>
             <Feather name="refresh-cw" size={14} color="#a3a3a3" style={{ marginRight: 6 }} />
             <Text style={styles.assuranceText}>
-              Zero recurring debits. When your time ends, you choose whether to renew manually.
+              Zero recurring debits. When your period ends, you choose whether to renew manually.
             </Text>
           </View>
         </View>
@@ -551,7 +653,7 @@ const styles = StyleSheet.create({
   heroSection: {
     alignItems: 'center',
     textAlign: 'center',
-    marginBottom: 24,
+    marginBottom: 20,
   },
   heroBadge: {
     flexDirection: 'row',
@@ -587,7 +689,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: 'center',
     lineHeight: 20,
-    maxWidth: 500,
+    maxWidth: 520,
   },
   activeStatusCard: {
     flexDirection: 'row',
@@ -599,7 +701,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     paddingVertical: 12,
     paddingHorizontal: 16,
-    marginBottom: 22,
+    marginBottom: 20,
   },
   activeStatusLeft: {
     flexDirection: 'row',
@@ -633,6 +735,104 @@ const styles = StyleSheet.create({
     color: '#000000',
     fontSize: 10,
     fontWeight: '900',
+  },
+  accountCard: {
+    backgroundColor: '#141414',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(229, 9, 20, 0.35)',
+    padding: 16,
+    marginBottom: 22,
+  },
+  accountCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  accountCardIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: 'rgba(229, 9, 20, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  accountCardTitle: {
+    color: '#a3a3a3',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+  },
+  accountCardEmail: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+    marginTop: 2,
+  },
+  codeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    marginBottom: 10,
+  },
+  codeBadge: {
+    flex: 1,
+  },
+  codeDigits: {
+    color: '#FFFFFF',
+    fontSize: 20,
+    fontWeight: '900',
+    letterSpacing: 4,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+  },
+  copyBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#e50914',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 8,
+  },
+  copyBtnSuccess: {
+    backgroundColor: '#10b981',
+  },
+  copyBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  accountCardHint: {
+    color: '#8e8e93',
+    fontSize: 11,
+    lineHeight: 16,
+  },
+  signInPromptRow: {
+    paddingVertical: 8,
+    marginBottom: 8,
+  },
+  signInPromptText: {
+    color: '#d4d4d4',
+    fontSize: 12,
+    marginBottom: 10,
+  },
+  signInSmallBtn: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#e50914',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  signInSmallBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
   },
   featuresCard: {
     backgroundColor: '#141414',
@@ -779,75 +979,105 @@ const styles = StyleSheet.create({
   planPriceCol: {
     alignItems: 'flex-end',
   },
-  planPriceText: {
-    color: '#FFFFFF',
-    fontSize: 22,
+  starsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  starEmoji: {
+    fontSize: 16,
+    marginRight: 4,
+  },
+  planStarsText: {
+    color: '#FBBF24',
+    fontSize: 20,
     fontWeight: '900',
   },
-  planCurrencyText: {
-    color: '#8e8e93',
-    fontSize: 10,
+  planStarsUnit: {
+    color: '#FBBF24',
+    fontSize: 11,
     fontWeight: '700',
+    marginLeft: 3,
+  },
+  planUsdText: {
+    color: '#8e8e93',
+    fontSize: 11,
+    marginTop: 2,
   },
   planDescText: {
     color: '#a3a3a3',
     fontSize: 12,
     marginTop: 4,
   },
-  checkoutBtn: {
-    backgroundColor: '#e50914',
-    borderRadius: 14,
-    paddingVertical: 15,
+  telegramSubscribeBtn: {
+    backgroundColor: '#2AABEE', // Official Telegram Blue
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 8,
-    marginBottom: 12,
-    shadowColor: '#e50914',
+    marginBottom: 16,
+    shadowColor: '#2AABEE',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.35,
     shadowRadius: 10,
     elevation: 4,
   },
-  btnDisabled: {
-    opacity: 0.6,
-  },
-  checkoutBtnContent: {
+  telegramBtnInner: {
     flexDirection: 'row',
     alignItems: 'center',
+    width: '100%',
   },
-  checkoutBtnText: {
+  telegramBtnTitle: {
     color: '#FFFFFF',
     fontSize: 15,
-    fontWeight: '800',
-    letterSpacing: 0.3,
+    fontWeight: '900',
+    letterSpacing: 0.2,
   },
-  cryptoRow: {
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  cryptoRowLabel: {
-    color: '#737373',
+  telegramBtnSubtitle: {
+    color: 'rgba(255, 255, 255, 0.85)',
     fontSize: 11,
-    marginBottom: 6,
+    fontWeight: '500',
+    marginTop: 2,
   },
-  cryptoBadgeList: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: 6,
-  },
-  coinBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderRadius: 6,
+  howItWorksCard: {
+    backgroundColor: '#141414',
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.08)',
+    padding: 16,
+    marginBottom: 20,
   },
-  coinBadgeText: {
-    color: '#d4d4d4',
-    fontSize: 10,
-    fontWeight: '700',
+  howItWorksTitle: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '800',
+    marginBottom: 12,
+  },
+  howStepRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 10,
+  },
+  howStepNum: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+    marginTop: 1,
+  },
+  howStepNumText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  howStepText: {
+    color: '#a3a3a3',
+    fontSize: 12,
+    lineHeight: 18,
+    flex: 1,
   },
   sandboxBox: {
     backgroundColor: 'rgba(16, 185, 129, 0.08)',
@@ -910,14 +1140,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '800',
     letterSpacing: 0.3,
-  },
-  liveNoticeText: {
-    color: '#737373',
-    fontSize: 11,
-    textAlign: 'center',
-    marginTop: -8,
-    marginBottom: 16,
-    lineHeight: 15,
   },
   alertBoxError: {
     flexDirection: 'row',

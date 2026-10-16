@@ -123,6 +123,10 @@
       "destination": "/donate/index.html"
     },
     {
+      "source": "/pricing",
+      "destination": "/pricing/index.html"
+    },
+    {
       "source": "/movieflix.apk",
       "destination": "/api/download"
     },

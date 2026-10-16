@@ -621,6 +621,27 @@ const PAGES = {
       "name": "MovieFlix Server Donation",
       "description": "Help support MovieFlix infrastructure."
     }
+  },
+
+  pricing: {
+    outPath: path.join(distDir, 'pricing', 'index.html'),
+    title: 'Movieflix Pro — Upgrade to 4K Ultra HD & Zero Ads',
+    description: 'Upgrade your Movieflix account to Pro. Stream movies and series in crisp 4K Ultra HD with zero ads and all VIP episodes.',
+    canonical: `${BASE_URL}/pricing`,
+    ogType: 'website',
+    keywords: 'movieflix pro, movieflix premium, 4k movies, ad-free streaming, telegram stars subscription',
+    schema: {
+      "@context": "https://schema.org",
+      "@type": "Product",
+      "name": "Movieflix Pro Subscription",
+      "description": "Unlock 4K streaming quality and 100% ad-free playback on Movieflix.",
+      "offers": {
+        "@type": "AggregateOffer",
+        "priceCurrency": "USD",
+        "lowPrice": "1.00",
+        "highPrice": "5.00"
+      }
+    }
   }
 };
 

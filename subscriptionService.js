@@ -66,16 +66,9 @@ export async function fetchSubscriptionStatus(authToken = null) {
 }
 
 /**
- * Create a NOWPayments invoice for a chosen plan ($1/mo, $3/3mo, $5/6mo)
+ * Fetch or generate the user's 6-digit Account ID for Telegram Stars bot subscription
  */
-export async function createSubscriptionInvoice(planKey = '1_month', authToken, options = {}) {
-  const isSandbox = options.isSandbox === true;
-  const userEmail = options.userEmail || '';
-
-  if (!authToken && !isSandbox) {
-    throw new Error('Please sign in to your Movieflix account before subscribing.');
-  }
-
+export async function fetchTelegramUserCode(authToken, email = null) {
   const headers = {
     'Content-Type': 'application/json',
     Accept: 'application/json',
@@ -84,22 +77,29 @@ export async function createSubscriptionInvoice(planKey = '1_month', authToken, 
     headers['Authorization'] = `Bearer ${authToken}`;
   }
 
-  const res = await fetch(`${API_BASE}/api/subscription?action=create_invoice`, {
+  const res = await fetch(`${API_BASE}/api/telegram?action=get_user_code`, {
     method: 'POST',
     headers,
-    body: JSON.stringify({
-      plan: planKey,
-      isSandbox,
-      userEmail,
-    }),
+    body: JSON.stringify({ email }),
   });
 
   const data = await res.json();
   if (!res.ok || !data.success) {
-    throw new Error(data.error || data.detail || 'Failed to generate crypto payment invoice.');
+    throw new Error(data.message || data.error || 'Failed to retrieve Account ID for Telegram.');
   }
 
   return data;
+}
+
+/**
+ * Generate deep link to the Telegram Stars Bot
+ */
+export function getTelegramBotUrl(code) {
+  const botUsername = process.env.EXPO_PUBLIC_TELEGRAM_BOT_USERNAME || 'movieflix_pro_bot';
+  if (code) {
+    return `https://t.me/${botUsername}?start=${encodeURIComponent(code)}`;
+  }
+  return `https://t.me/${botUsername}`;
 }
 
 /**
