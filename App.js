@@ -90,9 +90,7 @@ import PrivacyScreen, { PRIVACY_POLICY_URL } from './PrivacyScreen';
 import DownloadScreen from './DownloadScreen';
 import PricingScreen from './PricingScreen';
 import NotFoundScreen from './NotFoundScreen';
-import NowPaymentsButton from './components/NowPaymentsButton';
 import MaintenanceScreen from './components/MaintenanceScreen';
-import ServerCrashDonateScreen from './components/ServerCrashDonateScreen';
 import { checkSystemStatusAsync } from './statusService';
 import PlayerAdOverlay from './components/PlayerAdOverlay';
 import { fetchRandomAd, recordImpression, recordClick } from './adService';
@@ -1317,7 +1315,6 @@ function ReelApp() {
   const [showWebInstallBanner, setShowWebInstallBanner] = useState(true);
   const [securityStatus, setSecurityStatus] = useState({ verified: true, authentic: true, isTampered: false });
   const [isMaintenanceMode, setIsMaintenanceMode] = useState(false);
-  const [isDonateServerDownMode, setIsDonateServerDownMode] = useState(false);
   const [isCheckingSystemStatus, setIsCheckingSystemStatus] = useState(false);
   const [isSubscriptionModalOpen, setIsSubscriptionModalOpen] = useState(false);
   const [subscriptionStatus, setSubscriptionStatus] = useState({ is_premium: false, days_left: 0 });
@@ -1345,10 +1342,8 @@ function ReelApp() {
     try {
       const status = await checkSystemStatusAsync();
       setIsMaintenanceMode(Boolean(status?.maintenance));
-      setIsDonateServerDownMode(Boolean(!status?.maintenance && status?.donate));
     } catch (_) {
       setIsMaintenanceMode(false);
-      setIsDonateServerDownMode(false);
     } finally {
       setIsCheckingSystemStatus(false);
     }
@@ -1360,8 +1355,6 @@ function ReelApp() {
       const pathname = window.location.pathname;
       if (pathname === '/maintenance') {
         setIsMaintenanceMode(true);
-      } else if (pathname === '/donate') {
-        setIsDonateServerDownMode(true);
       }
       // Initialize Vercel Analytics for web visitor telemetry
       import('@vercel/analytics')
@@ -3944,14 +3937,6 @@ function ReelApp() {
     );
   }
 
-  if (isDonateServerDownMode) {
-    return (
-      <ServerCrashDonateScreen
-        onRefresh={checkStatus}
-        isChecking={isCheckingSystemStatus}
-      />
-    );
-  }
 
   // ─── NATIVE (APK) ONBOARDING & AUTH GATE ─────────────────────────────────
   if (Platform.OS !== 'web') {
@@ -4400,23 +4385,6 @@ function ReelApp() {
                   </TouchableOpacity>
                 </View>
 
-                {/* Cryptocurrency & Bitcoin Donation Section */}
-                <View style={styles.meDonationCard}>
-                  <View style={styles.meDonationHeader}>
-                    <View style={styles.meDonationIcon}>
-                      <Feather name="heart" size={16} color="#e50914" />
-                    </View>
-                    <View style={styles.meDonationCopy}>
-                      <Text style={styles.meDonationTitle}>Support MovieFlix</Text>
-                      <Text style={styles.meDonationDescription}>
-                        Keep streaming free and ad-free with cryptocurrency & Bitcoin donations.
-                      </Text>
-                    </View>
-                  </View>
-                  <View style={styles.meDonationBtnWrapper}>
-                    <NowPaymentsButton />
-                  </View>
-                </View>
 
                 {/* Minimal Footer: Movieflix *v1.1.8* Up to date / Official build, verified */}
                 <View style={styles.meMinimalAppFooter}>
@@ -11195,54 +11163,6 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 11,
     fontWeight: '700',
-  },
-  meDonationCard: {
-    width: '100%',
-    backgroundColor: '#0d0d0d',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(229, 9, 20, 0.25)',
-    padding: 16,
-    marginTop: 12,
-    marginBottom: 16,
-    alignItems: 'center',
-  },
-  meDonationHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-    width: '100%',
-  },
-  meDonationIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(229, 9, 20, 0.12)',
-    borderWidth: 1,
-    borderColor: 'rgba(229, 9, 20, 0.25)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 10,
-  },
-  meDonationCopy: {
-    flex: 1,
-  },
-  meDonationTitle: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  meDonationDescription: {
-    color: '#a3a3a3',
-    fontSize: 11,
-    lineHeight: 16,
-    marginTop: 2,
-  },
-  meDonationBtnWrapper: {
-    marginTop: 6,
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '100%',
   },
   minimalProgressBarTrack: {
     height: 4,

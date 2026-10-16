@@ -61,7 +61,7 @@ const getCommonMeta = () => `
     <meta name="twitter:creator" content="@movieflixlol" />
     <meta name="twitter:image" content="${OG_BANNER}" />
     <!-- Google reCAPTCHA v2 Bot Protection -->
-    <meta name="recaptcha-site-key" content="6LcgT-stAAAAAJqL8-Jytz125rPxUsFv3aZt69zn" />
+    <meta name="recaptcha-site-key" content="6Lev_vEtAAAAACFboy87GQIJYCY2Ntx3Iv5WDwH2" />
     <script src="https://www.google.com/recaptcha/api.js?onload=onMfRecaptchaLoaded&render=explicit" async defer></script>
     <!-- Vercel Web Analytics -->
     <script defer src="/_vercel/insights/script.js"></script>
@@ -232,7 +232,7 @@ const getBotProtectionBodyHtml = () => `
 
     <script>
       (function() {
-        var SITE_KEY = '6LcgT-stAAAAAJqL8-Jytz125rPxUsFv3aZt69zn';
+        var SITE_KEY = '6Lev_vEtAAAAACFboy87GQIJYCY2Ntx3Iv5WDwH2';
         var VERIFY_URL = '/api/verify-captcha';
         var hasVerified = false;
         var widgetRendered = false;
@@ -566,20 +566,6 @@ const PAGES = {
     }
   },
 
-  donate: {
-    outPath: path.join(distDir, 'donate', 'index.html'),
-    title: 'Support MovieFlix Server Recovery — Cryptocurrency & Bitcoin Donation',
-    description: 'Our server has crashed. Please donate to help keep MovieFlix alive for everyone.',
-    canonical: `${BASE_URL}/donate`,
-    ogType: 'website',
-    keywords: 'donate movieflix, cryptocurrency donation, bitcoin donation, nowpayments',
-    schema: {
-      "@context": "https://schema.org",
-      "@type": "WebPage",
-      "name": "MovieFlix Server Donation",
-      "description": "Help support MovieFlix infrastructure."
-    }
-  },
 
   pricing: {
     outPath: path.join(distDir, 'pricing', 'index.html'),

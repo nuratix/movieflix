@@ -193,9 +193,6 @@ export default function PlayerAdOverlay({
             />
           )}
 
-          {/* Vignettes for readability of top bar & bottom CTA */}
-          <View style={styles.topVignette} pointerEvents="none" />
-          <View style={styles.bottomVignette} pointerEvents="none" />
 
           {/* Video Completed State: Blurred Video with Center "Get Started" Button (Does not replay) */}
           {Boolean(isVideo && isVideoEnded) && (
@@ -439,24 +436,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '800',
     letterSpacing: 0.4,
-  },
-  topVignette: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 120,
-    backgroundColor: 'rgba(0, 0, 0, 0.45)',
-    zIndex: 5,
-  },
-  bottomVignette: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 140,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
-    zIndex: 5,
   },
   bottomFloatingBar: {
     position: 'absolute',

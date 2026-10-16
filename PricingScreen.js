@@ -9,6 +9,7 @@ import {
   StatusBar,
   ActivityIndicator,
   Linking,
+  TextInput,
 } from 'react-native';
 import { Feather, FontAwesome5 } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -18,6 +19,7 @@ import {
   fetchTelegramUserCode,
   getTelegramBotUrl,
   formatExpirationDate,
+  redeemPromoCode,
 } from './subscriptionService';
 
 export default function PricingScreen({
@@ -42,6 +44,10 @@ export default function PricingScreen({
   const [copiedCode, setCopiedCode] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
+  const [promoCodeInput, setPromoCodeInput] = useState('');
+  const [redeemingPromo, setRedeemingPromo] = useState(false);
+  const [promoError, setPromoError] = useState('');
+  const [promoSuccess, setPromoSuccess] = useState('');
 
   const isPremium = Boolean(subscriptionStatus?.is_premium);
   const daysLeft = subscriptionStatus?.days_left || 0;
@@ -139,6 +145,37 @@ export default function PricingScreen({
       setSuccessMessage('Redirecting to @movieflix_pro_bot on Telegram...');
     } catch (err) {
       setErrorMessage(`Open Telegram, search for @movieflix_pro_bot and send your Account ID: ${targetCode}`);
+    }
+  };
+ 
+  // Redeem VIP Promo Code
+  const handleRedeemPromo = async () => {
+    const code = promoCodeInput.trim().toUpperCase();
+    if (!code) {
+      setPromoError('Please enter your promo code.');
+      return;
+    }
+
+    setPromoError('');
+    setPromoSuccess('');
+    setRedeemingPromo(true);
+
+    try {
+      const res = await redeemPromoCode(
+        code,
+        userCode,
+        authUser?.email,
+        authAccessToken
+      );
+      setPromoSuccess(res.message || `Promo code claimed! ${res.duration_months} month(s) VIP Pro activated.`);
+      setPromoCodeInput('');
+      if (onSubscriptionUpdated) {
+        onSubscriptionUpdated();
+      }
+    } catch (err) {
+      setPromoError(err.message || 'Failed to redeem promo code. Please check and try again.');
+    } finally {
+      setRedeemingPromo(false);
     }
   };
 
@@ -368,6 +405,67 @@ export default function PricingScreen({
             Opens @movieflix_pro_bot · Instant account activation
           </Text>
         </TouchableOpacity>
+
+        {/* ─── VIP PROMO CODE SECTION ─── */}
+        <View style={styles.promoCard}>
+          <View style={styles.promoHeaderRow}>
+            <View style={styles.promoIconCircle}>
+              <Feather name="gift" size={15} color="#e50914" />
+            </View>
+            <View style={styles.promoTitleCol}>
+              <Text style={styles.promoTitle}>Have a VIP Promo Code?</Text>
+              <Text style={styles.promoSubtitle}>
+                Enter your code below for instant VIP Pro subscription activation.
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.promoInputRow}>
+            <TextInput
+              style={styles.promoInput}
+              placeholder="e.g. VIP-PRO-2026"
+              placeholderTextColor="#71717a"
+              value={promoCodeInput}
+              onChangeText={(text) => {
+                setPromoCodeInput(text.toUpperCase());
+                if (promoError) setPromoError('');
+                if (promoSuccess) setPromoSuccess('');
+              }}
+              autoCapitalize="characters"
+              autoCorrect={false}
+              editable={!redeemingPromo}
+            />
+            <TouchableOpacity
+              style={[
+                styles.promoSubmitBtn,
+                (!promoCodeInput.trim() || redeemingPromo) && styles.promoSubmitBtnDisabled,
+              ]}
+              onPress={handleRedeemPromo}
+              disabled={!promoCodeInput.trim() || redeemingPromo}
+              activeOpacity={0.8}
+            >
+              {redeemingPromo ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Text style={styles.promoSubmitBtnText}>Redeem</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+
+          {Boolean(promoError) && (
+            <View style={styles.promoErrorRow}>
+              <Feather name="alert-circle" size={13} color="#ef4444" style={{ marginRight: 6 }} />
+              <Text style={styles.promoErrorText}>{promoError}</Text>
+            </View>
+          )}
+
+          {Boolean(promoSuccess) && (
+            <View style={styles.promoSuccessRow}>
+              <Feather name="check-circle" size={13} color="#10b981" style={{ marginRight: 6 }} />
+              <Text style={styles.promoSuccessText}>{promoSuccess}</Text>
+            </View>
+          )}
+        </View>
 
         {/* ─── MINIMAL FEATURES LIST ─── */}
         <View style={styles.featuresSection}>
@@ -799,5 +897,108 @@ const styles = StyleSheet.create({
     fontSize: 11,
     textAlign: 'center',
     lineHeight: 16,
+  },
+
+  // ─── PROMO CODE CARD STYLES ───
+  promoCard: {
+    backgroundColor: '#121216',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 20,
+  },
+  promoHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  promoIconCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(229, 9, 20, 0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  promoTitleCol: {
+    flex: 1,
+  },
+  promoTitle: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  promoSubtitle: {
+    color: '#8E8E93',
+    fontSize: 11,
+    marginTop: 2,
+    lineHeight: 15,
+  },
+  promoInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  promoInput: {
+    flex: 1,
+    height: 42,
+    backgroundColor: '#1a1a20',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  promoSubmitBtn: {
+    backgroundColor: '#e50914',
+    height: 42,
+    paddingHorizontal: 18,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  promoSubmitBtnDisabled: {
+    backgroundColor: 'rgba(229, 9, 20, 0.35)',
+  },
+  promoSubmitBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  promoErrorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.25)',
+    borderRadius: 6,
+    padding: 8,
+    marginTop: 10,
+  },
+  promoErrorText: {
+    color: '#ef4444',
+    fontSize: 11.5,
+    flex: 1,
+  },
+  promoSuccessRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.25)',
+    borderRadius: 6,
+    padding: 8,
+    marginTop: 10,
+  },
+  promoSuccessText: {
+    color: '#10b981',
+    fontSize: 11.5,
+    fontWeight: '600',
+    flex: 1,
   },
 });

@@ -245,7 +245,15 @@ export default async function handler(req, res) {
     // 2. GET STATUS: /api/subscription?action=status or GET /api/subscription/status
     // ─────────────────────────────────────────────────────────────────────────
     if (action === 'status' || pathname.endsWith('/status')) {
-      const user = await authenticateUser(req, body, query);
+      let user = await authenticateUser(req, body, query);
+      const queryCode = (query.userCode || query.code || body.userCode || body.code || '').toString().trim();
+      if (!user && queryCode) {
+        user = {
+          userId: `code_${queryCode}`,
+          username: queryCode,
+          email: `${queryCode}@movieflix.internal`,
+        };
+      }
       if (!user) {
         return res.status(200).json({
           success: true,
@@ -256,14 +264,28 @@ export default async function handler(req, res) {
       }
 
       try {
-        const subRes = await ddbDoc.send(
+        let subRes = await ddbDoc.send(
           new GetCommand({
             TableName: SUBSCRIPTIONS_TABLE,
             Key: { userId: user.userId },
           })
         );
 
-        const sub = subRes.Item;
+        let sub = subRes.Item;
+
+        // If not found under user.userId and queryCode exists, check code_ alias
+        if (!sub && queryCode && user.userId !== `code_${queryCode}`) {
+          try {
+            const aliasRes = await ddbDoc.send(
+              new GetCommand({
+                TableName: SUBSCRIPTIONS_TABLE,
+                Key: { userId: `code_${queryCode}` },
+              })
+            );
+            if (aliasRes?.Item) sub = aliasRes.Item;
+          } catch (_) {}
+        }
+
         const now = Date.now();
         const isPremium = Boolean(
           sub &&
@@ -294,6 +316,136 @@ export default async function handler(req, res) {
         console.error('[Subscription Status Error]', ddbErr);
         return res.status(500).json({ error: 'Failed to read subscription status.' });
       }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 2.5 REDEEM PROMO CODE: /api/subscription?action=redeem_promo
+    // ─────────────────────────────────────────────────────────────────────────
+    if (action === 'redeem_promo' || action === 'promo' || pathname.endsWith('/redeem-promo')) {
+      const user = await authenticateUser(req, body, query);
+      const guestCode = (body.userCode || body.account_id || query.userCode || '').toString().trim();
+      const guestEmail = (body.email || query.email || '').toString().trim().toLowerCase();
+
+      const effectiveUserId = user?.userId || (guestEmail ? guestEmail : (guestCode ? `code_${guestCode}` : ''));
+      const effectiveEmail = user?.email || guestEmail || (guestCode ? `user_${guestCode}@movieflix.internal` : '');
+      const effectiveAccount = guestCode || user?.username || effectiveUserId;
+
+      if (!effectiveUserId && !guestCode) {
+        return res.status(401).json({
+          error: 'Please sign in or provide your 6-digit Account ID to claim a promo code.',
+        });
+      }
+
+      const rawPromoCode = (body.promo_code || body.code || query.code || '').toString().trim().toUpperCase();
+      if (!rawPromoCode) {
+        return res.status(400).json({ error: 'Please enter a promo code.' });
+      }
+
+      // Call MovieAds Private Redemption API with server-side secret key
+      const adsApiUrl = (process.env.ADS_API_URL || 'https://ads.wallpaperdomain.xyz').replace(/\/+$/, '');
+      const adsSecretKey = (process.env.ADS_SECRET_KEY || 'mf_ad_sec_89a31bc09e').trim();
+
+      let redeemRes;
+      let redeemData;
+      try {
+        redeemRes = await fetch(`${adsApiUrl}/api/v1/promo/redeem`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Ad-Secret-Key': adsSecretKey,
+          },
+          body: JSON.stringify({
+            code: rawPromoCode,
+            user_id: effectiveUserId,
+            email: effectiveEmail,
+            account_id: effectiveAccount,
+          }),
+        });
+        redeemData = await redeemRes.json();
+      } catch (networkErr) {
+        console.error('[Promo Redemption Network Error]', networkErr);
+        return res.status(502).json({
+          error: 'Unable to connect to Promo Code verification server. Please try again.',
+        });
+      }
+
+      if (!redeemRes.ok) {
+        return res.status(redeemRes.status || 400).json({
+          error: redeemData?.error || 'Invalid or expired promo code.',
+        });
+      }
+
+      const durationMonths = parseInt(redeemData.duration_months, 10) || 1;
+      const durationMs = durationMonths * 30 * 24 * 60 * 60 * 1000;
+
+      // Calculate start time and support time stacking
+      let startTime = Date.now();
+      try {
+        const curSubRes = await ddbDoc.send(
+          new GetCommand({
+            TableName: SUBSCRIPTIONS_TABLE,
+            Key: { userId: effectiveUserId },
+          })
+        );
+        const curSub = curSubRes.Item;
+        if (curSub && curSub.status === 'active' && curSub.expiresAtTimestamp && curSub.expiresAtTimestamp > startTime) {
+          startTime = curSub.expiresAtTimestamp;
+        }
+      } catch (_) {}
+
+      const expiresAtTimestamp = startTime + durationMs;
+      const expiresAt = new Date(expiresAtTimestamp).toISOString();
+
+      const subItem = {
+        userId: effectiveUserId,
+        userEmail: effectiveEmail,
+        status: 'active',
+        plan: `${durationMonths}_month_promo`,
+        planName: `${durationMonths} Month${durationMonths > 1 ? 's' : ''} Pro (Promo)`,
+        amount: 0,
+        currency: 'PROMO',
+        paymentId: `promo_${redeemData.code}`,
+        orderId: `promo_${Date.now()}_${redeemData.code}`,
+        paymentStatus: 'finished',
+        promoCode: redeemData.code,
+        isAutoRenew: false,
+        startsAt: new Date().toISOString(),
+        expiresAt,
+        expiresAtTimestamp,
+        updatedAt: new Date().toISOString(),
+      };
+
+      // Save to DynamoDB
+      await ddbDoc.send(
+        new PutCommand({
+          TableName: SUBSCRIPTIONS_TABLE,
+          Item: subItem,
+        })
+      );
+
+      // If guestCode was provided and differs from effectiveUserId, also save/alias for guestCode lookup
+      if (guestCode && effectiveUserId !== `code_${guestCode}`) {
+        try {
+          await ddbDoc.send(
+            new PutCommand({
+              TableName: SUBSCRIPTIONS_TABLE,
+              Item: {
+                ...subItem,
+                userId: `code_${guestCode}`,
+              },
+            })
+          );
+        } catch (_) {}
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: `Successfully redeemed ${durationMonths} month${durationMonths > 1 ? 's' : ''} VIP Pro access!`,
+        code: redeemData.code,
+        duration_months: durationMonths,
+        expires_at: expiresAt,
+        expires_at_timestamp: expiresAtTimestamp,
+      });
     }
 
     // ─────────────────────────────────────────────────────────────────────────

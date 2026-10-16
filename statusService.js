@@ -33,7 +33,7 @@ export async function checkSystemStatusAsync() {
     const data = await res.json();
     return {
       maintenance: Boolean(data?.maintenance),
-      donate: Boolean(data?.donate),
+      donate: false,
     };
   } catch (err) {
     // Fail-open: if status check fails, do not block the user

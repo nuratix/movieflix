@@ -115,10 +115,6 @@
       "destination": "/maintenance/index.html"
     },
     {
-      "source": "/donate",
-      "destination": "/donate/index.html"
-    },
-    {
       "source": "/pricing",
       "destination": "/pricing/index.html"
     },

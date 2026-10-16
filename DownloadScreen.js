@@ -16,7 +16,6 @@ import {
 } from 'react-native';
 import { Feather, Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import NowPaymentsButton from './components/NowPaymentsButton';
 
 export const DOWNLOAD_URL = '/api/download';
 export const PRIVACY_POLICY_URL = '/privacy';
@@ -154,14 +153,6 @@ export default function DownloadScreen({
     }
   };
 
-  // Format real download count (strictly authentic count)
-  const formattedDownloadCount = () => {
-    const count = releaseInfo.realDownloads;
-    if (!count || count <= 0) return '0';
-    if (count < 1000) return `${count}`;
-    if (count < 1000000) return `${(count / 1000).toFixed(1)}K`;
-    return `${(count / 1000000).toFixed(1)}M`;
-  };
 
   return (
     <View style={styles.container}>
@@ -243,15 +234,7 @@ export default function DownloadScreen({
           {/* VERIFIED REAL STATS ROW                              */}
           {/* ==================================================== */}
           <View style={styles.statsCard}>
-            {/* Stat 1: Real Verified Downloads */}
-            <View style={styles.statCol}>
-              <Text style={styles.statNumber}>{formattedDownloadCount()}</Text>
-              <Text style={styles.statLabel}>Downloads</Text>
-            </View>
-
-            <View style={styles.statDivider} />
-
-            {/* Stat 2: Age Rating */}
+            {/* Stat 1: Age Rating */}
             <View style={styles.statCol}>
               <View style={styles.ageRatingBadge}>
                 <Text style={styles.ageRatingBadgeText}>{releaseInfo.ageRating || '18+'}</Text>
@@ -413,13 +396,6 @@ export default function DownloadScreen({
               </View>
 
               <View style={styles.infoTableRow}>
-                <Text style={styles.infoTableLabel}>Downloads</Text>
-                <Text style={[styles.infoTableValue, { color: '#E50914', fontWeight: '700' }]}>
-                  {`${(releaseInfo.realDownloads || 0).toLocaleString()} verified`}
-                </Text>
-              </View>
-
-              <View style={styles.infoTableRow}>
                 <Text style={styles.infoTableLabel}>Download size</Text>
                 <Text style={styles.infoTableValue}>{releaseInfo.sizeFormatted}</Text>
               </View>
@@ -497,24 +473,7 @@ export default function DownloadScreen({
           </View>
 
           {/* ==================================================== */}
-          {/* CRYPTOCURRENCY & BITCOIN DONATION                    */}
-          {/* ==================================================== */}
-          <View style={styles.donationCard}>
-            <View style={styles.donationHeaderRow}>
-              <View style={styles.donationIconCircle}>
-                <Feather name="heart" size={16} color="#E50914" />
-              </View>
-              <View style={styles.donationTextCol}>
-                <Text style={styles.donationCardTitle}>Support MovieFlix</Text>
-                <Text style={styles.donationCardDesc}>
-                  Support independent streaming infrastructure and high-speed bandwidth with cryptocurrency donations.
-                </Text>
-              </View>
-            </View>
-            <View style={styles.donationBtnWrap}>
-              <NowPaymentsButton />
-            </View>
-          </View>
+
 
           {/* ==================================================== */}
           {/* FOOTER PRIVACY & SECURITY TERMS                      */}
@@ -981,52 +940,6 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
 
-  // DONATION SECTION
-  donationCard: {
-    backgroundColor: '#18181c',
-    borderRadius: 14,
-    padding: 16,
-    marginTop: 20,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(229, 9, 20, 0.25)',
-    alignItems: 'center',
-  },
-  donationHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-    width: '100%',
-  },
-  donationIconCircle: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: 'rgba(229, 9, 20, 0.12)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  donationTextCol: {
-    flex: 1,
-  },
-  donationCardTitle: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '700',
-    marginBottom: 2,
-  },
-  donationCardDesc: {
-    color: '#8E8E93',
-    fontSize: 11.5,
-    lineHeight: 16,
-  },
-  donationBtnWrap: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '100%',
-    paddingTop: 4,
-  },
 
   // FOOTER
   footerContainer: {

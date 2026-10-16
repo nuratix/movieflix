@@ -154,6 +154,40 @@ export function getTelegramBotUrl(code) {
 }
 
 /**
+ * Redeem VIP Promo Code via /api/subscription?action=redeem_promo
+ */
+export async function redeemPromoCode(code, userCode = null, email = null, authToken = null) {
+  if (!code || !code.trim()) {
+    throw new Error('Please enter a valid promo code.');
+  }
+
+  const headers = {
+    'Content-Type': 'application/json',
+    Accept: 'application/json',
+  };
+  if (authToken) {
+    headers['Authorization'] = `Bearer ${authToken}`;
+  }
+
+  const res = await fetch(`${API_BASE}/api/subscription?action=redeem_promo`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      promo_code: code.trim().toUpperCase(),
+      userCode,
+      email,
+    }),
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.success) {
+    throw new Error(data.error || 'Failed to redeem promo code.');
+  }
+
+  return data;
+}
+
+/**
  * Sandbox Only: Simulate Instant Crypto Payment via signed IPN webhook
  */
 export async function simulateSandboxPayment(orderId, authToken) {

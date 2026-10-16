@@ -6,7 +6,7 @@ import crypto from 'crypto';
 
 const RECAPTCHA_SECRET =
   process.env.RECAPTCHA_SECRET_KEY ||
-  '6LcgT-stAAAAAMPAn8MLhzgcopUWn5NXVdTS680j';
+  '6Lev_vEtAAAAAG2DdWFnxtUujMLyCZ1yNtfkKTSC';
 
 const JWT_SECRET =
   process.env.JWT_SECRET ||
@@ -74,7 +74,7 @@ export default async function handler(req, res) {
     const isValid = verifyCaptchaSessionToken(sessionHeader, ip);
     return res.status(200).json({
       status: 'ok',
-      site_key: process.env.EXPO_PUBLIC_RECAPTCHA_SITE_KEY || '6LcgT-stAAAAAJqL8-Jytz125rPxUsFv3aZt69zn',
+      site_key: process.env.EXPO_PUBLIC_RECAPTCHA_SITE_KEY || '6Lev_vEtAAAAACFboy87GQIJYCY2Ntx3Iv5WDwH2',
       verified: isValid,
     });
   }
