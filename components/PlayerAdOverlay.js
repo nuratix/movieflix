@@ -9,6 +9,7 @@ import {
   Platform,
   useWindowDimensions,
   Animated,
+  ActivityIndicator,
 } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -24,6 +25,7 @@ import { recordClick } from '../adService';
  * - Only "Get Started" call-to-action button
  * - Video completion blur state with center "Get Started" button (does not replay)
  * - Skip timer countdown (unlocked after skip_seconds)
+ * - Zero Blank Screen: Always renders poster background instantly while video buffers
  */
 export default function PlayerAdOverlay({
   ad,
@@ -41,6 +43,8 @@ export default function PlayerAdOverlay({
     Number(ad?.skip_seconds) || initialSkipSeconds
   );
   const [isVideoEnded, setIsVideoEnded] = useState(false);
+  const [videoLoaded, setVideoLoaded] = useState(false);
+  const [videoError, setVideoError] = useState(false);
   const [isMuted, setIsMuted] = useState(Platform.OS === 'web');
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const webVideoRef = useRef(null);
@@ -51,6 +55,11 @@ export default function PlayerAdOverlay({
     setIsMuted(next);
     if (webVideoRef.current) {
       webVideoRef.current.muted = next;
+    }
+    if (nativePlayer) {
+      try {
+        nativePlayer.muted = next;
+      } catch (_) {}
     }
   };
 
@@ -88,17 +97,73 @@ export default function PlayerAdOverlay({
     if (!p) return;
     try {
       p.loop = false; // Never replay when video ends
+      p.muted = isMuted;
       p.play();
     } catch (_) {}
   });
 
+  // Sync mute state to native player
   useEffect(() => {
     if (!nativePlayer || Platform.OS === 'web') return;
+    try {
+      nativePlayer.muted = isMuted;
+    } catch (_) {}
+  }, [nativePlayer, isMuted]);
+
+  // Native player event listeners & playback assurance
+  useEffect(() => {
+    if (!nativePlayer || Platform.OS === 'web') return;
+
+    try {
+      nativePlayer.play();
+    } catch (_) {}
+
+    const statusSub = nativePlayer.addListener('statusChange', (payload) => {
+      const status = payload?.status || payload;
+      if (status === 'readyToPlay') {
+        setVideoLoaded(true);
+        try { nativePlayer.play(); } catch (_) {}
+      } else if (status === 'error') {
+        console.warn('[AdOverlay] Native ad video playback error');
+        setVideoError(true);
+      }
+    });
+
+    const playSub = nativePlayer.addListener('playingChange', (payload) => {
+      const isPlaying = typeof payload === 'boolean' ? payload : Boolean(payload?.isPlaying);
+      if (isPlaying) {
+        setVideoLoaded(true);
+      }
+    });
+
+    const timeSub = nativePlayer.addListener('timeUpdate', (payload) => {
+      const currentTime = typeof payload === 'number' ? payload : (payload?.currentTime || 0);
+      if (currentTime > 0.05) {
+        setVideoLoaded(true);
+      }
+    });
+
     const endSub = nativePlayer.addListener('playToEnd', () => {
       setIsVideoEnded(true);
       try { nativePlayer.pause(); } catch (_) {}
     });
+
+    // Safety fallback: If player doesn't report within 2.5 seconds, check status
+    const timer = setTimeout(() => {
+      try {
+        if (nativePlayer.status === 'readyToPlay' || nativePlayer.playing) {
+          setVideoLoaded(true);
+        } else if (nativePlayer.status === 'error') {
+          setVideoError(true);
+        }
+      } catch (_) {}
+    }, 2500);
+
     return () => {
+      clearTimeout(timer);
+      try { statusSub?.remove?.(); } catch (_) {}
+      try { playSub?.remove?.(); } catch (_) {}
+      try { timeSub?.remove?.(); } catch (_) {}
       try { endSub?.remove?.(); } catch (_) {}
     };
   }, [nativePlayer]);
@@ -145,11 +210,23 @@ export default function PlayerAdOverlay({
         { opacity: fadeAnim },
       ]}
     >
-      {/* ─── FULLSCREEN LANDSCAPE BACKGROUND MEDIA (POSTER OR VIDEO) ─── */}
+      {/* ─── FULLSCREEN LANDSCAPE BACKGROUND MEDIA (POSTER + VIDEO OVERLAY) ─── */}
       <TouchableWithoutFeedback onPress={handlePressAd}>
         <View style={StyleSheet.absoluteFillObject}>
-          {isVideo && ad.video_url ? (
-            // Fullscreen Video Player
+          {/* 1. Base Layer: Poster Image (always rendered instantly so screen is NEVER blank!) */}
+          {Boolean(ad?.poster_url) ? (
+            <ExpoImage
+              source={{ uri: ad.poster_url }}
+              style={StyleSheet.absoluteFill}
+              contentFit="cover"
+              transition={200}
+            />
+          ) : (
+            <View style={[StyleSheet.absoluteFill, { backgroundColor: '#111111' }]} />
+          )}
+
+          {/* 2. Video Layer (renders over poster seamlessly once ready, falls back to poster on error) */}
+          {Boolean(isVideo && ad?.video_url && !videoError) && (
             Platform.OS === 'web' ? (
               <video
                 ref={webVideoRef}
@@ -170,29 +247,31 @@ export default function PlayerAdOverlay({
                   filter: isVideoEnded ? 'blur(22px) brightness(0.45)' : 'none',
                   transition: 'filter 0.45s ease',
                 }}
+                onPlay={() => setVideoLoaded(true)}
                 onEnded={() => setIsVideoEnded(true)}
+                onError={() => setVideoError(true)}
               />
             ) : (
               <VideoView
                 style={[
                   StyleSheet.absoluteFill,
-                  isVideoEnded && { opacity: 0.35 },
+                  {
+                    opacity: isVideoEnded ? 0.35 : (videoLoaded ? 1 : 0),
+                  },
                 ]}
                 player={nativePlayer}
                 nativeControls={false}
                 contentFit="cover"
               />
             )
-          ) : (
-            // Fullscreen Poster Image
-            <ExpoImage
-              source={{ uri: ad.poster_url }}
-              style={StyleSheet.absoluteFill}
-              contentFit="cover"
-              transition={200}
-            />
           )}
 
+          {/* Buffering Indicator: subtle spinner while video is buffering */}
+          {Boolean(isVideo && !videoLoaded && !videoError && !isVideoEnded) && (
+            <View style={styles.bufferingContainer} pointerEvents="none">
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            </View>
+          )}
 
           {/* Video Completed State: Blurred Video with Center "Get Started" Button (Does not replay) */}
           {Boolean(isVideo && isVideoEnded) && (
@@ -512,5 +591,18 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 6,
     maxWidth: '85%',
+  },
+  bufferingContainer: {
+    position: 'absolute',
+    bottom: 80,
+    right: 28,
+    backgroundColor: 'rgba(0, 0, 0, 0.45)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    zIndex: 15,
   },
 });

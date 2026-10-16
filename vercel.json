@@ -4,8 +4,8 @@
   "outputDirectory": "dist",
   "framework": null,
   "functions": {
-    "api/index.js": {
-      "memory": 512,
+    "api/**/*.js": {
+      "memory": 256,
       "maxDuration": 15
     }
   },
@@ -34,6 +34,86 @@
     }
   ],
   "rewrites": [
+    {
+      "source": "/api/catalog",
+      "destination": "/api/content?endpoint=home"
+    },
+    {
+      "source": "/api/home",
+      "destination": "/api/content?endpoint=home"
+    },
+    {
+      "source": "/api/movies",
+      "destination": "/api/content?endpoint=movies"
+    },
+    {
+      "source": "/api/tv-series",
+      "destination": "/api/content?endpoint=tv-series"
+    },
+    {
+      "source": "/api/animation",
+      "destination": "/api/content?endpoint=animation"
+    },
+    {
+      "source": "/api/shots",
+      "destination": "/api/content?endpoint=shots"
+    },
+    {
+      "source": "/api/reels",
+      "destination": "/api/content?endpoint=shots"
+    },
+    {
+      "source": "/api/search",
+      "destination": "/api/content?endpoint=search"
+    },
+    {
+      "source": "/api/detail/:slug",
+      "destination": "/api/content?endpoint=detail&slug=:slug"
+    },
+    {
+      "source": "/api/stream/:id/captions",
+      "destination": "/api/content?endpoint=captions&id=:id"
+    },
+    {
+      "source": "/api/stream/:id",
+      "destination": "/api/content?endpoint=stream&id=:id"
+    },
+    {
+      "source": "/sitemap.xml",
+      "destination": "/api/sitemap"
+    },
+    {
+      "source": "/assets/icon.png",
+      "destination": "/api/icon"
+    },
+    {
+      "source": "/assets/icon-512.png",
+      "destination": "/api/icon?size=512"
+    },
+    {
+      "source": "/assets/og-banner.png",
+      "destination": "/api/og-image"
+    },
+    {
+      "source": "/favicon.png",
+      "destination": "/api/favicon"
+    },
+    {
+      "source": "/favicon.ico",
+      "destination": "/api/favicon?format=ico"
+    },
+    {
+      "source": "/assets/favicon.png",
+      "destination": "/api/favicon"
+    },
+    {
+      "source": "/icon.png",
+      "destination": "/api/icon"
+    },
+    {
+      "source": "/og-image.png",
+      "destination": "/api/og-image"
+    },
     {
       "source": "/download",
       "destination": "/download/index.html"
@@ -64,23 +144,19 @@
     },
     {
       "source": "/movieflix.apk",
-      "destination": "/api/index?path=download"
+      "destination": "/api/download"
     },
     {
       "source": "/movieflix-latest.apk",
-      "destination": "/api/index?path=download"
+      "destination": "/api/download"
     },
     {
       "source": "/downloads/movieflix.apk",
-      "destination": "/api/index?path=download"
+      "destination": "/api/download"
     },
     {
       "source": "/app.apk",
-      "destination": "/api/index?path=download"
-    },
-    {
-      "source": "/api/(.*)",
-      "destination": "/api/index?path=$1"
+      "destination": "/api/download"
     },
     {
       "source": "/((?!api/|assets/|favicon\\.ico|sitemap\\.xml|robots\\.txt|404\\.html|.*\\.(?:png|jpg|jpeg|gif|svg|ico|webp|mp4|json|js|css|ttf|woff|woff2|apk)$).*)",

@@ -95,17 +95,12 @@ export async function fetchRandomAd(options = {}) {
 export async function recordImpression(ad) {
   if (!ad || !ad.id) return;
   try {
-    const impressionUrl =
-      ad.impression_url ||
-      (Platform.OS === 'web' || !DIRECT_ADS_API
-        ? `${API_BASE}/api/ads/impression/${ad.id}`
-        : `${DIRECT_ADS_API}/api/v1/impression/${ad.id}`);
+    const impressionUrl = ad.impression_url || `${API_BASE}/api/ads/impression/${ad.id}`;
 
     fetch(impressionUrl, {
       method: 'POST',
       headers: {
         Accept: 'application/json',
-        ...(DIRECT_ADS_KEY ? { 'X-Ad-Secret-Key': DIRECT_ADS_KEY } : {}),
       },
     }).catch(() => {});
   } catch (_) {}
@@ -117,18 +112,11 @@ export async function recordImpression(ad) {
 export function recordClick(ad) {
   if (!ad || !ad.id) return;
   try {
-    const clickUrl =
-      ad.click_url ||
-      (Platform.OS === 'web' || !DIRECT_ADS_API
-        ? `${API_BASE}/api/ads/click/${ad.id}`
-        : `${DIRECT_ADS_API}/api/v1/click/${ad.id}`);
+    const clickUrl = ad.click_url || `${API_BASE}/api/ads/click/${ad.id}`;
 
     // Ping click endpoint to increment stats
     fetch(clickUrl, {
       method: 'GET',
-      headers: {
-        ...(DIRECT_ADS_KEY ? { 'X-Ad-Secret-Key': DIRECT_ADS_KEY } : {}),
-      },
     }).catch(() => {});
   } catch (_) {}
 }
