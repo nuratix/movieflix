@@ -406,10 +406,15 @@ const buildVideoSource = (url) => {
   // Native Android/iOS (ExoPlayer/AVPlayer) CAN send custom Referer/Origin headers directly to the CDN!
   // Android ExoPlayer strictly requires Content-Length on byte-range requests, which Vercel edge proxy chunks/drops.
   // Therefore, on Native platforms (Android/iOS), pass the direct CDN URL with Referer & Origin headers.
-  if (Platform.OS === 'web' && typeof url === 'string' && (url.startsWith('http://') || url.startsWith('https://'))) {
-    return {
-      uri: `/api/proxy?url=${encodeURIComponent(url)}`,
-    };
+  if (Platform.OS === 'web' && typeof url === 'string') {
+    if (url.includes('ads.wallpaperdomain.xyz')) {
+      return { uri: url };
+    }
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      return {
+        uri: `/api/proxy?url=${encodeURIComponent(url)}`,
+      };
+    }
   }
 
   return {
@@ -6959,6 +6964,7 @@ function ReelCustomPlayer({
   }, [seasons, currentSeason]);
 
   const [playerStatus, setPlayerStatus] = useState('loading');
+  const [isPlayerMuted, setIsPlayerMuted] = useState(false);
 
   // Video Stretch / Zoom mode: 'contain' (Fit) | 'cover' (Zoom) | 'fill' (Stretch)
   const [contentFitMode, setContentFitMode] = useState('contain');
@@ -7404,6 +7410,48 @@ function ReelCustomPlayer({
   // Synchronously update playerRef with the active player instance on every render
   playerRef.current = player;
 
+  // Ensure video playback starts cleanly after VideoView DOM mount
+  // (vital on Web where useVideoPlayer setup runs before HTMLVideoElement mounts)
+  useEffect(() => {
+    if (!player) return;
+    let isCancelled = false;
+
+    // Immediately sync playerStatus if already initialized
+    if (player.status && player.status !== 'loading' && player.status !== 'idle') {
+      setPlayerStatus(player.status);
+    }
+
+    const startPlayback = async () => {
+      if (isCancelled || isAdShowingRef.current) return;
+      try {
+        if (initialResumeTime > 0) {
+          player.currentTime = initialResumeTime;
+        }
+        await player.play();
+      } catch (err) {
+        console.warn('[Player] Initial playback start note:', err?.message || err);
+        // Browser Autoplay Policy: if unmuted autoplay is blocked by Chrome/Safari,
+        // attempt muted autoplay first so video frames start streaming immediately!
+        if (Platform.OS === 'web') {
+          try {
+            player.muted = true;
+            setIsPlayerMuted(true);
+            await player.play();
+          } catch (_) {}
+        }
+      }
+    };
+
+    const t1 = setTimeout(startPlayback, 60);
+    const t2 = setTimeout(startPlayback, 300);
+
+    return () => {
+      isCancelled = true;
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, [player, initialResumeTime]);
+
   // Handle stream url changes (e.g. Next Episode, Audio Dub, or Quality switch)
   const currentStreamUrlRef = useRef(videoUrl);
   useEffect(() => {
@@ -7439,6 +7487,8 @@ function ReelCustomPlayer({
       }
     };
   }, [player]);
+
+  const handleSkipAdRef = useRef(null);
 
   // Helper to switch the primary player instance to stream the ad video seamlessly
   const playAdOnMainPlayer = async (ad, skipSec = 30) => {
@@ -7482,6 +7532,7 @@ function ReelCustomPlayer({
         activePlayer.play();
       } catch (e) {
         console.warn('[Player] Ad playback stream note:', e?.message);
+        if (handleSkipAdRef.current) handleSkipAdRef.current();
       }
     } else if (activePlayer) {
       // Static image ad banner: pause movie playback while banner is displayed
@@ -7558,6 +7609,8 @@ function ReelCustomPlayer({
     }
   }, [player, videoUrl]);
 
+  handleSkipAdRef.current = handleSkipAd;
+
   // 1. Pre-roll Ad Trigger: Loads sponsor ad for non-VIP users at start of movie/series
   useEffect(() => {
     if (isPremium || hasTriggeredPreRollRef.current) return;
@@ -7627,8 +7680,16 @@ function ReelCustomPlayer({
   useEffect(() => {
     if (!player) return;
 
+    // Immediately sync current player status if already available!
+    if (player.status && player.status !== 'loading' && player.status !== 'idle') {
+      setPlayerStatus(player.status);
+    }
+
     const playSub = player.addListener('playingChange', (e) => {
       setIsPlaying(e.isPlaying);
+      if (e.isPlaying) {
+        setPlayerStatus('readyToPlay');
+      }
     });
 
     const timeSub = player.addListener('timeUpdate', (e) => {
@@ -7638,6 +7699,9 @@ function ReelCustomPlayer({
       }
       if (!isScrubbingRef.current) {
         setCurrentTime(e.currentTime);
+        if (e.currentTime > 0) {
+          setPlayerStatus('readyToPlay');
+        }
       }
       if (player.duration) {
         setDuration(player.duration);
@@ -7692,6 +7756,10 @@ function ReelCustomPlayer({
     const statusSub = player.addListener?.('statusChange', (e) => {
       if (e?.status) {
         setPlayerStatus(e.status);
+        if (e.status === 'error' && isAdShowingRef.current) {
+          console.warn('[Player] Ad playback error detected, auto-recovering movie stream...');
+          if (handleSkipAdRef.current) handleSkipAdRef.current();
+        }
       }
     });
 
@@ -7723,7 +7791,6 @@ function ReelCustomPlayer({
 
   const isBufferingOrLoading =
     playerStatus === 'loading' ||
-    playerStatus === 'idle' ||
     (isPlaying && currentTime === 0 && duration === 0);
 
   // Auto-hide controls after 4 seconds
@@ -8312,6 +8379,42 @@ function ReelCustomPlayer({
             </View>
           </View>
 
+          {/* TAP TO UNMUTE FLOATING PILL (Shown when browser autoplay started muted) */}
+          {Boolean(isPlayerMuted && isPlaying) && (
+            <View style={{ position: 'absolute', top: Math.max(insets.top + 70, 80), alignSelf: 'center', zIndex: 15 }} pointerEvents="box-none">
+              <TouchableOpacity
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  backgroundColor: 'rgba(0, 0, 0, 0.85)',
+                  paddingHorizontal: 16,
+                  paddingVertical: 10,
+                  borderRadius: 24,
+                  borderWidth: 1,
+                  borderColor: 'rgba(255, 255, 255, 0.35)',
+                  shadowColor: '#000',
+                  shadowOffset: { width: 0, height: 4 },
+                  shadowOpacity: 0.5,
+                  shadowRadius: 8,
+                  elevation: 6,
+                }}
+                onPress={() => {
+                  const activePlayer = playerRef.current || player;
+                  if (activePlayer) {
+                    try {
+                      activePlayer.muted = false;
+                    } catch (_) {}
+                  }
+                  setIsPlayerMuted(false);
+                }}
+                activeOpacity={0.85}
+              >
+                <Feather name="volume-x" size={17} color="#FFFFFF" style={{ marginRight: 8 }} />
+                <Text style={{ color: '#FFFFFF', fontSize: 13, fontWeight: '700' }}>Tap to Unmute Audio</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
           {/* CENTER CONTROLS (EXACT CENTER OVER THE VIDEO) */}
           <View style={styles.playerCenterRow}>
             {/* Seek Back -10s */}
@@ -8330,8 +8433,15 @@ function ReelCustomPlayer({
                 wakeControls();
                 const activePlayer = playerRef.current || player;
                 try {
-                  if (isPlaying) activePlayer?.pause?.();
-                  else activePlayer?.play?.();
+                  if (isPlaying) {
+                    activePlayer?.pause?.();
+                  } else {
+                    if (activePlayer && activePlayer.muted && isPlayerMuted) {
+                      activePlayer.muted = false;
+                      setIsPlayerMuted(false);
+                    }
+                    activePlayer?.play?.();
+                  }
                 } catch (e) {
                   console.warn('[Player] Play/Pause center button error:', e);
                 }

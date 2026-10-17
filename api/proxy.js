@@ -20,6 +20,8 @@ const ALLOWED_DOMAIN_PATTERNS = [
   /(^|\.)media-amazon\.com$/i,
   /(^|\.)github\.com$/i,
   /(^|\.)githubusercontent\.com$/i,
+  /(^|\.)wallpaperdomain\.xyz$/i,
+  /(^|\.)wallpaperdomain\.com$/i,
   /^api\.mymemory\.translated\.net$/i,
 ];
 
