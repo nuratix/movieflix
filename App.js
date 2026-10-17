@@ -407,7 +407,20 @@ const buildVideoSource = (url) => {
   // Android ExoPlayer strictly requires Content-Length on byte-range requests, which Vercel edge proxy chunks/drops.
   // Therefore, on Native platforms (Android/iOS), pass the direct CDN URL with Referer & Origin headers.
   if (Platform.OS === 'web' && typeof url === 'string') {
-    if (url.includes('ads.wallpaperdomain.xyz')) {
+    const isDirectApprovedDomain =
+      url.includes('wallpaperdomain.xyz') ||
+      url.includes('wallpaperdomain.com') ||
+      url.includes('movieflix.lol') ||
+      url.includes('amazon.com') ||
+      url.includes('amazonaws.com') ||
+      url.includes('media-amazon.com') ||
+      url.includes('images-amazon.com') ||
+      url.includes('ssl-images-amazon.com') ||
+      url.includes('amazon-adsystem.com') ||
+      url.includes('assoc-amazon.com') ||
+      url.includes('amzn.to');
+
+    if (isDirectApprovedDomain) {
       return { uri: url };
     }
     if (url.startsWith('http://') || url.startsWith('https://')) {
@@ -7489,6 +7502,7 @@ function ReelCustomPlayer({
   }, [player]);
 
   const handleSkipAdRef = useRef(null);
+  const isAdTransitioningRef = useRef(false);
 
   // Helper to switch the primary player instance to stream the ad video seamlessly
   const playAdOnMainPlayer = async (ad, skipSec = 30) => {
@@ -7497,7 +7511,7 @@ function ReelCustomPlayer({
 
     // 1. Save current movie position before switching to ad
     try {
-      if (activePlayer && typeof activePlayer.currentTime === 'number') {
+      if (activePlayer && typeof activePlayer.currentTime === 'number' && activePlayer.currentTime > 0) {
         savedMoviePositionRef.current = activePlayer.currentTime;
       } else if (currentTimeRef.current > 0) {
         savedMoviePositionRef.current = currentTimeRef.current;
@@ -7508,6 +7522,7 @@ function ReelCustomPlayer({
     const effectiveSkip = !isNaN(rawSkip) && rawSkip > 0 ? Math.max(30, rawSkip) : 30;
 
     isAdShowingRef.current = true;
+    isAdTransitioningRef.current = true;
     activeAdRef.current = ad;
     setActiveAd(ad);
     setIsAdShowing(true);
@@ -7523,18 +7538,53 @@ function ReelCustomPlayer({
 
       try {
         const adSrc = buildVideoSource(ad.video_url);
+
+        // On Web, start muted so browser Autoplay Policy never blocks video ad playback!
+        if (Platform.OS === 'web') {
+          try {
+            activePlayer.muted = true;
+          } catch (_) {}
+        }
+
         if (typeof activePlayer.replaceAsync === 'function') {
           await activePlayer.replaceAsync(adSrc);
         } else if (typeof activePlayer.replace === 'function') {
           activePlayer.replace(adSrc);
         }
-        activePlayer.currentTime = 0;
-        activePlayer.play();
+
+        // Slight pause for HTML5 media pipeline to attach the new source buffer
+        await new Promise((r) => setTimeout(r, 60));
+
+        try {
+          activePlayer.currentTime = 0;
+        } catch (_) {}
+
+        try {
+          await activePlayer.play();
+        } catch (playErr) {
+          console.warn('[Player] Ad initial play note:', playErr?.message);
+          // If browser policy blocked unmuted, mute and play
+          try {
+            activePlayer.muted = true;
+            await activePlayer.play();
+          } catch (_) {}
+        }
+
+        // Secondary play check to ensure ad video is streaming cleanly
+        setTimeout(async () => {
+          try {
+            if (isAdShowingRef.current && !activePlayer.playing) {
+              await activePlayer.play();
+            }
+          } catch (_) {}
+          isAdTransitioningRef.current = false;
+        }, 350);
       } catch (e) {
         console.warn('[Player] Ad playback stream note:', e?.message);
-        if (handleSkipAdRef.current) handleSkipAdRef.current();
+        isAdTransitioningRef.current = false;
       }
     } else if (activePlayer) {
+      isAdTransitioningRef.current = false;
       // Static image ad banner: pause movie playback while banner is displayed
       try {
         activePlayer.pause();
@@ -7548,6 +7598,7 @@ function ReelCustomPlayer({
     const resumePos = savedMoviePositionRef.current;
 
     isAdShowingRef.current = false;
+    isAdTransitioningRef.current = false;
     activeAdRef.current = null;
     setIsAdShowing(false);
     setActiveAd(null);
@@ -7568,6 +7619,11 @@ function ReelCustomPlayer({
       // 2. Replace source with movie stream using replaceAsync
       try {
         const movieSrc = buildVideoSource(videoUrl);
+        if (Platform.OS === 'web') {
+          try {
+            activePlayer.muted = false;
+          } catch (_) {}
+        }
         if (typeof activePlayer.replaceAsync === 'function') {
           await activePlayer.replaceAsync(movieSrc);
         } else if (typeof activePlayer.replace === 'function') {
@@ -7756,9 +7812,9 @@ function ReelCustomPlayer({
     const statusSub = player.addListener?.('statusChange', (e) => {
       if (e?.status) {
         setPlayerStatus(e.status);
-        if (e.status === 'error' && isAdShowingRef.current) {
-          console.warn('[Player] Ad playback error detected, auto-recovering movie stream...');
-          if (handleSkipAdRef.current) handleSkipAdRef.current();
+        if (e.status === 'error' && isAdShowingRef.current && !isAdTransitioningRef.current) {
+          console.warn('[Player] Ad playback error detected, unlocking ad skip...');
+          setIsAdVideoEnded(true);
         }
       }
     });

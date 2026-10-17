@@ -2,6 +2,8 @@
 // Hardened against SSRF, unauthorized network access, and open proxy abuse.
 // Enforces strict domain allowlists and validates all redirect destinations.
 
+import { isAllowedOrigin, getCorsOrigin } from './corsHelper.js';
+
 // Approved media and metadata domains
 const ALLOWED_DOMAIN_PATTERNS = [
   /(^|\.)aoneroom\.com$/i,
@@ -9,6 +11,7 @@ const ALLOWED_DOMAIN_PATTERNS = [
   /(^|\.)netfilm\.world$/i,
   /(^|\.)moviebo\.vercel\.app$/i,
   /(^|\.)movieflix-pi-six\.vercel\.app$/i,
+  /(^|\.)movieflix\.lol$/i,
   /(^|\.)media-imdb\.com$/i,
   /(^|\.)imdb\.com$/i,
   /(^|\.)tvmaze\.com$/i,
@@ -17,7 +20,15 @@ const ALLOWED_DOMAIN_PATTERNS = [
   /(^|\.)cloudfront\.net$/i,
   /(^|\.)googleusercontent\.com$/i,
   /(^|\.)gstatic\.com$/i,
+  /(^|\.)amazon\.com$/i,
+  /(^|\.)amazonaws\.com$/i,
   /(^|\.)media-amazon\.com$/i,
+  /(^|\.)images-amazon\.com$/i,
+  /(^|\.)ssl-images-amazon\.com$/i,
+  /(^|\.)amazon-adsystem\.com$/i,
+  /(^|\.)assoc-amazon\.com$/i,
+  /(^|\.)amzn\.to$/i,
+  /(^|\.)amazon\.[a-z]{2,3}(\.[a-z]{2})?$/i,
   /(^|\.)github\.com$/i,
   /(^|\.)githubusercontent\.com$/i,
   /(^|\.)wallpaperdomain\.xyz$/i,
@@ -131,22 +142,6 @@ export default async function handler(req, res) {
   }
   // Otherwise Vercel Edge Runtime (Web Standard Request & Response)
   return handleEdge(req);
-}
-
-const ALLOWED_ORIGINS = new Set([
-  'https://mws.wallpaperdomain.xyz',
-  'https://mws.wallpaperdomain.com',
-  'https://netfilm.world',
-  'http://localhost:3000',
-  'http://localhost:8081',
-  'http://localhost:19006',
-]);
-
-function getCorsOrigin(origin) {
-  if (origin && ALLOWED_ORIGINS.has(origin)) {
-    return origin;
-  }
-  return 'https://mws.wallpaperdomain.xyz';
 }
 
 export function extractTargetUrl(reqUrl) {

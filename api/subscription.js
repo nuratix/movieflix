@@ -133,15 +133,7 @@ export function computeIpnSignature(payload, secretKey) {
   return crypto.createHmac('sha512', secretKey).update(jsonStr).digest('hex');
 }
 
-// ─── CORS Allowlist ──────────────────────────────────────────────────────────
-const ALLOWED_ORIGINS = new Set([
-  'https://mws.wallpaperdomain.xyz',
-  'https://mws.wallpaperdomain.com',
-  'https://netfilm.world',
-  'http://localhost:8081',
-  'http://localhost:3000',
-  'http://localhost:19006',
-]);
+import { isAllowedOrigin } from './corsHelper.js';
 
 // ─── Helper: Verify NOWPayments IPN Signature ────────────────────────────────
 function verifyIpnSignature(req, payload, secretKey) {
@@ -163,10 +155,12 @@ function verifyIpnSignature(req, payload, secretKey) {
 // ─── Handler ─────────────────────────────────────────────────────────────────
 export default async function handler(req, res) {
   // Strict edge no-cache headers and CORS
-  const origin = req.headers?.origin;
-  if (origin && ALLOWED_ORIGINS.has(origin)) {
+  const origin = req.headers?.origin || req.headers?.['origin'];
+  if (isAllowedOrigin(origin)) {
     res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Access-Control-Allow-Credentials', 'true');
+  } else if (!origin) {
+    res.setHeader('Access-Control-Allow-Origin', '*');
   }
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-nowpayments-sig');

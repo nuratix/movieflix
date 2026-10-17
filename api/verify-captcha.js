@@ -7,19 +7,15 @@ import crypto from 'crypto';
 const RECAPTCHA_SECRET = (process.env.RECAPTCHA_SECRET_KEY || '').trim();
 const JWT_SECRET = (process.env.JWT_SECRET || '').trim();
 
-const ALLOWED_ORIGINS = new Set([
-  'https://mws.wallpaperdomain.xyz',
-  'https://mws.wallpaperdomain.com',
-  'https://netfilm.world',
-  'http://localhost:3000',
-  'http://localhost:8081',
-  'http://localhost:19006',
-]);
+import { isAllowedOrigin } from './corsHelper.js';
 
 function setCors(req, res) {
-  const origin = req.headers['origin'];
-  if (origin && ALLOWED_ORIGINS.has(origin)) {
+  const origin = req.headers['origin'] || req.headers?.origin;
+  if (isAllowedOrigin(origin)) {
     res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  } else if (!origin) {
+    res.setHeader('Access-Control-Allow-Origin', '*');
   }
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
   res.setHeader(

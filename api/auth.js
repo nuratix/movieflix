@@ -97,21 +97,16 @@ function removeMemoryLike(shotId, id) {
   return 0;
 }
 
-// ─── CORS Configuration ──────────────────────────────────────────────────────
-const ALLOWED_ORIGINS = new Set([
-  'https://mws.wallpaperdomain.xyz',
-  'https://mws.wallpaperdomain.com',
-  'https://netfilm.world',
-  'http://localhost:8081',
-  'http://localhost:3000',
-  'http://localhost:19006',
-]);
+import { isAllowedOrigin } from './corsHelper.js';
 
+// ─── CORS Configuration ──────────────────────────────────────────────────────
 function setCorsHeaders(req, res) {
-  const origin = req.headers?.origin;
-  if (origin && ALLOWED_ORIGINS.has(origin)) {
+  const origin = req.headers?.origin || req.headers?.['origin'];
+  if (isAllowedOrigin(origin)) {
     res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Access-Control-Allow-Credentials', 'true');
+  } else if (!origin) {
+    res.setHeader('Access-Control-Allow-Origin', '*');
   }
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
   res.setHeader(

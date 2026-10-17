@@ -6,19 +6,15 @@
 const ADS_API_URL = (process.env.ADS_API_URL || 'https://ads.wallpaperdomain.xyz').replace(/\/+$/, '');
 const ADS_SECRET_KEY = (process.env.ADS_SECRET_KEY || '').trim();
 
-const ALLOWED_ORIGINS = new Set([
-  'https://mws.wallpaperdomain.xyz',
-  'https://mws.wallpaperdomain.com',
-  'https://netfilm.world',
-  'http://localhost:3000',
-  'http://localhost:8081',
-  'http://localhost:19006',
-]);
+import { isAllowedOrigin } from './corsHelper.js';
 
 export default async function handler(req, res) {
-  const origin = req.headers?.origin;
-  if (origin && ALLOWED_ORIGINS.has(origin)) {
+  const origin = req.headers?.origin || req.headers?.['origin'];
+  if (isAllowedOrigin(origin)) {
     res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  } else if (!origin) {
+    res.setHeader('Access-Control-Allow-Origin', '*');
   }
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Ad-Secret-Key');

@@ -43,11 +43,18 @@ export default function PlayerAdOverlay({
   const [remainingSeconds, setRemainingSeconds] = useState(effectiveStartSec);
   const [isMuted, setIsMuted] = useState(false);
 
-  // Sync initial mute state if player exists
+  // Sync initial and dynamic mute state if player exists
   useEffect(() => {
-    if (player && typeof player.muted === 'boolean') {
+    if (!player) return;
+    if (typeof player.muted === 'boolean') {
       setIsMuted(player.muted);
     }
+    const interval = setInterval(() => {
+      if (typeof player.muted === 'boolean') {
+        setIsMuted((prev) => (prev !== player.muted ? player.muted : prev));
+      }
+    }, 500);
+    return () => clearInterval(interval);
   }, [player]);
 
   const toggleMute = (e) => {
@@ -252,6 +259,21 @@ export default function PlayerAdOverlay({
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* ─── TAP TO UNMUTE AUDIO FLOATING PILL (AUTOPLAY POLICY FALLBACK) ─── */}
+      {Boolean(isVideo && isMuted && !isVideoEnded) && (
+        <TouchableOpacity
+          style={[
+            styles.unmuteFloatingPill,
+            { bottom: Math.max(insets.bottom, 16) + 64 },
+          ]}
+          onPress={toggleMute}
+          activeOpacity={0.8}
+        >
+          <Feather name="volume-x" size={15} color="#FFFFFF" style={{ marginRight: 8 }} />
+          <Text style={styles.unmuteFloatingText}>Tap to Unmute Audio</Text>
+        </TouchableOpacity>
+      )}
 
       {/* ─── BOTTOM FLOATING BAR: ONLY GET STARTED BUTTON & TITLE ─── */}
       {!isVideoEnded && (
@@ -515,5 +537,29 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     marginTop: 16,
     textAlign: 'center',
+  },
+  unmuteFloatingPill: {
+    position: 'absolute',
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(20, 20, 20, 0.88)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.25)',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 24,
+    zIndex: 40,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 6,
+    elevation: 8,
+  },
+  unmuteFloatingText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.2,
   },
 });

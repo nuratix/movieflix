@@ -80,19 +80,15 @@ function checkUpdateRateLimit(ip) {
   return true;
 }
 
-const ALLOWED_ORIGINS = new Set([
-  'https://mws.wallpaperdomain.com',
-  'https://mws.wallpaperdomain.xyz',
-  'https://netfilm.world',
-  'http://localhost:3000',
-  'http://localhost:8081',
-  'http://localhost:19006',
-]);
+import { isAllowedOrigin } from './corsHelper.js';
 
 function setCors(req, res) {
-  const origin = req.headers['origin'];
-  if (origin && ALLOWED_ORIGINS.has(origin)) {
+  const origin = req.headers['origin'] || req.headers?.origin;
+  if (isAllowedOrigin(origin)) {
     res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  } else if (!origin) {
+    res.setHeader('Access-Control-Allow-Origin', '*');
   } else {
     res.setHeader('Access-Control-Allow-Origin', 'https://mws.wallpaperdomain.xyz');
   }
